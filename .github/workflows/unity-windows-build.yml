@@ -25,6 +25,8 @@ jobs:
       WB_VERSION: ${{ github.event_name == 'push' && format('0.3.{0}', github.run_number) || inputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Verify updater backup and rollback before building
+        run: python3 launcher/test_updater.py
       - name: Confirm Unity activation
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
