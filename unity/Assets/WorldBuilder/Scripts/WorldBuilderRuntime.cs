@@ -36,6 +36,78 @@ namespace WorldBuilder {
   private float statusUntil;
   private bool showLibrary=true;
   private bool showProjects=false;
+  private GameObject preview;
+  private bool showGrid=true;
+  private readonly List<GameObject> gridMarkers=new List<GameObject>();
+  bool OverUI(){
+   Vector2 p=new Vector2(Input.mousePosition.x,Screen.height-Input.mousePosition.y);
+   return p.y<66f||p.y>Screen.height-54f||
+     (showLibrary&&p.x<205f)||
+     (showProjects&&p.x>Screen.width-365f&&p.y<520f)||
+     (showHelp&&p.x>Screen.width-380f&&p.y>Screen.height-215f);
+  }
+  void UndoLast(){
+   int i=objects.Count-1;
+   if(i<0){Notice("Nothing to undo");return;}
+   if(objects[i]!=null)Destroy(objects[i]);
+   objects.RemoveAt(i);project.pieces.RemoveAt(i);anchor=null;
+   Notice("Last object removed");
+  }
+  void ToggleGrid(){
+   showGrid=!showGrid;
+   foreach(var obj in gridMarkers)if(obj!=null)Destroy(obj);
+   gridMarkers.Clear();
+   if(showGrid)BuildGrid();
+   Notice("Grid "+(showGrid?"visible":"hidden"));
+  }
+  void BuildGrid(){
+   for(int i=-20;i<=20;i++){
+    for(int axis=0;axis<2;axis++){
+     var go=new GameObject("Grid");
+     var line=go.AddComponent<LineRenderer>();
+     line.material=new Material(Shader.Find("Sprites/Default"));
+     line.positionCount=2;line.startWidth=.012f;line.endWidth=.012f;
+     line.startColor=line.endColor=new Color(.45f,.6f,.7f,.28f);
+     line.SetPosition(0,axis==0?new Vector3(-20,.012f,i):new Vector3(i,.012f,-20));
+     line.SetPosition(1,axis==0?new Vector3(20,.012f,i):new Vector3(i,.012f,20));
+     gridMarkers.Add(go);
+    }
+   }
+  }
+  void UpdatePreview(){
+   if(OverUI()||currentTool==Tool.Erase||!MouseOnGround(out Vector3 p)){
+    if(preview!=null)preview.SetActive(false);
+    return;
+   }
+   if(preview==null){
+    preview=GameObject.CreatePrimitive(PrimitiveType.Cube);
+    preview.name="Build cursor";
+    Destroy(preview.GetComponent<Collider>());
+    var m=new Material(Shader.Find("Sprites/Default"));
+    m.color=new Color(.15f,.8f,1f,.5f);
+    preview.GetComponent<Renderer>().material=m;
+   }
+   preview.SetActive(true);
+   preview.transform.rotation=Quaternion.identity;
+   if(currentTool==Tool.Couch||currentTool==Tool.Table){
+    bool sofa=currentTool==Tool.Couch;
+    preview.transform.position=p+Vector3.up*.4f;
+    preview.transform.localScale=new Vector3(sofa?2f:1.2f,.8f,sofa?.9f:1.2f);
+   }else if(anchor.HasValue){
+    Vector3 d=p-anchor.Value;
+    if(currentTool==Tool.Wall){
+     preview.transform.position=(p+anchor.Value)*.5f+Vector3.up*wallHeight*.5f;
+     preview.transform.localScale=new Vector3(Mathf.Max(.05f,d.magnitude),wallHeight,wallThickness);
+     preview.transform.rotation=Quaternion.Euler(0,-Mathf.Atan2(d.z,d.x)*Mathf.Rad2Deg,0);
+    }else{
+     preview.transform.position=(p+anchor.Value)*.5f-Vector3.up*.075f;
+     preview.transform.localScale=new Vector3(Mathf.Max(gridSize,Mathf.Abs(d.x)),.15f,Mathf.Max(gridSize,Mathf.Abs(d.z)));
+    }
+   }else{
+    preview.transform.position=p+Vector3.up*.04f;
+    preview.transform.localScale=new Vector3(.25f,.08f,.25f);
+   }
+  }
   private Vector2 libraryScroll;
   private GUIStyle titleStyle,buttonStyle;
   void Notice(string message){status=message;statusUntil=Time.time+5f;}
@@ -53,6 +125,7 @@ namespace WorldBuilder {
    if(sceneCamera==null)sceneCamera=Camera.main;
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
    if(File.Exists(filePath))Load();
+   BuildGrid();
   }
   Vector3 Snap(Vector3 p) => new Vector3(Mathf.Round(p.x/gridSize)*gridSize,0,Mathf.Round(p.z/gridSize)*gridSize);
   bool MouseOnGround(out Vector3 point) {
@@ -71,10 +144,13 @@ namespace WorldBuilder {
    if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
    if(Input.GetKeyDown(KeyCode.Escape))anchor=null;
    if(Input.GetKeyDown(KeyCode.F1))showHelp=!showHelp;
+   if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
+   if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Z))UndoLast();
+   UpdatePreview();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.S))Save();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.O))Load();
    if(!Input.GetMouseButtonDown(0) || Input.GetKey(KeyCode.LeftAlt) || Input.GetMouseButton(1))return;
-   if(!MouseOnGround(out Vector3 p))return;
+   if(OverUI()||!MouseOnGround(out Vector3 p))return;
    if(currentTool==Tool.Erase) { Erase(p);return; }
    if(currentTool==Tool.Couch||currentTool==Tool.Table) {
     Add(new Piece(currentTool==Tool.Couch?"couch":"table",p+Vector3.up*.4f,new Vector3(currentTool==Tool.Couch?2f:1.2f,.8f,currentTool==Tool.Couch?.9f:1.2f),Quaternion.identity));return;
@@ -145,6 +221,8 @@ namespace WorldBuilder {
     if(GUI.Button(new Rect(14,324,176,42),"4   Table"))SelectTool(Tool.Table);
     GUI.Label(new Rect(15,387,170,24),"EDIT");
     if(GUI.Button(new Rect(14,415,176,42),"5   Eraser"))SelectTool(Tool.Erase);
+    if(GUI.Button(new Rect(14,474,176,38),showGrid?"Hide grid (G)":"Show grid (G)"))ToggleGrid();
+    if(GUI.Button(new Rect(14,520,176,38),"Undo (Ctrl+Z)"))UndoLast();
     GUI.Label(new Rect(14,h-185,180,48),"Selected: "+currentTool);
    }
    if(showProjects){
@@ -167,7 +245,7 @@ namespace WorldBuilder {
     GUI.Label(new Rect(Mathf.Max(230,w-365),h-185,340,25),"1-5 select tools  |  Esc cancels");
     GUI.Label(new Rect(Mathf.Max(230,w-365),h-158,340,25),"Left click to place  |  Right drag to orbit");
     GUI.Label(new Rect(Mathf.Max(230,w-365),h-131,340,25),"Ctrl+S save  |  Ctrl+O reload");
-    GUI.Label(new Rect(Mathf.Max(230,w-365),h-104,340,25),"Projects lists named saves");
+    GUI.Label(new Rect(Mathf.Max(230,w-365),h-104,340,25),"Ctrl+Z undo placement | G toggle grid");
    }
   }
  }
