@@ -1,12 +1,6 @@
 name: Release WorldBuilder
+# Legacy 2D publishing is retired. 3D release automation lives in unity-windows-build.yml.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'VERSION'
-      - 'app/**'
-      - 'scripts/make_update.py'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
 permissions:
   contents: write
