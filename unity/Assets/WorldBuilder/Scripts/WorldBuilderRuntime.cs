@@ -19,6 +19,8 @@ namespace WorldBuilder {
  }
  public class WorldBuilderRuntime : MonoBehaviour {
   public Camera sceneCamera;
+  private WalkthroughCamera walkthrough;
+  private float avatarHeight=1.70f;
   public Material wallMaterial;
   public Material floorMaterial;
   public Material furnitureMaterial;
@@ -40,6 +42,7 @@ namespace WorldBuilder {
   private bool showGrid=true;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
   bool OverUI(){
+   if(walkthrough!=null&&walkthrough.IsWalking)return true;
    Vector2 p=new Vector2(Input.mousePosition.x,Screen.height-Input.mousePosition.y);
    return p.y<66f||p.y>Screen.height-54f||
      (showLibrary&&p.x<205f)||
@@ -123,6 +126,7 @@ namespace WorldBuilder {
 
   void Start() {
    if(sceneCamera==null)sceneCamera=Camera.main;
+   if(sceneCamera!=null)walkthrough=sceneCamera.GetComponent<WalkthroughCamera>();
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
    if(File.Exists(filePath))Load();
    BuildGrid();
@@ -137,6 +141,7 @@ namespace WorldBuilder {
    point=Snap(ray.GetPoint(distance));return true;
   }
   void Update() {
+   if(walkthrough!=null&&walkthrough.IsWalking)return;
    if(Input.GetKeyDown(KeyCode.Alpha1))SelectTool(Tool.Wall);
    if(Input.GetKeyDown(KeyCode.Alpha2))SelectTool(Tool.Floor);
    if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
@@ -206,6 +211,15 @@ namespace WorldBuilder {
    GUI.Box(new Rect(0,0,w,66),"");
    GUI.Label(new Rect(18,9,230,30),"WORLDBUILDER 3D");
    GUI.Label(new Rect(18,35,270,20),"BUILD STUDIO  |  PREVIEW");
+   if(walkthrough!=null&&walkthrough.IsWalking){
+    GUI.Box(new Rect(0,0,w,66),"WALK PREVIEW  |  WASD move  |  Mouse look  |  Esc return to Build");
+    GUI.Box(new Rect(0,h-54,w,54),"Avatar height: "+avatarHeight.ToString("F2")+" m  |  Spatial scale preview, not a full VRChat simulator");
+    return;
+   }
+   if(GUI.Button(new Rect(w-555,15,120,36),"Walk Preview")){
+    if(walkthrough!=null){walkthrough.SetHeight(avatarHeight);walkthrough.Enter();}
+    else Notice("Walkthrough camera unavailable");
+   }
    if(GUI.Button(new Rect(w-425,15,75,36),"New"))NewProject();
    if(GUI.Button(new Rect(w-342,15,75,36),"Save"))Save();
    if(GUI.Button(new Rect(w-259,15,75,36),"Save As"))SaveAsNamed("World-"+DateTime.Now.ToString("yyyyMMdd-HHmmss"));
@@ -224,6 +238,9 @@ namespace WorldBuilder {
     if(GUI.Button(new Rect(14,474,176,38),showGrid?"Hide grid (G)":"Show grid (G)"))ToggleGrid();
     if(GUI.Button(new Rect(14,520,176,38),"Undo (Ctrl+Z)"))UndoLast();
     GUI.Label(new Rect(14,h-185,180,48),"Selected: "+currentTool);
+    GUI.Label(new Rect(14,h-158,180,24),"AVATAR HEIGHT");
+    GUI.Label(new Rect(14,h-132,180,22),avatarHeight.ToString("F2")+" m");
+    avatarHeight=GUI.HorizontalSlider(new Rect(14,h-108,176,20),avatarHeight,1.2f,2.2f);
    }
    if(showProjects){
     float px=Mathf.Max(215,w-365);
