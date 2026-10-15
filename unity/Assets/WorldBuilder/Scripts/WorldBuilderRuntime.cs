@@ -32,6 +32,23 @@ namespace WorldBuilder {
   private readonly List<GameObject> objects=new List<GameObject>();
   private string filePath;
   private bool showHelp=true;
+  private string status="Ready to build";
+  private float statusUntil;
+  private bool showLibrary=true;
+  private bool showProjects=false;
+  private Vector2 libraryScroll;
+  private GUIStyle titleStyle,buttonStyle;
+  void Notice(string message){status=message;statusUntil=Time.time+5f;}
+  void SelectTool(Tool tool){currentTool=tool;anchor=null;Notice(tool+" tool selected");}
+  void NewProject(){project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
+  string ProjectsFolder(){string p=Path.Combine(Application.persistentDataPath,"Projects");Directory.CreateDirectory(p);return p;}
+  void SaveAsNamed(string name){
+   try{string safe=string.Join("_",name.Split(Path.GetInvalidFileNameChars()));if(string.IsNullOrWhiteSpace(safe))safe="My World";
+    filePath=Path.Combine(ProjectsFolder(),safe+".json");Save();}
+   catch(Exception e){Notice("Save failed: "+e.Message);}
+  }
+  void OpenProject(string path){filePath=path;Load();showProjects=false;}
+
   void Start() {
    if(sceneCamera==null)sceneCamera=Camera.main;
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
@@ -47,11 +64,11 @@ namespace WorldBuilder {
    point=Snap(ray.GetPoint(distance));return true;
   }
   void Update() {
-   if(Input.GetKeyDown(KeyCode.Alpha1))currentTool=Tool.Wall;
-   if(Input.GetKeyDown(KeyCode.Alpha2))currentTool=Tool.Floor;
-   if(Input.GetKeyDown(KeyCode.Alpha3))currentTool=Tool.Couch;
-   if(Input.GetKeyDown(KeyCode.Alpha4))currentTool=Tool.Table;
-   if(Input.GetKeyDown(KeyCode.Alpha5))currentTool=Tool.Erase;
+   if(Input.GetKeyDown(KeyCode.Alpha1))SelectTool(Tool.Wall);
+   if(Input.GetKeyDown(KeyCode.Alpha2))SelectTool(Tool.Floor);
+   if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
+   if(Input.GetKeyDown(KeyCode.Alpha4))SelectTool(Tool.Table);
+   if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
    if(Input.GetKeyDown(KeyCode.Escape))anchor=null;
    if(Input.GetKeyDown(KeyCode.F1))showHelp=!showHelp;
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.S))Save();
@@ -95,8 +112,8 @@ namespace WorldBuilder {
    }
   }
   public void Save(){
-   try{File.WriteAllText(filePath,JsonUtility.ToJson(project,true));Debug.Log("Saved "+filePath);}
-   catch(Exception e){Debug.LogError(e);}
+   try{File.WriteAllText(filePath,JsonUtility.ToJson(project,true));Debug.Log("Saved "+filePath);Notice("Saved: "+Path.GetFileName(filePath));}
+   catch(Exception e){Debug.LogError(e);Notice("Save failed: "+e.Message);}
   }
   public void Load(){
    try{
@@ -104,17 +121,54 @@ namespace WorldBuilder {
     if(loaded==null||loaded.schema!=2||loaded.pieces==null)throw new InvalidDataException("Unsupported project schema");
     foreach(var obj in objects)if(obj!=null)Destroy(obj);
     objects.Clear();project=loaded;
-    foreach(var piece in project.pieces)objects.Add(Create(piece));
-   }catch(Exception e){Debug.LogError("Load failed: "+e.Message);}
+    foreach(var piece in project.pieces)objects.Add(Create(piece));Notice("Loaded: "+Path.GetFileName(filePath));
+   }catch(Exception e){Debug.LogError("Load failed: "+e.Message);Notice("Load failed: "+e.Message);}
   }
   void OnGUI(){
-   if(!showHelp)return;
-   GUI.Box(new Rect(12,12,365,145),"WorldBuilder 3D Prototype");
-   GUI.Label(new Rect(24,40,345,25),"1 Wall | 2 Floor | 3 Couch | 4 Table | 5 Erase");
-   GUI.Label(new Rect(24,62,345,25),"Click endpoints to build. Esc cancels.");
-   GUI.Label(new Rect(24,84,345,25),"Right-drag orbit | WASD move | Wheel zoom");
-   GUI.Label(new Rect(24,106,345,25),"Ctrl+S save | Ctrl+O load | F1 hide help");
-   GUI.Label(new Rect(24,128,345,25),"Selected: "+currentTool);
+   float w=Screen.width,h=Screen.height;
+   GUI.skin.box.fontSize=14;
+   GUI.Box(new Rect(0,0,w,66),"");
+   GUI.Label(new Rect(18,9,230,30),"WORLDBUILDER 3D");
+   GUI.Label(new Rect(18,35,270,20),"BUILD STUDIO  |  PREVIEW");
+   if(GUI.Button(new Rect(w-425,15,75,36),"New"))NewProject();
+   if(GUI.Button(new Rect(w-342,15,75,36),"Save"))Save();
+   if(GUI.Button(new Rect(w-259,15,75,36),"Save As"))SaveAsNamed("World-"+DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+   if(GUI.Button(new Rect(w-176,15,75,36),"Projects"))showProjects=!showProjects;
+   if(GUI.Button(new Rect(w-93,15,75,36),"Help"))showHelp=!showHelp;
+   if(showLibrary){
+    GUI.Box(new Rect(0,66,205,h-120),"BUILD LIBRARY");
+    GUI.Label(new Rect(15,105,170,24),"STRUCTURE");
+    if(GUI.Button(new Rect(14,134,176,42),"1   Walls"))SelectTool(Tool.Wall);
+    if(GUI.Button(new Rect(14,182,176,42),"2   Floors"))SelectTool(Tool.Floor);
+    GUI.Label(new Rect(15,247,170,24),"FURNITURE");
+    if(GUI.Button(new Rect(14,276,176,42),"3   Sofa"))SelectTool(Tool.Couch);
+    if(GUI.Button(new Rect(14,324,176,42),"4   Table"))SelectTool(Tool.Table);
+    GUI.Label(new Rect(15,387,170,24),"EDIT");
+    if(GUI.Button(new Rect(14,415,176,42),"5   Eraser"))SelectTool(Tool.Erase);
+    GUI.Label(new Rect(14,h-185,180,48),"Selected: "+currentTool);
+   }
+   if(showProjects){
+    float px=Mathf.Max(215,w-365);
+    GUI.Box(new Rect(px,72,350,Mathf.Min(h-145,450)),"PROJECTS");
+    if(GUI.Button(new Rect(px+12,110,326,34),"Open latest saved project"))Load();
+    string[] paths=Directory.GetFiles(ProjectsFolder(),"*.json");
+    Array.Sort(paths);Array.Reverse(paths);
+    for(int i=0;i<Mathf.Min(paths.Length,6);i++){
+     string p=paths[i];
+     if(GUI.Button(new Rect(px+12,152+i*42,326,36),Path.GetFileNameWithoutExtension(p)))OpenProject(p);
+    }
+   }
+   GUI.Box(new Rect(0,h-54,w,54),"");
+   GUI.Label(new Rect(18,h-40,Mathf.Max(200,w-45),25),
+    (Time.time<statusUntil?status:"Ready")+
+    "     |     Click two points for walls/floors     |     Right drag: orbit     |     Wheel: zoom");
+   if(showHelp){
+    GUI.Box(new Rect(Mathf.Max(215,w-380),h-215,365,148),"QUICK START");
+    GUI.Label(new Rect(Mathf.Max(230,w-365),h-185,340,25),"1-5 select tools  |  Esc cancels");
+    GUI.Label(new Rect(Mathf.Max(230,w-365),h-158,340,25),"Left click to place  |  Right drag to orbit");
+    GUI.Label(new Rect(Mathf.Max(230,w-365),h-131,340,25),"Ctrl+S save  |  Ctrl+O reload");
+    GUI.Label(new Rect(Mathf.Max(230,w-365),h-104,340,25),"Projects lists named saves");
+   }
   }
  }
 }
