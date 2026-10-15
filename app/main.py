@@ -1,9 +1,9 @@
-import json, math, os, sys, tkinter as tk
+import json, math, os, sys, subprocess, tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from updater import check_for_update
 
-VERSION='0.1.1'
+VERSION='0.1.2'
 CELL=32
 class Builder:
  def __init__(self,root):
@@ -84,5 +84,45 @@ class Builder:
  def export(self):
   p=filedialog.asksaveasfilename(title='Export scene for Unity importer',defaultextension='.json',initialfile='worldbuilder-scene.json',filetypes=[('JSON','*.json')]);
   if p:Path(p).write_text(json.dumps(self.data(),indent=2),encoding='utf-8');messagebox.showinfo('Exported','Scene exported. In Unity, install the importer C# file and use Tools > WorldBuilder > Import Scene.')
-if __name__=='__main__':
+def find_local_3d():
+ home=Path.home()
+ candidates=[
+  home/'Documents'/'WorldBuilder-Source'/'unity'/'Build'/'WorldBuilder.exe',
+  home/'Software'/'WorldBuilder-3D'/'WorldBuilder.exe'
+ ]
+ return next((p for p in candidates if p.is_file()),None)
+
+def launch_3d():
+ exe=find_local_3d()
+ if exe is None:return False
+ try:
+  subprocess.Popen([str(exe)],cwd=str(exe.parent))
+  return True
+ except OSError as e:
+  messagebox.showerror('WorldBuilder 3D',str(e))
+  return False
+
+def bridge():
+ root=tk.Tk()
+ root.title('WorldBuilder 3D Launcher')
+ root.geometry('460x260')
+ root.resizable(False,False)
+ frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
+ ttk.Label(frame,text='WORLDBUILDER 3D',font=('Segoe UI',20,'bold')).pack(anchor='w')
+ exe=find_local_3d()
+ if exe:
+  ttk.Label(frame,text='3D application detected and ready to launch.').pack(anchor='w',pady=(8,14))
+  ttk.Button(frame,text='Launch WorldBuilder 3D',command=lambda:(root.destroy(),launch_3d())).pack(fill='x',pady=4)
+ else:
+  ttk.Label(frame,text='3D application not found. Existing 2D editor is still available.',wraplength=400).pack(anchor='w',pady=(8,14))
+ ttk.Button(frame,text='Check Updates',command=lambda:check_for_update(root,VERSION)).pack(fill='x',pady=4)
+ ttk.Button(frame,text='Open Legacy 2D Editor',command=lambda:(root.destroy(),open_legacy())).pack(fill='x',pady=4)
+ ttk.Label(frame,text='Updater bridge v'+VERSION+' • Your projects remain untouched.').pack(anchor='w',pady=(10,0))
+ root.mainloop()
+
+def open_legacy():
  root=tk.Tk();Builder(root);root.mainloop()
+
+if __name__=='__main__':
+ bridge()
+
