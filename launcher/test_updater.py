@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert (root/"WorldBuilder.exe").read_text()=="v1"
     assert mod.STATE.read_text().strip()=="0.2.0"
     assert (mod.OLD/"WorldBuilder.exe").read_text()=="v2"
-    assert (root/"WorldBuilder-Launcher.pyw").read_text()=="launcher-v1"
+    assert (root/"WorldBuilder-Launcher.pyw").read_text()=="launcher-v2"
     try:
         mod.install("0.3.2",bundle("broken",include_data=False))
         raise AssertionError("Incomplete archive accepted")
@@ -61,4 +61,8 @@ with tempfile.TemporaryDirectory() as tmp:
         pass
     assert (root/"WorldBuilder.exe").read_text()=="v1"
     assert mod.STATE.read_text().strip()=="0.2.0"
+    mod.OLD_VERSION.write_text("")
+    mod.rollback()
+    assert mod.STATE.read_text().strip()=="0.0.0"
+    assert mod.valid_version("") == (0,0,0)
 print("WorldBuilder update/rollback tests passed.")
