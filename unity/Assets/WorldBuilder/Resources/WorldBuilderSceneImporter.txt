@@ -1,0 +1,84 @@
+#if UNITY_EDITOR
+using System;
+using System.IO;
+using System.Reflection;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+
+// Copy this script and the WorldBuilder export JSON into the target Unity project's Assets folder.
+// No manual geometry placement is required.
+public static class WorldBuilderSceneImporter {
+ [Serializable] private class Part {
+  public string kind;
+  public Vector3 position;
+  public Vector3 scale;
+  public Quaternion rotation;
+ }
+ [Serializable] private class World {
+  public int schema;
+  public Part[] pieces;
+ }
+ [MenuItem("Tools/WorldBuilder/Import World")]
+ public static void Import(){
+  string path="Assets/WorldBuilderExport/world.json";
+  if(!File.Exists(path)){EditorUtility.DisplayDialog("WorldBuilder","Missing "+path+". Copy the exported WorldBuilderExport folder into this project's Assets folder first.","OK");return;}
+  try{
+   var world=JsonUtility.FromJson<World>(File.ReadAllText(path));
+   if(world==null||world.schema!=2||world.pieces==null)throw new Exception("Unsupported WorldBuilder project format.");
+   var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
+   GameObject root=new GameObject("WorldBuilder Imported World");
+   foreach(var p in world.pieces){
+    if(p==null)continue;
+    var obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
+    obj.name="WB_"+p.kind;
+    obj.transform.SetParent(root.transform);
+    var position=p.position;
+    // Legacy saved floors were below the preview surface. Match current WorldBuilder rendering.
+    if(p.kind=="floor" && position.y < .085f)position.y=.105f;
+    obj.transform.SetPositionAndRotation(position,p.rotation);
+    obj.transform.localScale=p.scale;
+    Color color=p.kind=="wall"?new Color(.89f,.91f,.94f):p.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
+    var mat=new Material(Shader.Find("Standard"));
+    mat.color=color;
+    obj.GetComponent<Renderer>().sharedMaterial=mat;
+    // Primitive BoxColliders already provide physical collision.
+   }
+   var sun=new GameObject("Sun").AddComponent<Light>();
+   sun.type=LightType.Directional;sun.intensity=1.05f;sun.transform.rotation=Quaternion.Euler(48,-32,0);
+   RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;
+   RenderSettings.ambientLight=new Color(.60f,.66f,.72f);
+   var spawn=new GameObject("WorldBuilder Spawn");
+   // Place spawn above a floor if one exists, otherwise above origin.
+   Vector3 spawnPos=new Vector3(0,1.05f,0);
+   foreach(var p in world.pieces)if(p!=null&&p.kind=="floor"){
+    spawnPos=new Vector3(p.position.x,Mathf.Max(.18f,p.position.y+p.scale.y*.5f)+.9f,p.position.z);
+    break;
+   }
+   spawn.transform.position=spawnPos;
+   spawn.transform.rotation=Quaternion.identity;
+   var descriptorType=FindType("VRC.SDK3.Components.VRCSceneDescriptor");
+   if(descriptorType!=null){
+    Component descriptor=spawn.AddComponent(descriptorType);
+    var f=descriptorType.GetField("spawns",BindingFlags.Public|BindingFlags.Instance);
+    if(f!=null)f.SetValue(descriptor,new Transform[]{spawn.transform});
+    var property=descriptorType.GetProperty("spawns",BindingFlags.Public|BindingFlags.Instance);
+    if(property!=null&&property.CanWrite)property.SetValue(descriptor,new Transform[]{spawn.transform},null);
+   }else{
+    Debug.LogWarning("WorldBuilder: VRChat SDK world descriptor is not installed. Add the VRChat Worlds SDK before publishing.");
+   }
+   string output="Assets/WorldBuilderExport/WorldBuilderWorld.unity";
+   if(!EditorSceneManager.SaveScene(scene,output))throw new Exception("Could not save scene.");
+   AssetDatabase.Refresh();
+   EditorUtility.DisplayDialog("WorldBuilder","Imported "+world.pieces.Length+" objects into "+output+". Check spawn and VRChat SDK readiness before publishing.","OK");
+  }catch(Exception ex){Debug.LogException(ex);EditorUtility.DisplayDialog("WorldBuilder Import Error",ex.Message,"OK");}
+ }
+ private static Type FindType(string name){
+  foreach(var assembly in AppDomain.CurrentDomain.GetAssemblies()){
+   Type type=assembly.GetType(name,false);
+   if(type!=null)return type;
+  }
+  return null;
+ }
+}
+#endif
