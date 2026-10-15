@@ -190,6 +190,8 @@ namespace WorldBuilder {
      string assetsTarget=Path.Combine(rootProject,"Assets");
      if(!Directory.Exists(assetsTarget)||!File.Exists(Path.Combine(rootProject,"ProjectSettings","ProjectVersion.txt")))
       throw new InvalidDataException("Choose an existing Unity project root folder");
+     PlayerPrefs.SetString("WorldBuilder.VRChatProject",rootProject);
+     PlayerPrefs.Save();
      string target=Path.Combine(assetsTarget,"WorldBuilderExport");
      CopyTree(assets,target);
      File.WriteAllText(Path.Combine(target,"WorldBuilderAutoImport.request"),"import");
@@ -213,6 +215,7 @@ namespace WorldBuilder {
   void Start() {
    if(sceneCamera==null)sceneCamera=Camera.main;
    if(sceneCamera!=null)walkthrough=sceneCamera.GetComponent<WalkthroughCamera>();
+   targetVrcProject=PlayerPrefs.GetString("WorldBuilder.VRChatProject","");
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
    if(File.Exists(filePath))Load();
    BuildGrid();
@@ -233,7 +236,7 @@ namespace WorldBuilder {
    if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
    if(Input.GetKeyDown(KeyCode.Alpha4))SelectTool(Tool.Table);
    if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
-   if(Input.GetKeyDown(KeyCode.Escape))anchor=null;
+   if(Input.GetKeyDown(KeyCode.Escape)){anchor=null;showImport=false;showExport=false;}
    if(Input.GetKeyDown(KeyCode.F1))showHelp=!showHelp;
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Z))UndoLast();
