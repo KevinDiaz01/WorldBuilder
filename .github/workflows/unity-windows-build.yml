@@ -1,0 +1,41 @@
+name: Unity Windows prototype build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'unity/**'
+      - '.github/workflows/unity-windows-build.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Unity activation
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        shell: bash
+        run: |
+          if [ -z "$UNITY_LICENSE" ]; then
+            echo "::error::Unity activation is required. Configure repository secret UNITY_LICENSE before this build can run."
+            exit 1
+          fi
+      - name: Build Windows player
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity
+          targetPlatform: StandaloneWindows64
+          buildMethod: WorldBuilder.WorldBuilderBuild.BuildWindows
+          versioning: None
+      - name: Upload build artifact for validation (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorldBuilder-3D-Windows-prototype
+          path: unity/Build/
+          if-no-files-found: error
