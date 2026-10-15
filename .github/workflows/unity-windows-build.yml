@@ -10,14 +10,18 @@ on:
     branches: [main]
     paths:
       - 'unity/**'
-      - '.github/workflows/unity-windows-build.yml'
 
 permissions:
   contents: write
+concurrency:
+  group: worldbuilder-3d-release
+  cancel-in-progress: false
 
 jobs:
   windows-player:
     runs-on: ubuntu-latest
+    env:
+      WB_VERSION: ${{ github.event_name == 'push' && format('0.3.{0}', github.run_number) || inputs.version }}
     steps:
       - uses: actions/checkout@v4
       - name: Confirm Unity activation
@@ -43,8 +47,6 @@ jobs:
           buildMethod: WorldBuilder.WorldBuilderBuild.BuildWindows
           versioning: None
       - name: Validate Unity output and prepare signed-by-hash update assets
-        env:
-          WB_VERSION: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
@@ -74,10 +76,9 @@ jobs:
           path: unity/Build/
           if-no-files-found: error
       - name: Publish 3D release for desktop Check Updates
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.version != '') }}
         env:
           GH_TOKEN: ${{ github.token }}
-          WB_VERSION: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
