@@ -119,6 +119,30 @@ namespace WorldBuilder {
   private GUIStyle titleStyle,buttonStyle;
   void Notice(string message){status=message;statusUntil=Time.time+5f;}
   void SelectTool(Tool tool){currentTool=tool;anchor=null;Notice(tool+" tool selected");}
+  void ExportUnity(){
+   try{
+    if(project.pieces==null||project.pieces.Count==0){Notice("Build something before exporting");return;}
+    string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"WorldBuilder-Exports");
+    Directory.CreateDirectory(root);
+    string destination=Path.Combine(root,"World-"+DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+    string assets=Path.Combine(destination,"Assets","WorldBuilderExport");
+    Directory.CreateDirectory(assets);
+    File.WriteAllText(Path.Combine(assets,"world.json"),JsonUtility.ToJson(project,true));
+    var importer=Resources.Load<TextAsset>("WorldBuilderSceneImporter");
+    if(importer==null)throw new InvalidDataException("Scene importer resource missing");
+    File.WriteAllText(Path.Combine(assets,"WorldBuilderSceneImporter.cs"),importer.text);
+    File.WriteAllText(Path.Combine(destination,"README.txt"),
+      "WorldBuilder VRChat Export V1\\r\\n\\r\\n"+
+      "This is an export package, not yet a complete Unity project or one-click VRChat upload.\\r\\n"+
+      "1. Create/open a matching Unity project using VRChat Creator Companion (Worlds SDK).\\r\\n"+
+      "2. Copy the CONTENTS of this package's Assets folder into that Unity project's Assets folder.\\r\\n"+
+      "3. In Unity, select Tools > WorldBuilder > Import World. It will generate WorldBuilderWorld.unity automatically.\\r\\n"+
+      "4. Review the spawn and any SDK warnings, then build and publish via VRChat SDK.\\r\\n"+
+      "Geometry, box colliders and basic colors are preserved. Third-party assets are not yet supported.\\r\\n");
+    Notice("Exported to Documents/WorldBuilder-Exports/"+Path.GetFileName(destination));
+    Application.OpenURL(new Uri(destination).AbsoluteUri);
+   }catch(Exception e){Debug.LogException(e);Notice("Export failed: "+e.Message);}
+  }
   void NewProject(){project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
   string ProjectsFolder(){string p=Path.Combine(Application.persistentDataPath,"Projects");Directory.CreateDirectory(p);return p;}
   void SaveAsNamed(string name){
@@ -224,6 +248,7 @@ namespace WorldBuilder {
     GUI.Box(new Rect(0,h-54,w,54),"Avatar height: "+avatarHeight.ToString("F2")+" m  |  Spatial scale preview, not a full VRChat simulator");
     return;
    }
+   if(GUI.Button(new Rect(w-690,15,127,36),"Export Unity"))ExportUnity();
    if(GUI.Button(new Rect(w-555,15,120,36),"Walk Preview")){
     if(walkthrough!=null){if(preview!=null)preview.SetActive(false);walkthrough.SetHeight(avatarHeight);walkthrough.Enter();}
     else Notice("Walkthrough camera unavailable");
