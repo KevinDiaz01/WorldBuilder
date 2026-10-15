@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'unity/**'
+      - 'launcher/**'
 
 permissions:
   contents: write
@@ -60,8 +61,12 @@ jobs:
           if not version:
               raise SystemExit(0)
           root = pathlib.Path('unity/Build')
+          launcher = pathlib.Path('launcher/WorldBuilder-Launcher.pyw')
+          if not launcher.is_file():
+              raise SystemExit('Missing 3D updater launcher')
           name = f'WorldBuilder-3D-v{version}.zip'
           with zipfile.ZipFile(name, 'w', zipfile.ZIP_DEFLATED) as out:
+              out.write(launcher, 'WorldBuilder-Launcher.pyw')
               for path in root.rglob('*'):
                   if path.is_file():
                       out.write(path, path.relative_to(root))
