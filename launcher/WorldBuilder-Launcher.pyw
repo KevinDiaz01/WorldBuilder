@@ -35,6 +35,7 @@ def running():
     return "WorldBuilder.exe" in output.stdout
 
 def valid_version(v):
+    if not v or not v.strip(): return (0, 0, 0)
     p = v.lstrip("v").split(".")
     if len(p) != 3 or not all(x.isdecimal() for x in p): raise ValueError("Invalid version")
     return tuple(map(int,p))
@@ -110,7 +111,8 @@ def rollback():
     if not (OLD/"WorldBuilder.exe").is_file() or not (OLD/"WorldBuilder_Data").is_dir():
         raise RuntimeError("No complete previous version is available.")
     current = STATE.read_text(encoding="utf-8").strip() if STATE.exists() else ""
-    previous = OLD_VERSION.read_text(encoding="utf-8").strip() if OLD_VERSION.exists() else ""
+    previous = OLD_VERSION.read_text(encoding="utf-8").strip() if OLD_VERSION.exists() else "0.0.0"
+    if not previous: previous = "0.0.0"
     next_backup = HOME/".3d-rollback-working"
     remove(next_backup)
     next_backup.mkdir()
@@ -119,6 +121,9 @@ def rollback():
     try:
         for name in original: shutil.move(str(HOME/name),str(next_backup/name))
         for name in FILES:
+            # Roll back the player, not the current updater: old launchers may
+            # lack recovery features and fail to parse legacy version markers.
+            if name == "WorldBuilder-Launcher.pyw": continue
             if (OLD/name).exists(): shutil.copytree(OLD/name, HOME/name) if (OLD/name).is_dir() else shutil.copy2(OLD/name,HOME/name)
         if not APP.is_file() or not (HOME/"WorldBuilder_Data").is_dir():
             raise RuntimeError("Restored application is incomplete")
@@ -185,7 +190,7 @@ class Launcher:
             assets={a["name"]:a["browser_download_url"] for a in release.get("assets",[])}
             if name not in assets or name+".sha256" not in assets:
                 raise ValueError("Latest release is not a compatible WorldBuilder 3D update.")
-            installed=STATE.read_text(encoding="utf-8").strip() if STATE.exists() else "0.0.0"
+            installed=(STATE.read_text(encoding="utf-8").strip() if STATE.exists() else "") or "0.0.0"
             if valid_version(version)<=valid_version(installed):
                 self.root.after(0,lambda:self.done("WorldBuilder 3D is up to date."))
             else: self.root.after(0,lambda:self.ask_update(version,assets,name))
