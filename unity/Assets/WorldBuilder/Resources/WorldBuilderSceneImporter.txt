@@ -14,10 +14,22 @@ public static class WorldBuilderSceneImporter {
   public Vector3 position;
   public Vector3 scale;
   public Quaternion rotation;
+  public string assetId;
  }
  [Serializable] private class World {
   public int schema;
   public Part[] pieces;
+ }
+ [InitializeOnLoadMethod]
+ static void ScheduleAutomaticImport(){
+  EditorApplication.delayCall+=()=>{
+   string marker="Assets/WorldBuilderExport/WorldBuilderAutoImport.request";
+   if(!File.Exists(marker))return;
+   // Consume the marker first so a domain reload cannot trigger an import loop.
+   File.Delete(marker);
+   AssetDatabase.Refresh();
+   Import();
+  };
  }
  [MenuItem("Tools/WorldBuilder/Import World")]
  public static void Import(){
@@ -33,7 +45,25 @@ public static class WorldBuilderSceneImporter {
    var palette=new System.Collections.Generic.Dictionary<string,Material>();
    foreach(var p in world.pieces){
     if(p==null)continue;
-    var obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
+    GameObject obj;
+    if(p.kind=="imported"){
+     if(string.IsNullOrEmpty(p.assetId))throw new InvalidDataException("Imported object has no asset identifier");
+     string modelPath="Assets/WorldBuilderExport/ImportedAssets/"+p.assetId+"/model.obj";
+     AssetDatabase.ImportAsset(modelPath,ImportAssetOptions.ForceSynchronousImport);
+     GameObject prefab=AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+     if(prefab==null)throw new FileNotFoundException("Could not import OBJ asset",modelPath);
+     obj=(GameObject)PrefabUtility.InstantiatePrefab(prefab);
+     if(obj==null)throw new Exception("Unable to place imported OBJ prefab");
+     obj.name="WB_Imported_"+p.assetId;
+     // Keep Unity's model import as the source of truth for exported mesh and hierarchy.
+     // Configure colliders for meshes while preserving all children and materials.
+     foreach(var filter in obj.GetComponentsInChildren<MeshFilter>()){
+      if(filter.sharedMesh!=null && filter.GetComponent<Collider>()==null){
+       var meshCollider=filter.gameObject.AddComponent<MeshCollider>();
+       meshCollider.sharedMesh=filter.sharedMesh;
+      }
+     }
+    }else obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
     obj.name="WB_"+p.kind;
     obj.transform.SetParent(root.transform);
     var position=p.position;
@@ -41,6 +71,7 @@ public static class WorldBuilderSceneImporter {
     if(p.kind=="floor" && position.y < .085f)position.y=.105f;
     obj.transform.SetPositionAndRotation(position,p.rotation);
     obj.transform.localScale=p.scale;
+    if(p.kind=="imported")continue;
     Color color=p.kind=="wall"?new Color(.89f,.91f,.94f):p.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
     Material mat;
     if(!palette.TryGetValue(p.kind,out mat)){
@@ -80,6 +111,9 @@ public static class WorldBuilderSceneImporter {
     if(f!=null)f.SetValue(descriptor,new Transform[]{spawn.transform});
     var property=descriptorType.GetProperty("spawns",BindingFlags.Public|BindingFlags.Instance);
     if(property!=null&&property.CanWrite)property.SetValue(descriptor,new Transform[]{spawn.transform},null);
+    // VRC pipeline manager is mandatory and must share the descriptor GameObject.
+    var pipelineType=FindType("VRC.Core.PipelineManager");
+    if(pipelineType!=null && spawn.GetComponent(pipelineType)==null)spawn.AddComponent(pipelineType);
    }else{
     Debug.LogWarning("WorldBuilder: VRChat SDK world descriptor is not installed. Add the VRChat Worlds SDK before publishing.");
    }
@@ -87,6 +121,7 @@ public static class WorldBuilderSceneImporter {
    if(!EditorSceneManager.SaveScene(scene,output))throw new Exception("Could not save scene.");
    AssetDatabase.SaveAssets();
    AssetDatabase.Refresh();
+   EditorSceneManager.OpenScene(output,OpenSceneMode.Single);
    EditorUtility.DisplayDialog("WorldBuilder","Imported "+world.pieces.Length+" objects into "+output+". Check spawn and VRChat SDK readiness before publishing.","OK");
   }catch(Exception ex){Debug.LogException(ex);EditorUtility.DisplayDialog("WorldBuilder Import Error",ex.Message,"OK");}
  }
