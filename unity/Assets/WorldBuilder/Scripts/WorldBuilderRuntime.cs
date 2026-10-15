@@ -77,6 +77,10 @@ namespace WorldBuilder {
     }
    }
   }
+  // Give floor surfaces clearance above the base terrain to prevent z-fighting.
+  const float FloorTop=0.18f;
+  const float FloorThickness=0.15f;
+  const float FloorCenter=FloorTop-FloorThickness*.5f;
   void UpdatePreview(){
    if(OverUI()||currentTool==Tool.Erase||!MouseOnGround(out Vector3 p)){
     if(preview!=null)preview.SetActive(false);
@@ -103,8 +107,8 @@ namespace WorldBuilder {
      preview.transform.localScale=new Vector3(Mathf.Max(.05f,d.magnitude),wallHeight,wallThickness);
      preview.transform.rotation=Quaternion.Euler(0,-Mathf.Atan2(d.z,d.x)*Mathf.Rad2Deg,0);
     }else{
-     preview.transform.position=(p+anchor.Value)*.5f-Vector3.up*.075f;
-     preview.transform.localScale=new Vector3(Mathf.Max(gridSize,Mathf.Abs(d.x)),.15f,Mathf.Max(gridSize,Mathf.Abs(d.z)));
+     preview.transform.position=(p+anchor.Value)*.5f+Vector3.up*FloorCenter;
+     preview.transform.localScale=new Vector3(Mathf.Max(gridSize,Mathf.Abs(d.x)),FloorThickness,Mathf.Max(gridSize,Mathf.Abs(d.z)));
     }
    }else{
     preview.transform.position=p+Vector3.up*.04f;
@@ -168,18 +172,22 @@ namespace WorldBuilder {
     Add(new Piece("wall",(start+p)*.5f+Vector3.up*wallHeight*.5f,new Vector3(diff.magnitude,wallHeight,wallThickness),Quaternion.Euler(0,-Mathf.Atan2(diff.z,diff.x)*Mathf.Rad2Deg,0)));
    }else{
     Vector3 delta=p-start;
-    Add(new Piece("floor",(start+p)*.5f-Vector3.up*.075f,new Vector3(Mathf.Max(Mathf.Abs(delta.x),gridSize),.15f,Mathf.Max(Mathf.Abs(delta.z),gridSize)),Quaternion.identity));
+    Add(new Piece("floor",(start+p)*.5f+Vector3.up*FloorCenter,new Vector3(Mathf.Max(Mathf.Abs(delta.x),gridSize),FloorThickness,Mathf.Max(Mathf.Abs(delta.z),gridSize)),Quaternion.identity));
    }
   }
   void Add(Piece piece){project.pieces.Add(piece);objects.Add(Create(piece));}
   GameObject Create(Piece piece){
    GameObject obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
    obj.name="WB_"+piece.kind;
-   obj.transform.SetPositionAndRotation(piece.position,piece.rotation);
+   // Older saves put floor tops at y=0, coplanar with the base plane.
+   // Correct their render height without modifying the saved schema.
+   Vector3 displayPosition=piece.position;
+   if(piece.kind=="floor" && displayPosition.y < FloorCenter-.02f)displayPosition.y=FloorCenter;
+   obj.transform.SetPositionAndRotation(displayPosition,piece.rotation);
    obj.transform.localScale=piece.scale;
    Material material=piece.kind=="wall"?wallMaterial:piece.kind=="floor"?floorMaterial:furnitureMaterial;
    if(material!=null)obj.GetComponent<Renderer>().sharedMaterial=material;
-   else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.85f,.86f,.88f):piece.kind=="floor"?new Color(.63f,.54f,.44f):new Color(.25f,.6f,.7f);
+   else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.89f,.91f,.94f):piece.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
    return obj;
   }
   void Erase(Vector3 point){
