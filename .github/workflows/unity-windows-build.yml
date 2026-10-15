@@ -1,28 +1,37 @@
-name: Unity Windows prototype build
+name: Build and release WorldBuilder 3D
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "3D version, e.g. 0.2.0 (leave blank for build-only)"
+        required: false
+        type: string
   push:
     branches: [main]
     paths:
       - 'unity/**'
       - '.github/workflows/unity-windows-build.yml'
+
 permissions:
-  contents: read
+  contents: write
+
 jobs:
-  build:
+  windows-player:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check Unity activation
+      - name: Confirm Unity activation
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         shell: bash
         run: |
-          if [ -z "$UNITY_LICENSE" ]; then
-            echo "::error::Unity activation is required. Configure repository secret UNITY_LICENSE before this build can run."
+          if [ -z "$UNITY_LICENSE" ] && { [ -z "$UNITY_EMAIL" ] || [ -z "$UNITY_PASSWORD" ]; }; then
+            echo "::error::Unity credentials are not configured. Add GitHub Actions Unity activation secrets before publishing 3D builds."
             exit 1
           fi
-      - name: Build Windows player
+      - name: Build Unity Windows player
         uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -33,9 +42,52 @@ jobs:
           targetPlatform: StandaloneWindows64
           buildMethod: WorldBuilder.WorldBuilderBuild.BuildWindows
           versioning: None
-      - name: Upload build artifact for validation (not a release)
+      - name: Validate Unity output and prepare signed-by-hash update assets
+        env:
+          WB_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f unity/Build/WorldBuilder.exe
+          test -d unity/Build/WorldBuilder_Data
+          if [ -n "$WB_VERSION" ]; then
+            [[ "$WB_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Expected version X.Y.Z"; exit 1; }
+            python3 - <<'PY'
+          import hashlib, os, pathlib, zipfile
+          version = os.environ['WB_VERSION']
+          if not version:
+              raise SystemExit(0)
+          root = pathlib.Path('unity/Build')
+          name = f'WorldBuilder-3D-v{version}.zip'
+          with zipfile.ZipFile(name, 'w', zipfile.ZIP_DEFLATED) as out:
+              for path in root.rglob('*'):
+                  if path.is_file():
+                      out.write(path, path.relative_to(root))
+          pathlib.Path(name+'.sha256').write_text(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()+'  '+name+'\n')
+          PY
+            sha256sum -c "WorldBuilder-3D-v$WB_VERSION.zip.sha256"
+          fi
+      - name: Save Windows build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WorldBuilder-3D-Windows-prototype
+          name: WorldBuilder-3D-Windows
           path: unity/Build/
           if-no-files-found: error
+      - name: Publish 3D release for desktop Check Updates
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WB_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "v$WB_VERSION" >/dev/null 2>&1; then
+            echo "::error::Release v$WB_VERSION already exists; refusing to overwrite it."
+            exit 1
+          fi
+          gh release create "v$WB_VERSION" \
+            "WorldBuilder-3D-v$WB_VERSION.zip" \
+            "WorldBuilder-3D-v$WB_VERSION.zip.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "WorldBuilder 3D v$WB_VERSION" \
+            --notes "Windows 3D update for the installed WorldBuilder 3D Check Updates launcher."
