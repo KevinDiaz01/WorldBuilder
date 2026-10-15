@@ -14,6 +14,7 @@ namespace WorldBuilder {
    var camera=cameraObject.AddComponent<Camera>();
    cameraObject.AddComponent<AudioListener>();
    cameraObject.AddComponent<OrbitCamera>();
+   cameraObject.AddComponent<WalkthroughCamera>();
    var sunObject=new GameObject("Sun");
    var sun=sunObject.AddComponent<Light>();
    sun.type=LightType.Directional;
