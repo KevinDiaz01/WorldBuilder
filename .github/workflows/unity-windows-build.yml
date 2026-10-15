@@ -27,8 +27,8 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         shell: bash
         run: |
-          if [ -z "$UNITY_LICENSE" ] && { [ -z "$UNITY_EMAIL" ] || [ -z "$UNITY_PASSWORD" ]; }; then
-            echo "::error::Unity credentials are not configured. Add GitHub Actions Unity activation secrets before publishing 3D builds."
+          if [ -z "$UNITY_LICENSE" ] || [ -z "$UNITY_EMAIL" ] || [ -z "$UNITY_PASSWORD" ]; then
+            echo "::error::Unity credentials are not configured. Unity Personal requires UNITY_LICENSE, UNITY_EMAIL and UNITY_PASSWORD secrets. Configure in repository Settings > Secrets and variables > Actions."
             exit 1
           fi
       - name: Build Unity Windows player
