@@ -9,6 +9,7 @@ namespace WorldBuilder {
   public Vector3 position;
   public Vector3 scale;
   public Quaternion rotation;
+  public string assetId;
   public Piece(string kind, Vector3 position, Vector3 scale, Quaternion rotation) {
    this.kind=kind;this.position=position;this.scale=scale;this.rotation=rotation;
   }
@@ -27,7 +28,7 @@ namespace WorldBuilder {
   public float gridSize=1f;
   public float wallHeight=2.7f;
   public float wallThickness=.16f;
-  public enum Tool { Wall, Floor, Couch, Table, Erase }
+  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
   private Project project=new Project();
@@ -39,6 +40,11 @@ namespace WorldBuilder {
   private bool showLibrary=true;
   private bool showProjects=false;
   private GameObject preview;
+  private string importedId;
+  private string importPath="";
+  private string targetVrcProject="";
+  private bool showImport=false;
+  private bool showExport=false;
   private bool showGrid=true;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
   bool OverUI(){
@@ -47,7 +53,8 @@ namespace WorldBuilder {
    return p.y<66f||p.y>Screen.height-54f||
      (showLibrary&&p.x<205f)||
      (showProjects&&p.x>Screen.width-365f&&p.y<520f)||
-     (showHelp&&p.x>Screen.width-380f&&p.y>Screen.height-215f);
+     (showHelp&&p.x>Screen.width-380f&&p.y>Screen.height-215f)||
+     ((showImport||showExport)&&p.x>Screen.width*.5f-265&&p.x<Screen.width*.5f+265&&p.y<310);
   }
   void UndoLast(){
    int i=objects.Count-1;
@@ -96,7 +103,10 @@ namespace WorldBuilder {
    }
    preview.SetActive(true);
    preview.transform.rotation=Quaternion.identity;
-   if(currentTool==Tool.Couch||currentTool==Tool.Table){
+   if(currentTool==Tool.Imported){
+    preview.transform.position=p+Vector3.up*.5f;
+    preview.transform.localScale=Vector3.one;
+   }else if(currentTool==Tool.Couch||currentTool==Tool.Table){
     bool sofa=currentTool==Tool.Couch;
     preview.transform.position=p+Vector3.up*.4f;
     preview.transform.localScale=new Vector3(sofa?2f:1.2f,.8f,sofa?.9f:1.2f);
@@ -119,6 +129,41 @@ namespace WorldBuilder {
   private GUIStyle titleStyle,buttonStyle;
   void Notice(string message){status=message;statusUntil=Time.time+5f;}
   void SelectTool(Tool tool){currentTool=tool;anchor=null;Notice(tool+" tool selected");}
+  string AssetLibrary(){string d=Path.Combine(Application.persistentDataPath,"ImportedAssets");Directory.CreateDirectory(d);return d;}
+  void ImportObj(){
+   try{
+    string path=importPath.Trim().Trim('"');
+    if(!File.Exists(path)||Path.GetExtension(path).ToLowerInvariant()!=".obj")throw new FileNotFoundException("Choose an existing .obj file");
+    string id=Guid.NewGuid().ToString("N");
+    string directory=Path.Combine(AssetLibrary(),id);
+    Directory.CreateDirectory(directory);
+    foreach(string source in Directory.GetFiles(Path.GetDirectoryName(path))){
+     string ext=Path.GetExtension(source).ToLowerInvariant();
+     if(ext==".mtl"||ext==".png"||ext==".jpg"||ext==".jpeg")File.Copy(source,Path.Combine(directory,Path.GetFileName(source)),true);
+    }
+    string model=Path.Combine(directory,"model.obj");
+    File.Copy(path,model,true);
+    GameObject test=ImportedObj.Load(model);
+    Destroy(test);
+    importedId=id;
+    currentTool=Tool.Imported;
+    showImport=false;
+    Notice("OBJ imported. Click ground to place.");
+   }catch(Exception e){Debug.LogException(e);Notice("Import failed: "+e.Message);}
+  }
+  void CopyTree(string source,string destination){
+   Directory.CreateDirectory(destination);
+   foreach(string file in Directory.GetFiles(source))File.Copy(file,Path.Combine(destination,Path.GetFileName(file)),true);
+   foreach(string dir in Directory.GetDirectories(source))CopyTree(dir,Path.Combine(destination,Path.GetFileName(dir)));
+  }
+  void CopyImportedAssets(string exportAssets){
+   foreach(var item in project.pieces){
+    if(string.IsNullOrEmpty(item.assetId))continue;
+    string dir=Path.Combine(AssetLibrary(),item.assetId);
+    if(!Directory.Exists(dir))throw new DirectoryNotFoundException("Missing asset: "+item.assetId);
+    CopyTree(dir,Path.Combine(exportAssets,"ImportedAssets",item.assetId));
+   }
+  }
   void ExportUnity(){
    try{
     if(project.pieces==null||project.pieces.Count==0){Notice("Build something before exporting");return;}
@@ -128,6 +173,7 @@ namespace WorldBuilder {
     string assets=Path.Combine(destination,"Assets","WorldBuilderExport");
     Directory.CreateDirectory(assets);
     File.WriteAllText(Path.Combine(assets,"world.json"),JsonUtility.ToJson(project,true));
+    CopyImportedAssets(assets);
     var importer=Resources.Load<TextAsset>("WorldBuilderSceneImporter");
     if(importer==null)throw new InvalidDataException("Scene importer resource missing");
     File.WriteAllText(Path.Combine(assets,"WorldBuilderSceneImporter.cs"),importer.text);
@@ -139,8 +185,20 @@ namespace WorldBuilder {
       "3. In Unity, select Tools > WorldBuilder > Import World. It will generate WorldBuilderWorld.unity automatically.\\r\\n"+
       "4. Review the spawn and any SDK warnings, then build and publish via VRChat SDK.\\r\\n"+
       "Geometry, box colliders and basic colors are preserved. Third-party assets are not yet supported.\\r\\n");
-    Notice("Exported to Documents/WorldBuilder-Exports/"+Path.GetFileName(destination));
-    Application.OpenURL(new Uri(destination).AbsoluteUri);
+    string rootProject=targetVrcProject.Trim().Trim('"');
+    if(rootProject.Length>0){
+     string assetsTarget=Path.Combine(rootProject,"Assets");
+     if(!Directory.Exists(assetsTarget)||!File.Exists(Path.Combine(rootProject,"ProjectSettings","ProjectVersion.txt")))
+      throw new InvalidDataException("Choose an existing Unity project root folder");
+     string target=Path.Combine(assetsTarget,"WorldBuilderExport");
+     CopyTree(assets,target);
+     File.WriteAllText(Path.Combine(target,"WorldBuilderAutoImport.request"),"import");
+     Notice("VRChat project prepared. Open Unity for automatic scene generation.");
+    }else{
+     Notice("Exported to Documents/WorldBuilder-Exports/"+Path.GetFileName(destination));
+     Application.OpenURL(new Uri(destination).AbsoluteUri);
+    }
+    showExport=false;
    }catch(Exception e){Debug.LogException(e);Notice("Export failed: "+e.Message);}
   }
   void NewProject(){project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
@@ -185,6 +243,11 @@ namespace WorldBuilder {
    if(!Input.GetMouseButtonDown(0) || Input.GetKey(KeyCode.LeftAlt) || Input.GetMouseButton(1))return;
    if(OverUI()||!MouseOnGround(out Vector3 p))return;
    if(currentTool==Tool.Erase) { Erase(p);return; }
+   if(currentTool==Tool.Imported){
+    if(string.IsNullOrEmpty(importedId)){Notice("Import an OBJ first");return;}
+    var item=new Piece("imported",p,Vector3.one,Quaternion.identity);
+    item.assetId=importedId;Add(item);return;
+   }
    if(currentTool==Tool.Couch||currentTool==Tool.Table) {
     Add(new Piece(currentTool==Tool.Couch?"couch":"table",p+Vector3.up*.4f,new Vector3(currentTool==Tool.Couch?2f:1.2f,.8f,currentTool==Tool.Couch?.9f:1.2f),Quaternion.identity));return;
    }
@@ -201,6 +264,21 @@ namespace WorldBuilder {
   }
   void Add(Piece piece){project.pieces.Add(piece);objects.Add(Create(piece));}
   GameObject Create(Piece piece){
+   if(piece.kind=="imported"){
+    try{
+     string file=Path.Combine(AssetLibrary(),piece.assetId??"","model.obj");
+     var objImported=ImportedObj.Load(file);
+     objImported.name="WB_Imported_"+piece.assetId;
+     objImported.transform.SetPositionAndRotation(piece.position,piece.rotation);
+     objImported.transform.localScale=piece.scale;
+     return objImported;
+    }catch(Exception e){
+     Debug.LogError("Missing imported asset: "+e.Message);
+     var missing=GameObject.CreatePrimitive(PrimitiveType.Cube);
+     missing.name="MISSING ASSET "+piece.assetId;missing.transform.position=piece.position;
+     return missing;
+    }
+   }
    GameObject obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
    obj.name="WB_"+piece.kind;
    // Older saves put floor tops at y=0, coplanar with the base plane.
@@ -248,7 +326,8 @@ namespace WorldBuilder {
     GUI.Box(new Rect(0,h-54,w,54),"Avatar height: "+avatarHeight.ToString("F2")+" m  |  Spatial scale preview, not a full VRChat simulator");
     return;
    }
-   if(GUI.Button(new Rect(w-690,15,127,36),"Export Unity"))ExportUnity();
+   if(GUI.Button(new Rect(w-835,15,137,36),"Import OBJ")){showImport=!showImport;showExport=false;}
+   if(GUI.Button(new Rect(w-690,15,127,36),"Export Unity")){showExport=!showExport;showImport=false;}
    if(GUI.Button(new Rect(w-555,15,120,36),"Walk Preview")){
     if(walkthrough!=null){if(preview!=null)preview.SetActive(false);walkthrough.SetHeight(avatarHeight);walkthrough.Enter();}
     else Notice("Walkthrough camera unavailable");
@@ -274,6 +353,22 @@ namespace WorldBuilder {
     GUI.Label(new Rect(14,h-158,180,24),"AVATAR HEIGHT");
     GUI.Label(new Rect(14,h-132,180,22),avatarHeight.ToString("F2")+" m");
     avatarHeight=GUI.HorizontalSlider(new Rect(14,h-108,176,20),avatarHeight,1.2f,2.2f);
+   }
+   if(showImport){
+    float x=w*.5f-265;
+    GUI.Box(new Rect(x,75,530,205),"IMPORT OBJ MODEL");
+    GUI.Label(new Rect(x+20,111,490,25),"Paste the full file path to a .obj model:");
+    importPath=GUI.TextField(new Rect(x+20,142,490,32),importPath);
+    if(GUI.Button(new Rect(x+20,187,235,36),"Import and Select"))ImportObj();
+    if(GUI.Button(new Rect(x+275,187,235,36),"Cancel"))showImport=false;
+   }
+   if(showExport){
+    float x=w*.5f-265;
+    GUI.Box(new Rect(x,75,530,232),"EXPORT TO UNITY / VRCHAT");
+    GUI.Label(new Rect(x+20,111,490,40),"Optional: enter existing VRChat Unity project path.\\nLeave blank to create a folder.");
+    targetVrcProject=GUI.TextField(new Rect(x+20,162,490,32),targetVrcProject);
+    if(GUI.Button(new Rect(x+20,212,235,36),"Prepare Export"))ExportUnity();
+    if(GUI.Button(new Rect(x+275,212,235,36),"Cancel"))showExport=false;
    }
    if(showProjects){
     float px=Mathf.Max(215,w-365);
