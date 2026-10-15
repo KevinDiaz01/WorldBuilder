@@ -28,6 +28,9 @@ public static class WorldBuilderSceneImporter {
    if(world==null||world.schema!=2||world.pieces==null)throw new Exception("Unsupported WorldBuilder project format.");
    var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
    GameObject root=new GameObject("WorldBuilder Imported World");
+   string materialDir="Assets/WorldBuilderExport/Materials";
+   if(!AssetDatabase.IsValidFolder(materialDir))AssetDatabase.CreateFolder("Assets/WorldBuilderExport","Materials");
+   var palette=new System.Collections.Generic.Dictionary<string,Material>();
    foreach(var p in world.pieces){
     if(p==null)continue;
     var obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -39,8 +42,21 @@ public static class WorldBuilderSceneImporter {
     obj.transform.SetPositionAndRotation(position,p.rotation);
     obj.transform.localScale=p.scale;
     Color color=p.kind=="wall"?new Color(.89f,.91f,.94f):p.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
-    var mat=new Material(Shader.Find("Standard"));
-    mat.color=color;
+    Material mat;
+    if(!palette.TryGetValue(p.kind,out mat)){
+     string matPath=materialDir+"/WB_"+(p.kind=="wall"?"Wall":p.kind=="floor"?"Floor":"Object")+".mat";
+     mat=AssetDatabase.LoadAssetAtPath<Material>(matPath);
+     if(mat==null){
+      Shader shader=Shader.Find("Standard");
+      if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+      if(shader==null)throw new Exception("No compatible material shader found.");
+      mat=new Material(shader);
+      AssetDatabase.CreateAsset(mat,matPath);
+     }
+     mat.color=color;
+     EditorUtility.SetDirty(mat);
+     palette[p.kind]=mat;
+    }
     obj.GetComponent<Renderer>().sharedMaterial=mat;
     // Primitive BoxColliders already provide physical collision.
    }
@@ -69,6 +85,7 @@ public static class WorldBuilderSceneImporter {
    }
    string output="Assets/WorldBuilderExport/WorldBuilderWorld.unity";
    if(!EditorSceneManager.SaveScene(scene,output))throw new Exception("Could not save scene.");
+   AssetDatabase.SaveAssets();
    AssetDatabase.Refresh();
    EditorUtility.DisplayDialog("WorldBuilder","Imported "+world.pieces.Length+" objects into "+output+". Check spawn and VRChat SDK readiness before publishing.","OK");
   }catch(Exception ex){Debug.LogException(ex);EditorUtility.DisplayDialog("WorldBuilder Import Error",ex.Message,"OK");}
