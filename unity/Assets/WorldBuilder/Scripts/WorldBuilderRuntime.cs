@@ -217,7 +217,7 @@ namespace WorldBuilder {
     return;
    }
    if(GUI.Button(new Rect(w-555,15,120,36),"Walk Preview")){
-    if(walkthrough!=null){walkthrough.SetHeight(avatarHeight);walkthrough.Enter();}
+    if(walkthrough!=null){if(preview!=null)preview.SetActive(false);walkthrough.SetHeight(avatarHeight);walkthrough.Enter();}
     else Notice("Walkthrough camera unavailable");
    }
    if(GUI.Button(new Rect(w-425,15,75,36),"New"))NewProject();
@@ -237,7 +237,7 @@ namespace WorldBuilder {
     if(GUI.Button(new Rect(14,415,176,42),"5   Eraser"))SelectTool(Tool.Erase);
     if(GUI.Button(new Rect(14,474,176,38),showGrid?"Hide grid (G)":"Show grid (G)"))ToggleGrid();
     if(GUI.Button(new Rect(14,520,176,38),"Undo (Ctrl+Z)"))UndoLast();
-    GUI.Label(new Rect(14,h-185,180,48),"Selected: "+currentTool);
+    GUI.Label(new Rect(14,h-240,180,28),"Selected: "+currentTool);
     GUI.Label(new Rect(14,h-158,180,24),"AVATAR HEIGHT");
     GUI.Label(new Rect(14,h-132,180,22),avatarHeight.ToString("F2")+" m");
     avatarHeight=GUI.HorizontalSlider(new Rect(14,h-108,176,20),avatarHeight,1.2f,2.2f);
