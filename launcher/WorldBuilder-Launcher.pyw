@@ -120,6 +120,10 @@ def rollback():
     write(JOURNAL,json.dumps({"backup":next_backup.name,"original":original,"version":current}))
     try:
         for name in original: shutil.move(str(HOME/name),str(next_backup/name))
+        # The launcher is running from this file; retain the current updater
+        # rather than swapping it for one saved by an older release.
+        if (next_backup/"WorldBuilder-Launcher.pyw").is_file():
+            shutil.copy2(next_backup/"WorldBuilder-Launcher.pyw", HOME/"WorldBuilder-Launcher.pyw")
         for name in FILES:
             # Roll back the player, not the current updater: old launchers may
             # lack recovery features and fail to parse legacy version markers.
