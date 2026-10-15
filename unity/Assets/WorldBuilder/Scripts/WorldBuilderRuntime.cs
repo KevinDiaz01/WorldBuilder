@@ -41,6 +41,8 @@ namespace WorldBuilder {
   private bool showProjects=false;
   private GameObject preview;
   private string importedId;
+  private float importedScale=1f;
+  private float importedRotation=0f;
   private string importPath="";
   private string targetVrcProject="";
   private bool showImport=false;
@@ -105,7 +107,8 @@ namespace WorldBuilder {
    preview.transform.rotation=Quaternion.identity;
    if(currentTool==Tool.Imported){
     preview.transform.position=p+Vector3.up*.5f;
-    preview.transform.localScale=Vector3.one;
+    preview.transform.localScale=Vector3.one*importedScale;
+    preview.transform.rotation=Quaternion.Euler(0,importedRotation,0);
    }else if(currentTool==Tool.Couch||currentTool==Tool.Table){
     bool sofa=currentTool==Tool.Couch;
     preview.transform.position=p+Vector3.up*.4f;
@@ -248,7 +251,7 @@ namespace WorldBuilder {
    if(currentTool==Tool.Erase) { Erase(p);return; }
    if(currentTool==Tool.Imported){
     if(string.IsNullOrEmpty(importedId)){Notice("Import an OBJ first");return;}
-    var item=new Piece("imported",p,Vector3.one,Quaternion.identity);
+    var item=new Piece("imported",p,Vector3.one*importedScale,Quaternion.Euler(0,importedRotation,0));
     item.assetId=importedId;Add(item);return;
    }
    if(currentTool==Tool.Couch||currentTool==Tool.Table) {
@@ -353,6 +356,12 @@ namespace WorldBuilder {
     if(GUI.Button(new Rect(14,474,176,38),showGrid?"Hide grid (G)":"Show grid (G)"))ToggleGrid();
     if(GUI.Button(new Rect(14,520,176,38),"Undo (Ctrl+Z)"))UndoLast();
     GUI.Label(new Rect(14,h-240,180,28),"Selected: "+currentTool);
+    if(currentTool==Tool.Imported){
+     GUI.Label(new Rect(14,578,180,20),"MODEL SCALE "+importedScale.ToString("F2")+"x");
+     importedScale=GUI.HorizontalSlider(new Rect(14,601,176,18),importedScale,.1f,4f);
+     GUI.Label(new Rect(14,627,180,20),"ROTATE "+importedRotation.ToString("F0")+" deg");
+     importedRotation=GUI.HorizontalSlider(new Rect(14,650,176,18),importedRotation,0f,360f);
+    }
     GUI.Label(new Rect(14,h-158,180,24),"AVATAR HEIGHT");
     GUI.Label(new Rect(14,h-132,180,22),avatarHeight.ToString("F2")+" m");
     avatarHeight=GUI.HorizontalSlider(new Rect(14,h-108,176,20),avatarHeight,1.2f,2.2f);
