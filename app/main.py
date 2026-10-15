@@ -1,4 +1,4 @@
-import json, math, os, sys, subprocess, tkinter as tk
+import json, math, os, sys, subprocess, shutil, tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from updater import check_for_update
@@ -87,14 +87,37 @@ class Builder:
 def find_local_3d():
  home=Path.home()
  candidates=[
+  Path(__file__).resolve().parent.parent/'3d'/'WorldBuilder.exe',
   home/'Documents'/'WorldBuilder-Source'/'unity'/'Build'/'WorldBuilder.exe',
   home/'Software'/'WorldBuilder-3D'/'WorldBuilder.exe'
  ]
- return next((p for p in candidates if p.is_file()),None)
+ return next((p for p in candidates if p.is_file() and (p.parent/'WorldBuilder_Data').is_dir()),None)
 
-def launch_3d():
- exe=find_local_3d()
- if exe is None:return False
+def migrate_local_3d():
+ """Install the already-built Unity player beside the existing Python app.
+    Copy the entire player, not just the executable; keep the source and
+    existing 2D files untouched. Roll back incomplete installs."""
+ existing=find_local_3d()
+ if existing is None:return None
+ base=Path(__file__).resolve().parent.parent
+ target=base/'3d'
+ if existing.parent.resolve()==target.resolve():return existing
+ if (target/'WorldBuilder.exe').is_file() and (target/'WorldBuilder_Data').is_dir():
+  return target/'WorldBuilder.exe'
+ staging=base/'3d-installing'
+ try:
+  if staging.exists():shutil.rmtree(staging)
+  shutil.copytree(existing.parent,staging)
+  if not (staging/'WorldBuilder.exe').is_file() or not (staging/'WorldBuilder_Data').is_dir():
+   raise RuntimeError('Incomplete Unity build')
+  if target.exists():shutil.rmtree(target)
+  staging.rename(target)
+  return target/'WorldBuilder.exe'
+ except Exception:
+  if staging.exists():shutil.rmtree(staging)
+  return existing
+
+def launch_3d(exe):
  try:
   subprocess.Popen([str(exe)],cwd=str(exe.parent))
   return True
@@ -104,20 +127,20 @@ def launch_3d():
 
 def bridge():
  root=tk.Tk()
- root.title('WorldBuilder 3D Launcher')
- root.geometry('460x260')
+ root.title('WorldBuilder')
+ root.geometry('480x260')
  root.resizable(False,False)
  frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
  ttk.Label(frame,text='WORLDBUILDER 3D',font=('Segoe UI',20,'bold')).pack(anchor='w')
- exe=find_local_3d()
+ exe=migrate_local_3d()
  if exe:
-  ttk.Label(frame,text='3D application detected and ready to launch.').pack(anchor='w',pady=(8,14))
-  ttk.Button(frame,text='Launch WorldBuilder 3D',command=lambda:(root.destroy(),launch_3d())).pack(fill='x',pady=4)
+  ttk.Label(frame,text='Your 3D application is ready.',wraplength=420).pack(anchor='w',pady=(8,14))
+  ttk.Button(frame,text='Launch WorldBuilder 3D',command=lambda:(launch_3d(exe) and root.destroy())).pack(fill='x',pady=4)
  else:
-  ttk.Label(frame,text='3D application not found. Existing 2D editor is still available.',wraplength=400).pack(anchor='w',pady=(8,14))
+  ttk.Label(frame,text='3D build not found yet. Your original installation is safe.',wraplength=420).pack(anchor='w',pady=(8,14))
  ttk.Button(frame,text='Check Updates',command=lambda:check_for_update(root,VERSION)).pack(fill='x',pady=4)
  ttk.Button(frame,text='Open Legacy 2D Editor',command=lambda:(root.destroy(),open_legacy())).pack(fill='x',pady=4)
- ttk.Label(frame,text='Updater bridge v'+VERSION+' • Your projects remain untouched.').pack(anchor='w',pady=(10,0))
+ ttk.Label(frame,text='WorldBuilder v'+VERSION+' • Projects are preserved').pack(anchor='w',pady=(10,0))
  root.mainloop()
 
 def open_legacy():
