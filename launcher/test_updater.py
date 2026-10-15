@@ -1,9 +1,22 @@
 """Non-GUI smoke test of WorldBuilder 3D update, rollback, and corrupted ZIP protection."""
 import importlib.machinery
 import io
+import sys
+import types
 import tempfile
 import zipfile
 from pathlib import Path
+
+# The updater engine is tested without opening a GUI. Linux CI may lack tkinter.
+try:
+    import tkinter
+except ImportError:
+    tkinter = types.ModuleType("tkinter")
+    tkinter.ttk = types.ModuleType("tkinter.ttk")
+    tkinter.messagebox = types.ModuleType("tkinter.messagebox")
+    sys.modules["tkinter"] = tkinter
+    sys.modules["tkinter.ttk"] = tkinter.ttk
+    sys.modules["tkinter.messagebox"] = tkinter.messagebox
 
 source = Path(__file__).with_name("WorldBuilder-Launcher.pyw")
 loader = importlib.machinery.SourceFileLoader("worldbuilder_launcher_test",str(source))
