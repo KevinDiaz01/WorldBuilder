@@ -63,6 +63,32 @@ namespace WorldBuilder {
     throw new FileNotFoundException("Cannot categorize a model not in My Assets");
    File.WriteAllText(Path.Combine(directory,"asset-category.txt"),category);
   }
+  // Images shipped with one model remain associated with that model; they are
+  // not mixed into the universal surface material palette.
+  public static List<string> ModelTextures(string id){
+   var found=new List<string>();
+   if(!Guid.TryParseExact(id??"","N",out Guid ignored))return found;
+   string folder=Path.Combine(Library,id);
+   if(!File.Exists(Path.Combine(folder,"model.obj")))return found;
+   foreach(string file in Directory.GetFiles(folder)){
+    string extension=Path.GetExtension(file).ToLowerInvariant();
+    if(extension==".png"||extension==".jpg"||extension==".jpeg"){
+     if(!string.Equals(Path.GetFileName(file),"thumbnail.png",StringComparison.OrdinalIgnoreCase))
+      found.Add(Path.GetFileName(file));
+    }
+   }
+   found.Sort(StringComparer.OrdinalIgnoreCase);
+   return found;
+  }
+  public static string ModelTexturePath(string id,string name){
+   if(!Guid.TryParseExact(id??"","N",out Guid ignored)||string.IsNullOrWhiteSpace(name)||
+    name!=Path.GetFileName(name))return null;
+   string folder=Path.Combine(Library,id);
+   if(!File.Exists(Path.Combine(folder,"model.obj")))return null;
+   string path=Path.Combine(folder,name);
+   string ext=Path.GetExtension(path).ToLowerInvariant();
+   return (ext==".png"||ext==".jpg"||ext==".jpeg")&&File.Exists(path)?path:null;
+  }
   public static string Provider(string id){
    string path=Path.Combine(Library,id,"asset-source.txt");
    return File.Exists(path)?File.ReadAllText(path).Trim():"Other";
