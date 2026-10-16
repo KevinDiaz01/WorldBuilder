@@ -43,6 +43,8 @@ namespace WorldBuilder {
   private int catalogCategory=0;
   private Vector2 catalogScroll;
   private string catalogSearch="";
+  private int editingPiece=-1;
+  private readonly string[] dimensionDraft=new string[6];
   private string status="Ready to build";
   private float statusUntil;
   private bool showLibrary=true;
@@ -500,23 +502,32 @@ namespace WorldBuilder {
    string name=selectedIndex>=0&&selectedIndex<project.pieces.Count?project.pieces[selectedIndex].kind:currentTool.ToString();
    Label(new Rect(x+17,129,240,24),name.ToUpperInvariant());
    float y=167;
+   if(selectedIndex!=editingPiece){
+    editingPiece=selectedIndex;
+    if(selectedIndex>=0&&selectedIndex<project.pieces.Count){
+     var edit=project.pieces[selectedIndex];
+     float[] v={edit.position.x,edit.position.y,edit.position.z,edit.scale.x,edit.scale.y,edit.scale.z};
+     for(int k=0;k<6;k++)dimensionDraft[k]=v[k].ToString("F2");
+    }
+   }
    if(selectedIndex>=0&&selectedIndex<project.pieces.Count){
     var p=project.pieces[selectedIndex];
     Label(new Rect(x+17,y,235,22),"POSITION (meters)");y+=27;
-    float nextX=FloatField(new Rect(x+17,y,72,29),p.position.x);
-    float nextY=FloatField(new Rect(x+100,y,72,29),p.position.y);
-    float nextZ=FloatField(new Rect(x+183,y,72,29),p.position.z);
+    float nextX=FloatField(new Rect(x+17,y,72,29),0,p.position.x);
+    float nextY=FloatField(new Rect(x+100,y,72,29),1,p.position.y);
+    float nextZ=FloatField(new Rect(x+183,y,72,29),2,p.position.z);
     y+=41;
     Label(new Rect(x+17,y,235,22),"SIZE (meters)");y+=25;
-    float sx=FloatField(new Rect(x+17,y,72,29),p.scale.x);
-    float sy=FloatField(new Rect(x+100,y,72,29),p.scale.y);
-    float sz=FloatField(new Rect(x+183,y,72,29),p.scale.z);
+    float sx=FloatField(new Rect(x+17,y,72,29),3,p.scale.x);
+    float sy=FloatField(new Rect(x+100,y,72,29),4,p.scale.y);
+    float sz=FloatField(new Rect(x+183,y,72,29),5,p.scale.z);
     y+=42;
     if(Button(new Rect(x+17,y,235,32),"Apply Dimensions")){
      p.position=new Vector3(nextX,nextY,nextZ);
      p.scale=new Vector3(Mathf.Max(.02f,sx),Mathf.Max(.02f,sy),Mathf.Max(.02f,sz));
      if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
      objects[selectedIndex]=Create(p);
+     editingPiece=-1;
      Notice("Object dimensions updated");
     }
     y+=49;
@@ -549,10 +560,9 @@ namespace WorldBuilder {
    Label(new Rect(x+17,bottom+27,235,24),avatarHeight.ToString("F2")+" m tall");
    avatarHeight=GUI.HorizontalSlider(new Rect(x+17,bottom+55,230,17),avatarHeight,1.2f,2.2f);
   }
-  float FloatField(Rect r,float value){
-   // Uses a field without rebuilding the project while the user types.
-   string text=GUI.TextField(r,value.ToString("F2"),regularStyle);
-   if(float.TryParse(text,out float number))return number;
+  float FloatField(Rect r,int index,float value){
+   dimensionDraft[index]=GUI.TextField(r,dimensionDraft[index]??value.ToString("F2"),regularStyle);
+   if(float.TryParse(dimensionDraft[index],out float number))return number;
    return value;
   }
   void DrawCatalog(float w,float h){
@@ -565,6 +575,7 @@ namespace WorldBuilder {
    }
    catalogSearch=GUI.TextField(new Rect(Mathf.Max(110,w-365),top+10,235,31),catalogSearch,regularStyle);
    if(Button(new Rect(w-120,top+10,109,31),"Get Assets"))ToggleAssetBrowser();
+   if(Button(new Rect(Mathf.Max(110,w-480),top+10,108,31),"Import OBJ")){showImport=!showImport;showExport=false;}
    if(catalogCategory==0){
     var entries=AssetHub.Catalog();
     var visible=new List<string>();
