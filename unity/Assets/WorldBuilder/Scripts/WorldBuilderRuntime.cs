@@ -44,6 +44,9 @@ namespace WorldBuilder {
   private readonly List<GameObject> objects=new List<GameObject>();
   private string filePath;
   private bool showHelp=false;
+  private bool showDiagnostics=false;
+  private Vector2 diagnosticsScroll;
+  private string diagnosticFilter="All";
   private bool showPause=false;
   private bool showConfirmExit=false;
   private bool quitting=false;
@@ -83,13 +86,14 @@ namespace WorldBuilder {
   private string assetSearch="";
   private int sourceTab=0;
   private float nextAssetScan=0f;
-  private string assetStatus="Drop ZIP/OBJ files into a provider Downloads folder";
+  private string assetStatus="Automatically detecting OBJ, GLB, glTF and ZIP in asset folders";
   private Vector2 assetScroll;
   private bool showExport=false;
   private bool showGrid=true;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
   bool OverUI(){
    if(walkthrough!=null&&walkthrough.IsWalking)return true;
+   if(showDiagnostics)return true;
    float scale=UIScale;
    float w=Screen.width/scale,h=Screen.height/scale;
    Vector2 p=new Vector2(Input.mousePosition.x/scale,(Screen.height-Input.mousePosition.y)/scale);
@@ -464,6 +468,7 @@ namespace WorldBuilder {
   }
   void Update() {
    if(walkthrough!=null&&walkthrough.IsWalking)return;
+   if(Input.GetKeyDown(KeyCode.F2)){showDiagnostics=!showDiagnostics;showPause=false;showHelp=false;showSettings=false;}
    if(showAssets&&(browserProcess==null||browserProcess.HasExited)){showAssets=false;if(browserProcess!=null){browserProcess.Dispose();browserProcess=null;}}
    if(Time.unscaledTime>=nextAssetScan){
     nextAssetScan=Time.unscaledTime+6f;
@@ -493,13 +498,14 @@ namespace WorldBuilder {
    if(Input.GetKeyDown(KeyCode.Alpha6)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Room);
    if(Input.GetKeyDown(KeyCode.M)&&!showPause&&!showSettings&&!showHelp){catalogCategory=8;showCatalog=true;SelectTool(Tool.Paint);}
    if(Input.GetKeyDown(KeyCode.Escape)){
+    if(showDiagnostics){showDiagnostics=false;return;}
     if(showConfirmExit){showConfirmExit=false;showPause=true;}
     else if(showImport||showExport||showProjects||showSettings||showHelp){
      showImport=false;showExport=false;showProjects=false;showSettings=false;showHelp=false;
     }else{showPause=!showPause;anchor=null;}
    }
    if(Input.GetKeyDown(KeyCode.F1)){showHelp=!showHelp;showPause=false;showConfirmExit=false;}
-   if(showPause||showConfirmExit||showSettings||showHelp||showImport||showExport||showProjects){
+   if(showDiagnostics||showPause||showConfirmExit||showSettings||showHelp||showImport||showExport||showProjects){
     if(preview!=null)preview.SetActive(false);
     return;
    }
@@ -1230,6 +1236,38 @@ namespace WorldBuilder {
    Label(new Rect(x+25,y+322,455,27),"WorldBuilder is currently in development.");
    if(Button(new Rect(x+24,y+397,452,42),"Back to Building"))showSettings=false;
   }
+  void DrawDiagnostics(float w,float h){
+   GUI.Box(new Rect(0,0,w,h),"",panelStyle);
+   float x=Mathf.Max(25f,w*.5f-500f),y=Mathf.Max(35f,h*.5f-310f);
+   float width=Mathf.Min(1000f,w-50f),height=Mathf.Min(620f,h-70f);
+   GUI.Box(new Rect(x,y,width,height),"",panelStyle);
+   Label(new Rect(x+25,y+19,width-180,35),"WorldBuilder Diagnostics  ·  F2",true);
+   if(Button(new Rect(x+width-125,y+15,99,43),"Close"))showDiagnostics=false;
+   Label(new Rect(x+27,y+65,width-50,27),
+      "Automatic asset discovery   |   Errors: "+Diagnostics.Errors+"   Warnings: "+Diagnostics.Warnings);
+   if(Button(new Rect(x+26,y+104,92,38),"All",diagnosticFilter=="All"))diagnosticFilter="All";
+   if(Button(new Rect(x+126,y+104,112,38),"Errors",diagnosticFilter=="ERROR"))diagnosticFilter="ERROR";
+   if(Button(new Rect(x+246,y+104,112,38),"Warnings",diagnosticFilter=="WARN"))diagnosticFilter="WARN";
+   if(Button(new Rect(x+width-151,y+104,122,38),"Clear Log"))Diagnostics.Clear();
+   float logY=y+152,viewHeight=height-208;
+   var entries=Diagnostics.Entries;
+   var visible=new List<Diagnostics.Entry>();
+   for(int i=entries.Count-1;i>=0;i--)
+    if(diagnosticFilter=="All"||entries[i].level==diagnosticFilter)visible.Add(entries[i]);
+   float contentHeight=Mathf.Max(viewHeight,visible.Count*44f+12f);
+   diagnosticsScroll=GUI.BeginScrollView(new Rect(x+23,logY,width-46,viewHeight),
+      diagnosticsScroll,new Rect(0,0,width-72,contentHeight));
+   if(visible.Count==0)GUI.Label(new Rect(16,14,width-130,32),
+     "No messages. New imports and errors will appear here automatically.",captionStyle);
+   for(int i=0;i<visible.Count;i++){
+    var e=visible[i];
+    string message="["+e.time+"]  "+e.level+"   "+e.message;
+    GUI.Label(new Rect(16,i*44f+8,width-122,40),message,smallStyle);
+   }
+   GUI.EndScrollView();
+   Label(new Rect(x+27,y+height-46,width-48,30),
+     "Supported 3D: OBJ, GLB, glTF, ZIP   ·   Textures-only packages do not appear under My Assets.");
+  }
   void OnGUI(){
    InitStyles();
    GUI.matrix=Matrix4x4.Scale(new Vector3(UIScale,UIScale,1f));
@@ -1239,10 +1277,15 @@ namespace WorldBuilder {
     Label(new Rect(19,10,Mathf.Min(w-35,840),30),"LIVE PREVIEW     WASD Move   |   Mouse Look   |   Esc Return");
     return;
    }
+   // Diagnostics is a modal overlay to prevent accidental world edits.
+   if(showDiagnostics){DrawDiagnostics(w,h);return;}
    // Modal dialogs own the screen. Never render interactive editor controls beneath them.
    if(showPause){DrawPause(w,h);return;}
    if(showSettings||showHelp){DrawSettings(w,h);return;}
    DrawToolbar(w);
+   if(Diagnostics.Errors>0){
+    if(Button(new Rect(w-558,91,145,36),"F2  Errors: "+Diagnostics.Errors))showDiagnostics=true;
+   }
    DrawLeft(h);
    DrawViewportControls(h);
    if(showInspector)DrawProperties(w,h);
