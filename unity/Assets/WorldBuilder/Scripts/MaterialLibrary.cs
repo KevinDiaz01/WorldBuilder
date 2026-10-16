@@ -90,12 +90,17 @@ namespace WorldBuilder {
    return Id(sb.ToString());
   }
   static void ScanFolder(string path,string provider){
-   string[] images=Array.FindAll(Directory.GetFiles(path),Image);
+   string[] images=Array.FindAll(Directory.GetFiles(path),file=>
+    Image(file)&&AssetHub.RequestedCategory(file)!="Skyboxes");
    if(images.Length==0)return;
    Array.Sort(images,StringComparer.OrdinalIgnoreCase);
    // A model's texture directory is not an architectural surface library.
    // Only recognized albedo/color maps qualify for automatic folder materials.
    string albedo=Pick(images);
+   // A directly downloaded texture may be named "Concrete.jpg" rather
+   // than "Concrete_Albedo.jpg"; explicit download intent wins.
+   if(albedo==null)foreach(string file in images)
+    if(AssetHub.RequestedCategory(file)=="Materials"){albedo=file;break;}
    if(albedo==null)return;
    string name=NiceName(Path.GetFileName(path));
    if(name==Path.GetFileName(path)&&name.Length<4)name=NiceName(albedo);
@@ -133,7 +138,7 @@ namespace WorldBuilder {
    return false;
   }
   static void ScanZip(string file,string provider){
-   if(IsModelArchive(file))return;
+   if(AssetHub.RequestedCategory(file)=="Skyboxes"||IsModelArchive(file))return;
    FileInfo info=new FileInfo(file);
    string signature=info.Length+"|"+info.LastWriteTimeUtc.Ticks;
    if(!observed.TryGetValue(file,out string before)||before!=signature){observed[file]=signature;return;}
