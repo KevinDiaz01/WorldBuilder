@@ -475,7 +475,7 @@ namespace WorldBuilder {
      showImport=false;showExport=false;showProjects=false;showSettings=false;showHelp=false;
     }else{showPause=!showPause;anchor=null;}
    }
-   if(Input.GetKeyDown(KeyCode.F1)){showHelp=!showHelp;showPause=false;}
+   if(Input.GetKeyDown(KeyCode.F1)){showHelp=!showHelp;showPause=false;showConfirmExit=false;}
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
    if(!showPause&&!showConfirmExit&&!showSettings&&!showExport&&!showImport&&!showProjects){
     if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.D))DuplicateSelection();
@@ -1075,9 +1075,10 @@ namespace WorldBuilder {
    if(Button(new Rect(x+30,y+269,304,43),"Projects")){showPause=false;showProjects=true;}
    if(Button(new Rect(x+30,y+318,304,43),"Settings & Help")){showPause=false;showSettings=true;}
    if(Button(new Rect(x+30,y+367,304,43),"New Project")){showPause=false;NewProject();}
-   if(Button(new Rect(x+30,y+433,304,49),"Exit WorldBuilder"))showConfirmExit=true;
+   if(Button(new Rect(x+30,y+433,304,49),"Exit WorldBuilder")){showConfirmExit=true;}
    Label(new Rect(x+30,y+507,304,29),"Esc to return to your world");
    if(showConfirmExit){
+    // The confirmation is the sole interactive layer while exit is pending.
     GUI.Box(new Rect(x-30,y+155,424,274),"",panelStyle);
     Label(new Rect(x+3,y+178,355,35),"Exit WorldBuilder?",true);
     Label(new Rect(x+3,y+213,362,43),"Save your work before leaving.");
@@ -1110,6 +1111,9 @@ namespace WorldBuilder {
     Label(new Rect(19,10,Mathf.Min(w-35,840),30),"LIVE PREVIEW     WASD Move   |   Mouse Look   |   Esc Return");
     return;
    }
+   // Modal dialogs own the screen. Never render interactive editor controls beneath them.
+   if(showPause){DrawPause(w,h);return;}
+   if(showSettings||showHelp){DrawSettings(w,h);return;}
    DrawToolbar(w);
    DrawLeft(h);
    DrawViewportControls(h);
@@ -1152,8 +1156,6 @@ namespace WorldBuilder {
     }
     if(Button(new Rect(x+15,367,340,29),"Close"))showProjects=false;
    }
-   if(showSettings||showHelp)DrawSettings(w,h);
-   if(showPause)DrawPause(w,h);
    if(Time.time<statusUntil&&!showPause&&!showSettings&&!showHelp){
     // Notifications float above, never across the asset shelf or its tabs.
     float noticeWidth=Mathf.Min(560f,w-550f);
