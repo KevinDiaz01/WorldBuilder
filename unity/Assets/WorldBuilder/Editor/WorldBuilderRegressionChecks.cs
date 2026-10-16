@@ -16,6 +16,7 @@ namespace WorldBuilder {
    RuntimeShaders();
    WorkspaceLayout(runtime);
    SpanGestureEligibility();
+   CatalogToolConsistency(runtime);
    ToolSwitching(runtime);
    MeshImports();
    GltfMaterialRoundTrip();
@@ -25,14 +26,17 @@ namespace WorldBuilder {
   static void RuntimeShaders(){
    Shader lit=Resources.Load<Shader>("WorldBuilderLit");
    Shader overlay=Resources.Load<Shader>("WorldBuilderOverlay");
-   Expect(lit!=null&&overlay!=null,"standalone runtime shader resources are missing");
+   Shader sky=Resources.Load<Shader>("WorldBuilderSky");
+   Expect(lit!=null&&overlay!=null&&sky!=null,"standalone runtime shader resources are missing");
    Material a=WorldBuilderShaders.NewLit(Color.white);
    Material b=WorldBuilderShaders.NewOverlay(new Color(.2f,.4f,.6f,.5f));
+   Material c=new Material(sky);
    try{
-    Expect(a.shader==lit&&b.shader==overlay,"runtime shaders are not used");
+    Expect(a.shader==lit&&b.shader==overlay&&c.shader==sky,"runtime shaders are not used");
    }finally{
     UnityEngine.Object.DestroyImmediate(a);
     UnityEngine.Object.DestroyImmediate(b);
+    UnityEngine.Object.DestroyImmediate(c);
    }
   }
   static void WorkspaceLayout(WorldBuilderRuntime runtime){
@@ -55,6 +59,17 @@ namespace WorldBuilder {
    foreach(var tool in new[]{WorldBuilderRuntime.Tool.Select,WorldBuilderRuntime.Tool.Imported,
     WorldBuilderRuntime.Tool.Window,WorldBuilderRuntime.Tool.Garage,WorldBuilderRuntime.Tool.Erase})
     Expect(!WorldBuilderRuntime.IsSpanTool(tool),"single-click tool captured drag: "+tool);
+  }
+  static void CatalogToolConsistency(WorldBuilderRuntime runtime){
+   MethodInfo choose=typeof(WorldBuilderRuntime).GetMethod("ChooseCatalogCategory",
+     BindingFlags.Instance|BindingFlags.NonPublic);
+   Expect(choose!=null,"category selection handler missing");
+   choose.Invoke(runtime,new object[]{8});
+   Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Paint,"Materials should activate Paint");
+   choose.Invoke(runtime,new object[]{10});
+   Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"Other must deactivate Paint");
+   choose.Invoke(runtime,new object[]{0});
+   Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"My Assets should be non-painting");
   }
   static void ToolSwitching(WorldBuilderRuntime runtime){
    Type type=typeof(WorldBuilderRuntime);

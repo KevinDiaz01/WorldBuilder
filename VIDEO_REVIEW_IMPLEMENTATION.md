@@ -11,6 +11,7 @@ The user-supplied video is 8m23s and predates builds #173/#174.
 ## Existing fixes before this review
 - #173 improved opening presets/previews, multi-material OBJ/glTF, scaled import previews, existing-model fitting, environment, stairs and browser embedding.
 - #174 packaged standalone shaders and protected project loading; user verified the magenta rendering was repaired.
+- New visual pass: a bundled, dynamically tinted gradient sky replaces the generic skybox and the flat fallback, with a safe solid-color fallback if sky material is unavailable.
 
 ## This change
 - Build and Landscape now start with the duplicate bottom catalog collapsed; Decorate keeps its catalog visible. The user can open/close and switch modes without losing that choice.

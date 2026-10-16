@@ -28,7 +28,10 @@ namespace WorldBuilder {
    groundMaterial.mainTextureScale=new Vector2(26f,26f);
    var renderer=ground.GetComponent<Renderer>();
    if(renderer!=null)renderer.sharedMaterial=groundMaterial;
-   // Use the stable sky-color fallback until a packaged skybox shader is available.
+   // Use our own packaged gradient instead of Unity's stripped procedural sky.
+   // If shader import fails, ApplySceneMood safely uses the camera background.
+   Shader skyShader=Resources.Load<Shader>("WorldBuilderSky");
+   if(skyShader!=null&&skyShader.isSupported)skyMaterial=new Material(skyShader);
   }
   static Texture2D CreateGrassTexture(int size){
    var image=new Texture2D(size,size,TextureFormat.RGB24,true);
@@ -45,19 +48,26 @@ namespace WorldBuilder {
   }
   public void ApplySceneMood(int preset,Camera sceneCamera){
    if(ground==null)Initialize();
-   Color[] colors={
-    new Color(.61f,.78f,.94f),new Color(.91f,.62f,.45f),
-    new Color(.075f,.12f,.24f),new Color(.77f,.80f,.86f)};
-   Color tint=colors[Mathf.Clamp(preset,0,colors.Length-1)];
+   int mood=Mathf.Clamp(preset,0,3);
+   Color[] top={
+    new Color(.24f,.51f,.83f),new Color(.16f,.32f,.57f),
+    new Color(.012f,.025f,.065f),new Color(.46f,.54f,.63f)};
+   Color[] horizon={
+    new Color(.72f,.84f,.95f),new Color(.95f,.58f,.37f),
+    new Color(.10f,.14f,.24f),new Color(.71f,.75f,.79f)};
+   Color[] below={
+    new Color(.51f,.61f,.66f),new Color(.45f,.39f,.42f),
+    new Color(.035f,.052f,.082f),new Color(.49f,.52f,.55f)};
    if(skyMaterial!=null){
-    skyMaterial.SetColor("_SkyTint",tint);
-    skyMaterial.SetColor("_GroundColor",new Color(.44f,.48f,.40f));
-    skyMaterial.SetFloat("_Exposure",preset==2?.36f:preset==1?.85f:1.15f);
+    skyMaterial.SetColor("_SkyTop",top[mood]);
+    skyMaterial.SetColor("_SkyHorizon",horizon[mood]);
+    skyMaterial.SetColor("_SkyGround",below[mood]);
     RenderSettings.skybox=skyMaterial;
     if(sceneCamera!=null)sceneCamera.clearFlags=CameraClearFlags.Skybox;
    }else if(sceneCamera!=null){
+    RenderSettings.skybox=null;
     sceneCamera.clearFlags=CameraClearFlags.SolidColor;
-    sceneCamera.backgroundColor=tint;
+    sceneCamera.backgroundColor=horizon[mood];
    }
    if(groundMaterial!=null)groundMaterial.color=preset==2?
     new Color(.52f,.59f,.67f):Color.white;

@@ -143,6 +143,8 @@ namespace WorldBuilder {
   private Light editorSun;
   private WorldBuilderBackdrop scenicBackdrop;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
+  // Camera movement and scroll should never consume input over a tray or modal.
+  public bool BlocksCameraPointer(){return OverUI();}
   bool OverUI(){
    if(walkthrough!=null&&walkthrough.IsWalking)return true;
    if(showDiagnostics)return true;
@@ -1855,6 +1857,14 @@ namespace WorldBuilder {
    if(message.Length>91)message=message.Substring(0,88)+"...";
    GUI.Label(new Rect(left+16,y+9,width-27,26),message,miniStyle);
   }
+  void ChooseCatalogCategory(int category){
+   if(category<0||category>10)return;
+   catalogCategory=category;
+   catalogScroll=Vector2.zero;
+   // Browsing furniture must not leave the material brush active.
+   if(category==8)SelectTool(Tool.Paint);
+   else if(currentTool==Tool.Paint)SelectTool(Tool.Select);
+  }
   void ChoosePaletteTool(Tool tool){
    SelectTool(tool);
    if(tool==Tool.Imported||tool==Tool.Paint){creativeMode=1;showCatalog=true;}
@@ -2260,11 +2270,8 @@ namespace WorldBuilder {
    float tabX=0f;
    for(int i=0;i<categories.Length;i++){
     int which=i;float tabWidth=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f);
-    if(Button(new Rect(tabX,0,tabWidth,31f),categories[i],catalogCategory==i)){
-     catalogCategory=which;
-     catalogScroll=Vector2.zero;
-     if(which==8)SelectTool(Tool.Paint);
-    }
+    if(Button(new Rect(tabX,0,tabWidth,31f),categories[i],catalogCategory==i))
+     ChooseCatalogCategory(which);
     tabX+=tabWidth+7f;
    }
    GUI.EndScrollView();
