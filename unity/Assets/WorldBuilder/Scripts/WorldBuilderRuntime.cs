@@ -408,8 +408,13 @@ namespace WorldBuilder {
      int col=i%3,row=i/3;
      float px=x+20+col*228,py=y+68+row*44;
      string provider=providers[i];
-     if(GUI.Button(new Rect(px,py,216,36),provider+" Folder"))
+     if(GUI.Button(new Rect(px,py,141,36),provider+" Folder"))
       Application.OpenURL(new Uri(AssetHub.Downloads(provider)).AbsoluteUri);
+     if(GUI.Button(new Rect(px+146,py,70,36),"Website")){
+      string[] sites={"https://polyhaven.com/models","https://sketchfab.com/search?features=downloadable&type=models","https://www.fab.com/","https://assetstore.unity.com/",""};
+      if(sites[i].Length>0)Application.OpenURL(sites[i]);
+      else Notice("Choose a source and save its ZIP/OBJ to the Other folder.");
+     }
     }
     if(GUI.Button(new Rect(x+20,y+168,175,38),"Open Assets Folder"))
      Application.OpenURL(new Uri(AssetHub.Root).AbsoluteUri);
