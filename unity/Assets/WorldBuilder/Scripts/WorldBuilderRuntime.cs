@@ -31,6 +31,8 @@ namespace WorldBuilder {
   public float wallThickness=.16f;
   private int buildingLevel=0;
   const float LevelHeight=2.85f;
+  const float DefaultWallHeight=2.7f;
+  const float DefaultWallThickness=.16f;
   public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
@@ -43,6 +45,7 @@ namespace WorldBuilder {
   private bool showHelp=false;
   private bool showPause=false;
   private bool showConfirmExit=false;
+  private bool quitting=false;
   private bool showSettings=false;
   private int selectedIndex=-1;
   private bool draggingSelection=false;
@@ -187,6 +190,16 @@ namespace WorldBuilder {
    editingPiece=-1;
    RefreshSelectionOutline();
   }
+  void UseSelectedWallForBuilding(){
+   if(selectedIndex<0||selectedIndex>=project.pieces.Count||project.pieces[selectedIndex].kind!="wall")return;
+   var wall=project.pieces[selectedIndex];
+   wallHeight=wall.scale.y;
+   wallThickness=wall.scale.z;
+   buildingLevel=Mathf.Clamp(Mathf.RoundToInt((wall.position.y-wall.scale.y*.5f)/LevelHeight),0,8);
+   SelectObject(-1);SelectTool(Tool.Wall);
+   Notice("New walls will use the selected wall height and thickness. Reset to restore defaults.");
+  }
+  void ResetWallDefaults(){wallHeight=DefaultWallHeight;wallThickness=DefaultWallThickness;buildingLevel=0;anchor=null;Notice("Default wall: 2.70 m tall, 0.16 m thick, ground level");}
   void SetStandardWallHeight(){
    if(selectedIndex<0||project.pieces[selectedIndex].kind!="wall")return;
    Vector3 size=project.pieces[selectedIndex].scale;
@@ -457,7 +470,7 @@ namespace WorldBuilder {
    if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
    if(Input.GetKeyDown(KeyCode.Alpha6))SelectTool(Tool.Room);
    if(Input.GetKeyDown(KeyCode.Escape)){
-    if(showConfirmExit)showConfirmExit=false;
+    if(showConfirmExit){showConfirmExit=false;showPause=true;}
     else if(showImport||showExport||showProjects||showSettings||showHelp){
      showImport=false;showExport=false;showProjects=false;showSettings=false;showHelp=false;
     }else{showPause=!showPause;anchor=null;}
@@ -1038,6 +1051,13 @@ namespace WorldBuilder {
     Label(new Rect(165,top+103,w-400,34),"This collection is coming soon.",true);
    }
   }
+  void ExitApplication(bool saveFirst){
+   if(quitting)return;
+   if(saveFirst&&!Save()){Notice("Save failed; exit cancelled");return;}
+   quitting=true;showConfirmExit=false;showPause=false;
+   if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
+   Application.Quit();
+  }
   void DrawPause(float w,float h){
    GUI.Box(new Rect(0,0,w,h),"",panelStyle);
    float x=w*.5f-182,y=h*.5f-285;
@@ -1056,8 +1076,8 @@ namespace WorldBuilder {
     GUI.Box(new Rect(x-30,y+155,424,274),"",panelStyle);
     Label(new Rect(x+3,y+178,355,35),"Exit WorldBuilder?",true);
     Label(new Rect(x+3,y+213,362,43),"Save your work before leaving.");
-    if(Button(new Rect(x+5,y+259,350,38),"Save and Exit")){if(Save())Application.Quit();}
-    if(Button(new Rect(x+5,y+304,350,38),"Exit Without Saving"))Application.Quit();
+    if(Button(new Rect(x+5,y+259,350,38),"Save and Exit"))ExitApplication(true);
+    if(Button(new Rect(x+5,y+304,350,38),"Exit Without Saving"))ExitApplication(false);
     if(Button(new Rect(x+5,y+349,350,38),"Cancel"))showConfirmExit=false;
    }
   }
