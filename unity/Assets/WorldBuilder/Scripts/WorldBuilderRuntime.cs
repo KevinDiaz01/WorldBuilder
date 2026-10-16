@@ -1876,7 +1876,13 @@ namespace WorldBuilder {
    if(Button(new Rect(x+28,y+255,width-56,48),"Restore My Build"))RestoreRecovery(true);
    if(Button(new Rect(x+28,y+308,width-56,42),"Open My Last Saved Project")){
     showRecoveryPrompt=false;
-    Notice("Saved project opened. Recovery is still available in Projects.");
+    if(interruptedRecovery!=null&&!string.IsNullOrWhiteSpace(interruptedRecovery.sourcePath)&&
+       File.Exists(interruptedRecovery.sourcePath)){
+     filePath=interruptedRecovery.sourcePath;
+     if(recoverySessionStarted)RecoveryStore.ChangeProject(filePath);
+     Load();
+    }
+    if(!showRecoveryPrompt)Notice("Saved project opened. Recovery is still available in Projects.");
    }
    Label(new Rect(x+30,y+356,width-60,26),"Your saved project won't be overwritten unless you choose Save.");
   }
