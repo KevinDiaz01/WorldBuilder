@@ -493,45 +493,77 @@ namespace WorldBuilder {
     foreach(var piece in project.pieces)objects.Add(Create(piece));Notice("Loaded: "+Path.GetFileName(filePath));
    }catch(Exception e){Debug.LogError("Load failed: "+e.Message);Notice("Load failed: "+e.Message);}
   }
-  // A game-like, responsive editor shell. Current tools remain functional;
-  // unimplemented features are explicitly marked as coming soon.
-  private GUIStyle panelStyle, headingStyle, captionStyle, menuStyle, activeStyle, regularStyle;
-  private Texture2D darkTexture, sideTexture, blueTexture, fieldTexture;
-  Texture2D Swatch(Color color){
-   var texture=new Texture2D(1,1);texture.SetPixel(0,0,color);texture.Apply();return texture;
+  // Premium rounded glass UI generated at runtime; no external font or art packages required.
+  private GUIStyle panelStyle, headingStyle, captionStyle, menuStyle, activeStyle, regularStyle, sectionStyle, smallStyle;
+  private Texture2D darkTexture, sideTexture, blueTexture, fieldTexture, hoverTexture, strokeTexture;
+  private Font interfaceFont;
+  private const float DesignWidth=1600f;
+  float UIScale { get { return Mathf.Max(.65f,Mathf.Min(Screen.width/DesignWidth,Screen.height/850f)); } }
+  Texture2D Rounded(Color fill,Color border,int radius=20){
+   const int size=64;
+   var tex=new Texture2D(size,size,TextureFormat.RGBA32,false);
+   tex.wrapMode=TextureWrapMode.Clamp;tex.filterMode=FilterMode.Bilinear;
+   float r=radius;
+   for(int y=0;y<size;y++)for(int x=0;x<size;x++){
+    float dx=Mathf.Max(r-x-.5f,0f)+Mathf.Max(x-(size-r-.5f),0f);
+    float dy=Mathf.Max(r-y-.5f,0f)+Mathf.Max(y-(size-r-.5f),0f);
+    float d=Mathf.Sqrt(dx*dx+dy*dy);
+    float outer=Mathf.Clamp01(r+1f-d);
+    float inner=Mathf.Clamp01(r-1.25f-d);
+    tex.SetPixel(x,y,Color.Lerp(Color.clear,Color.Lerp(border,fill,inner),outer));
+   }
+   tex.Apply();return tex;
+  }
+  GUIStyle RoundedStyle(Texture2D texture,int fontSize=17){
+   var style=new GUIStyle(GUI.skin.button);
+   style.normal.background=texture;style.hover.background=hoverTexture;
+   style.active.background=blueTexture;style.focused.background=texture;
+   style.border=new RectOffset(20,20,20,20);
+   style.padding=new RectOffset(10,10,8,8);
+   style.normal.textColor=Color.white;style.hover.textColor=Color.white;
+   style.active.textColor=Color.white;style.focused.textColor=Color.white;
+   style.fontSize=fontSize;style.font=interfaceFont;
+   style.alignment=TextAnchor.MiddleCenter;
+   return style;
   }
   void InitStyles(){
    if(panelStyle!=null)return;
-   darkTexture=Swatch(new Color(.065f,.095f,.125f,.96f));
-   sideTexture=Swatch(new Color(.08f,.115f,.15f,.93f));
-   blueTexture=Swatch(new Color(.105f,.35f,.66f,.96f));
-   fieldTexture=Swatch(new Color(.14f,.19f,.25f,.96f));
+   interfaceFont=Font.CreateDynamicFontFromOSFont(new[]{"Segoe UI","Arial"},18);
+   darkTexture=Rounded(new Color(.052f,.079f,.115f,.87f),new Color(.40f,.55f,.68f,.52f));
+   sideTexture=Rounded(new Color(.068f,.105f,.15f,.82f),new Color(.37f,.5f,.63f,.42f));
+   blueTexture=Rounded(new Color(.08f,.34f,.70f,.94f),new Color(.35f,.73f,1f,.96f));
+   hoverTexture=Rounded(new Color(.17f,.28f,.41f,.96f),new Color(.5f,.72f,.89f,.7f));
+   fieldTexture=Rounded(new Color(.10f,.15f,.21f,.85f),new Color(.28f,.4f,.51f,.68f));
+   strokeTexture=Rounded(new Color(.095f,.13f,.18f,.95f),new Color(.4f,.54f,.66f,.63f));
+   GUI.skin.font=interfaceFont;
    panelStyle=new GUIStyle(GUI.skin.box);
    panelStyle.normal.background=darkTexture;
-   panelStyle.border=new RectOffset(0,0,0,0);
+   panelStyle.border=new RectOffset(20,20,20,20);
    panelStyle.normal.textColor=Color.white;
    panelStyle.alignment=TextAnchor.UpperCenter;
-   panelStyle.fontSize=13;
+   panelStyle.font=interfaceFont;panelStyle.fontSize=16;
    headingStyle=new GUIStyle(GUI.skin.label);
-   headingStyle.normal.textColor=new Color(.94f,.97f,1f);
-   headingStyle.fontSize=17;headingStyle.fontStyle=FontStyle.Bold;
+   headingStyle.font=interfaceFont;
+   headingStyle.normal.textColor=new Color(.97f,.985f,1f);
+   headingStyle.fontSize=23;headingStyle.fontStyle=FontStyle.Bold;
    captionStyle=new GUIStyle(GUI.skin.label);
-   captionStyle.normal.textColor=new Color(.68f,.76f,.83f);
-   captionStyle.fontSize=12;
-   menuStyle=new GUIStyle(GUI.skin.button);
-   menuStyle.normal.background=sideTexture;
-   menuStyle.hover.background=fieldTexture;
-   menuStyle.active.background=blueTexture;
-   menuStyle.normal.textColor=Color.white;
-   menuStyle.hover.textColor=Color.white;
-   menuStyle.fontSize=13;
-   menuStyle.alignment=TextAnchor.MiddleCenter;
-   activeStyle=new GUIStyle(menuStyle);
-   activeStyle.normal.background=blueTexture;
+   captionStyle.font=interfaceFont;
+   captionStyle.normal.textColor=new Color(.75f,.83f,.91f);
+   captionStyle.fontSize=16;
+   sectionStyle=new GUIStyle(captionStyle);
+   sectionStyle.normal.textColor=new Color(.94f,.97f,1f);
+   sectionStyle.fontSize=17;sectionStyle.fontStyle=FontStyle.Bold;
+   smallStyle=new GUIStyle(captionStyle);smallStyle.fontSize=14;
+   menuStyle=RoundedStyle(sideTexture,17);
+   activeStyle=RoundedStyle(blueTexture,17);
    regularStyle=new GUIStyle(GUI.skin.textField);
    regularStyle.normal.background=fieldTexture;
+   regularStyle.focused.background=strokeTexture;
+   regularStyle.border=new RectOffset(20,20,20,20);
+   regularStyle.padding=new RectOffset(14,10,7,7);
    regularStyle.normal.textColor=Color.white;
-   regularStyle.fontSize=13;
+   regularStyle.focused.textColor=Color.white;
+   regularStyle.font=interfaceFont;regularStyle.fontSize=16;
   }
   bool Button(Rect rect,string label,bool selected=false){return GUI.Button(rect,label,selected?activeStyle:menuStyle);}
   void Label(Rect rect,string content,bool heading=false){GUI.Label(rect,content,heading?headingStyle:captionStyle);}
@@ -544,25 +576,23 @@ namespace WorldBuilder {
    }else Notice("Walkthrough camera unavailable");
   }
   void DrawToolbar(float w){
-   GUI.Box(new Rect(0,0,w,66),"",panelStyle);
-   if(Button(new Rect(12,9,45,46),"⌂")){showPause=true;}
-   Label(new Rect(69,9,245,29),Path.GetFileNameWithoutExtension(filePath),true);
-   Label(new Rect(69,34,255,22),"WORLDBUILDER  |  VRChat worlds");
-   float start=Mathf.Max(320,w*.37f);
-   float width=Mathf.Min(118,Mathf.Max(82,(w-750)/4f));
+   GUI.Box(new Rect(10,9,w-20,73),"",panelStyle);
+   if(Button(new Rect(21,19,55,53),"⌂"))showPause=true;
+   Label(new Rect(92,16,235,31),"WorldBuilder",true);
+   Label(new Rect(92,47,310,25),Path.GetFileNameWithoutExtension(filePath)+"  ·  VRChat world");
+   float middle=w*.5f-285f;
    string[] modes={"Build","Decorate","Landscape","Live"};
-   for(int k=0;k<4;k++){
+   for(int k=0;k<modes.Length;k++){
     int n=k;
-    if(Button(new Rect(start+k*(width+7),12,width,40),modes[k],creativeMode==k)){
+    if(Button(new Rect(middle+k*145,22,137,46),modes[k],creativeMode==k)){
      if(k==3)EnterWalk();
      else {creativeMode=n;if(n>0)ComingSoon(modes[n]+" tools");}
     }
    }
-   float x=w-296;
-   if(Button(new Rect(x,12,61,40),"Undo"))UndoLast();
-   if(Button(new Rect(x+67,12,64,40),"Save"))Save();
-   if(Button(new Rect(x+137,12,64,40),"Assets"))ToggleAssetBrowser();
-   if(Button(new Rect(x+207,12,73,40),"Menu"))showPause=!showPause;
+   if(Button(new Rect(w-330,22,64,46),"↶"))UndoLast();
+   if(Button(new Rect(w-258,22,70,46),"Save"))Save();
+   if(Button(new Rect(w-180,22,77,46),"Assets"))ToggleAssetBrowser();
+   if(Button(new Rect(w-95,22,71,46),"☰"))showPause=!showPause;
   }
   void SetCameraView(bool overhead){
    var orbit=sceneCamera!=null?sceneCamera.GetComponent<OrbitCamera>():null;
