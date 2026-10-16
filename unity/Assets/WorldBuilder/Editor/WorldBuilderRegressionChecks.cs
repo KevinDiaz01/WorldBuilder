@@ -15,6 +15,7 @@ namespace WorldBuilder {
    if(runtime==null)throw new ArgumentNullException(nameof(runtime));
    RuntimeShaders();
    WorkspaceLayout(runtime);
+   SpanGestureEligibility();
    ToolSwitching(runtime);
    MeshImports();
    GltfMaterialRoundTrip();
@@ -45,6 +46,15 @@ namespace WorldBuilder {
    Expect(state.Length==3&&!state[0]&&state[1]&&!state[2],"mode palette defaults");
    Expect(Mathf.Abs((float)height.Invoke(runtime,new object[]{900f})-245f)<.01f,
      "catalog height should be capped at 245 pixels");
+  }
+  static void SpanGestureEligibility(){
+   foreach(var tool in new[]{WorldBuilderRuntime.Tool.Wall,WorldBuilderRuntime.Tool.Floor,
+    WorldBuilderRuntime.Tool.Room,WorldBuilderRuntime.Tool.Roof,WorldBuilderRuntime.Tool.Stairs,
+    WorldBuilderRuntime.Tool.Terrain,WorldBuilderRuntime.Tool.Water,WorldBuilderRuntime.Tool.Path})
+    Expect(WorldBuilderRuntime.IsSpanTool(tool),"drag support lost for "+tool);
+   foreach(var tool in new[]{WorldBuilderRuntime.Tool.Select,WorldBuilderRuntime.Tool.Imported,
+    WorldBuilderRuntime.Tool.Window,WorldBuilderRuntime.Tool.Garage,WorldBuilderRuntime.Tool.Erase})
+    Expect(!WorldBuilderRuntime.IsSpanTool(tool),"single-click tool captured drag: "+tool);
   }
   static void ToolSwitching(WorldBuilderRuntime runtime){
    Type type=typeof(WorldBuilderRuntime);

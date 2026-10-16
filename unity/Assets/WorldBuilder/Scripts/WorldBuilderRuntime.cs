@@ -49,6 +49,8 @@ namespace WorldBuilder {
   public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs, Paint, Garage, Light, Terrain, Water, Mirror, Seat, Spawn, Tree, Path }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
+  private bool dragAnchorArmed=false;
+  private Vector2 dragAnchorMouse;
   private readonly Stack<string> undoHistory=new Stack<string>();
   private readonly Stack<string> redoHistory=new Stack<string>();
   private bool restoringHistory=false;
@@ -729,6 +731,7 @@ namespace WorldBuilder {
    bool changed=currentTool!=tool;
    currentTool=tool;
    anchor=null;
+   dragAnchorArmed=false;
    draggingSelection=false;
    polygonCorners.Clear();
    if(changed){
@@ -1005,7 +1008,7 @@ namespace WorldBuilder {
     return;
    }
    if(Input.GetKeyDown(KeyCode.G)&&!Input.GetKey(KeyCode.LeftControl)&&!Input.GetKey(KeyCode.RightControl))ToggleGrid();
-   if(currentTool==Tool.Room&&Input.GetKeyDown(KeyCode.C)){polygonMode=!polygonMode;polygonCorners.Clear();anchor=null;Notice(polygonMode?"Custom room: click corners, Enter to finish":"Rectangular room mode");}
+   if(currentTool==Tool.Room&&Input.GetKeyDown(KeyCode.C)){polygonMode=!polygonMode;polygonCorners.Clear();anchor=null;dragAnchorArmed=false;Notice(polygonMode?"Custom room: click corners, Enter to finish":"Rectangular room mode");}
    if(currentTool==Tool.Room&&polygonMode){
     if(Input.GetKeyDown(KeyCode.Return)||Input.GetKeyDown(KeyCode.KeypadEnter))CompletePolygonRoom();
     if(Input.GetKeyDown(KeyCode.Backspace)&&polygonCorners.Count>0)polygonCorners.RemoveAt(polygonCorners.Count-1);
@@ -1052,6 +1055,16 @@ namespace WorldBuilder {
     }
    }
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Z))UndoLast();
+   if(dragAnchorArmed&&Input.GetMouseButtonUp(0)){
+    dragAnchorArmed=false;
+    if(anchor.HasValue&&!OverUI()&&
+      (new Vector2(Input.mousePosition.x,Input.mousePosition.y)-dragAnchorMouse).sqrMagnitude>=196f&&
+      MouseOnGround(out Vector3 drop)&&Vector3.Distance(anchor.Value,drop)>.01f){
+     Vector3 start=anchor.Value;
+     anchor=null;
+     CompleteSpan(start,drop);
+    }
+   }
    UpdatePreview();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.S))Save();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.O))Load();
@@ -1096,8 +1109,23 @@ namespace WorldBuilder {
    if(currentTool==Tool.Couch||currentTool==Tool.Table) {
     Add(new Piece(currentTool==Tool.Couch?"couch":"table",p+Vector3.up*.4f,new Vector3(currentTool==Tool.Couch?2f:1.2f,.8f,currentTool==Tool.Couch?.9f:1.2f),Quaternion.identity));return;
    }
-   if(!anchor.HasValue){anchor=p;return;}
-   Vector3 start=anchor.Value;anchor=null;
+   if(!anchor.HasValue){
+    anchor=p;
+    dragAnchorArmed=IsSpanTool(currentTool);
+    dragAnchorMouse=new Vector2(Input.mousePosition.x,Input.mousePosition.y);
+    return;
+   }
+   Vector3 start=anchor.Value;
+   anchor=null;dragAnchorArmed=false;
+   CompleteSpan(start,p);
+  }
+  // Allows click-once + click-again and press-drag-release with identical geometry.
+  internal static bool IsSpanTool(Tool tool){
+   return tool==Tool.Wall||tool==Tool.Floor||tool==Tool.Room||
+    tool==Tool.Roof||tool==Tool.Stairs||tool==Tool.Terrain||
+    tool==Tool.Water||tool==Tool.Path;
+  }
+  void CompleteSpan(Vector3 start,Vector3 p){
    if(Vector3.Distance(start,p)<.01f)return;
    if(currentTool==Tool.Room){MakeRoom(start,p);return;}
    if(currentTool==Tool.Terrain){Add(new Piece("terrain",(start+p)*.5f,new Vector3(Mathf.Max(2f,Mathf.Abs(start.x-p.x)),terrainAmplitude,Mathf.Max(2f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
@@ -1800,16 +1828,16 @@ namespace WorldBuilder {
    if(currentTool==Tool.Room&&polygonMode)return "Click corners to shape a room · Enter to finish · Backspace to undo corner";
    switch(currentTool){
     case Tool.Select:return "Click an object to edit it · Shift-click multiple objects";
-    case Tool.Wall:return "Click a start point, then an end point to build a wall";
-    case Tool.Floor:return "Click a floor corner, then the opposite corner";
-    case Tool.Room:return "Click opposite room corners · Freeform: click points, then Enter";
+    case Tool.Wall:return "Drag a wall, or click its start and end points";
+    case Tool.Floor:return "Drag a floor, or click two opposite corners";
+    case Tool.Room:return "Drag a room or click two corners · Freeform: points then Enter";
     case Tool.Garage:return "Aim at a wall · Click to create a garage-sized opening";
     case Tool.Door:case Tool.Window:return "Aim at a wall · Click to create an opening";
     case Tool.Imported:return "Move your mouse to preview · Q/E rotate · Click to place";
     case Tool.Paint:return "Choose a finish below · Click a wall or floor";
-    case Tool.Terrain:return "Click two corners for terrain · Tune height in Studio";
-    case Tool.Water:return "Click two corners to make a pond or pool";
-    case Tool.Path:return "Click two corners to create a path or driveway";
+    case Tool.Terrain:return "Drag terrain, or click two corners · Hill height in Studio";
+    case Tool.Water:return "Drag a pond or pool, or click two corners";
+    case Tool.Path:return "Drag a path or driveway, or click two corners";
     case Tool.Tree:return "Click to plant trees";
     case Tool.Light:return "Click to add a light · Very bright lights can wash out textures";
     default:return "Click or drag in the world to use "+currentTool.ToString();
