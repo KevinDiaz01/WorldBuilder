@@ -30,6 +30,10 @@ internal static class AssetSearch {
    case "landscape": case "terrain":return "Terrain";
    case "water":return "Water";
    case "furniture":return "Furniture";
+   case "living room":return "Living Room";
+   case "bedroom":return "Bedroom";
+   case "dining room":return "Dining Room";
+   case "office":return "Office";
    case "lighting":return "Lighting";
    case "decor":return "Decor";
    case "kitchen":return "Kitchen";
@@ -41,17 +45,21 @@ internal static class AssetSearch {
   }
  }
  public static string Kind(string category){
-  if(category=="Materials")return "material";
+  if(category=="Materials"||category=="Water")return "material";
   if(category=="Skyboxes")return "skybox";
   return "model";
  }
  public static readonly string[] Providers={"Poly Haven","Sketchfab","ambientCG"};
  public static string Url(string category,int provider){
-  string term=category=="Models"?"":category=="Terrain"?"ground":category.ToLowerInvariant();
+  string term=category=="Models"?"":category=="Terrain"?"ground":
+   category=="Water"?"pool water":category.ToLowerInvariant();
   string q=Uri.EscapeDataString(term);
   if(category=="Skyboxes")return provider==0?"https://polyhaven.com/hdris":null;
-  if(category=="Materials")return provider==0?"https://polyhaven.com/textures":
-    provider==2?"https://ambientcg.com/list?type=Material":null;
+  if(category=="Materials"||category=="Water"){
+   string query=category=="Water"?"water":"";
+   return provider==0?(query==""?"https://polyhaven.com/textures":"https://polyhaven.com/textures?q="+Uri.EscapeDataString(query)):
+    provider==2?"https://ambientcg.com/list?type=Material"+(query==""?"":"&search="+Uri.EscapeDataString(query)):null;
+  }
   if(provider==0){
    if(category=="Trees")return "https://polyhaven.com/models/nature/trees";
    if(category=="Plants")return "https://polyhaven.com/models/nature/plants";
@@ -63,7 +71,7 @@ internal static class AssetSearch {
   if(provider==1)return "https://sketchfab.com/search?features=downloadable&type=models"+(q==""?"":"&q="+q);
   return "https://ambientcg.com/list?type=3DModel"+(q==""?"":"&search="+q);
  }
- public static int Preferred(string category){return category=="Materials"?2:0;}
+ public static int Preferred(string category){return category=="Materials"||category=="Water"?2:0;}
 }
 
 internal sealed class BrowserWindow:Form {
@@ -174,7 +182,7 @@ internal sealed class BrowserWindow:Form {
      try{
       // This sidecar is the contract consumed by the model/material/sky scanners.
       // Never mark incomplete or interrupted files as importable.
-      File.WriteAllText(target+".worldbuilder-category",requested);
+      File.WriteAllText(target+".worldbuilder-category",requested=="Water"?"Materials":requested);
       BeginInvoke(new Action(()=>status.Text="Downloaded "+Path.GetFileName(target)+" as "+requested));
      }catch(Exception ex){BeginInvoke(new Action(()=>status.Text="Category save failed: "+ex.Message));}
     }else if(e.DownloadOperation.State==CoreWebView2DownloadState.Interrupted)

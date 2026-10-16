@@ -74,6 +74,8 @@ namespace WorldBuilder {
   private LineRenderer selectionOutline;
   private int creativeMode=0;
   private int catalogCategory=0;
+  private int furnitureRoom=0;
+  private int landscapeCategory=0;
   private int selectedFinish=0;
   private string selectedTextureId="";
   private float selectedTextureTile=1f;
@@ -96,7 +98,7 @@ namespace WorldBuilder {
   private bool showLibrary=true;
   private bool showCatalog=false;
   // Build/Landscape have left-hand tools; palettes are available on demand.
-  private readonly bool[] catalogOpenForMode={false,true,false};
+  private readonly bool[] catalogOpenForMode={false,false,false};
   private bool showInspector=false;
   private bool showProjects=false;
   private GameObject preview;
@@ -142,6 +144,7 @@ namespace WorldBuilder {
   private float lightBrightness=.9f;
   private float lightRadius=7f;
   private float terrainAmplitude=2.5f;
+  private float newWaterDepth=1.5f;
   private Light editorSun;
   private WorldBuilderBackdrop scenicBackdrop;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
@@ -1186,7 +1189,15 @@ namespace WorldBuilder {
    if(currentTool==Tool.Room){MakeRoom(start,p);return;}
    if(currentTool==Tool.Terrain){Add(new Piece("terrain",(start+p)*.5f,new Vector3(Mathf.Max(2f,Mathf.Abs(start.x-p.x)),terrainAmplitude,Mathf.Max(2f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
    if(currentTool==Tool.Path){Add(new Piece("path",(start+p)*.5f+Vector3.up*.04f,new Vector3(Mathf.Max(.5f,Mathf.Abs(start.x-p.x)),.08f,Mathf.Max(.5f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
-   if(currentTool==Tool.Water){Add(new Piece("water",(start+p)*.5f,new Vector3(Mathf.Max(1f,Mathf.Abs(start.x-p.x)),.08f,Mathf.Max(1f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
+   if(currentTool==Tool.Water){
+    // Water is a volume with its top at the design ground height. A depth
+    // control is necessary for pools/beaches even before terrain excavation.
+    float depth=Mathf.Clamp(newWaterDepth,.15f,12f);
+    Add(new Piece("water",(start+p)*.5f+Vector3.down*(depth*.5f),
+     new Vector3(Mathf.Max(1f,Mathf.Abs(start.x-p.x)),depth,
+      Mathf.Max(1f,Mathf.Abs(start.z-p.z))),Quaternion.identity));
+    return;
+   }
    if(currentTool==Tool.Roof){MakeRoof(start,p);return;}
    if(currentTool==Tool.Stairs){MakeStairs(start,p);return;}
    if(currentTool==Tool.Wall){
@@ -1360,9 +1371,12 @@ namespace WorldBuilder {
     if(objects[i]==null)continue;
     if(hit.collider.gameObject==objects[i]||hit.collider.transform.IsChildOf(objects[i].transform)){index=i;break;}
    }
-   if(index<0){Notice("Choose a WorldBuilder surface to paint");return;}
+   if(index<0){Notice("Choose a WorldBuilder object or surface to paint");return;}
    Piece p=project.pieces[index];
-   if(p.kind!="wall"&&p.kind!="floor"&&p.kind!="roof"){Notice("Paint currently supports walls, floors and roofs");return;}
+   if(p.kind!="wall"&&p.kind!="floor"&&p.kind!="roof"&&p.kind!="imported"&&
+      p.kind!="water"&&p.kind!="terrain"&&p.kind!="path"){
+    Notice("Select a model, wall, floor, roof or landscape surface to paint");return;
+   }
    string desired=string.IsNullOrEmpty(selectedTextureId)?FinishNames[selectedFinish]:"texture:"+selectedTextureId;
    if(p.finish==desired&&Mathf.Abs(p.textureTile-selectedTextureTile)<.001f)return;
    RememberChange();
@@ -1438,6 +1452,34 @@ namespace WorldBuilder {
     return tex;
    }catch(Exception ex){Diagnostics.Add("ERROR","Material image unreadable: "+ex.Message);return null;}
   }
+  // Imported OBJ/GLB materials live on child mesh renderers, not on the
+  // parent GameObject. Preserve each material by default and replace it only
+  // when the user explicitly paints the asset.
+  void ApplyImportedFinish(GameObject root,Piece piece){
+   if(string.IsNullOrEmpty(piece.finish)||piece.finish=="Default")return;
+   Texture2D image=null;Color color=Color.white;
+   if(piece.finish.StartsWith("texture:",StringComparison.Ordinal)){
+    image=GetMaterialImage(piece.finish.Substring(8));
+    if(image==null){Diagnostics.Add("WARN","Missing paint texture on imported model: "+piece.finish);return;}
+   }else{
+    int index=Array.IndexOf(FinishNames,piece.finish);
+    if(index<0)return;
+    color=FinishColors[index];
+   }
+   foreach(Renderer renderer in root.GetComponentsInChildren<Renderer>(true)){
+    var original=renderer.sharedMaterials;
+    for(int i=0;i<original.Length;i++){
+     var finish=WorldBuilderShaders.NewLit(color);
+     if(image!=null){
+      finish.mainTexture=image;
+      float repeat=Mathf.Clamp(piece.textureTile<=0?1f:piece.textureTile,.1f,20f);
+      finish.mainTextureScale=new Vector2(repeat,repeat);
+     }
+     original[i]=finish;
+    }
+    renderer.sharedMaterials=original;
+   }
+  }
   GameObject Create(Piece piece){
    if(piece.kind=="tree"){
     GameObject root=new GameObject("WB_Tree");
@@ -1475,7 +1517,20 @@ namespace WorldBuilder {
     var filter=meshObj.AddComponent<MeshFilter>();filter.sharedMesh=mesh;
     var renderer=meshObj.AddComponent<MeshRenderer>();
     Shader shader=WorldBuilderShaders.Lit;
-    if(shader!=null){var mat=new Material(shader);mat.color=piece.kind=="terrain"?new Color(.30f,.52f,.27f):new Color(.60f,.61f,.60f);renderer.sharedMaterial=mat;}
+    if(shader!=null){
+     var mat=new Material(shader);
+     mat.color=piece.kind=="terrain"?new Color(.30f,.52f,.27f):new Color(.60f,.61f,.60f);
+     if(piece.kind=="terrain"){
+      if(!string.IsNullOrEmpty(piece.finish)&&piece.finish.StartsWith("texture:",StringComparison.Ordinal)){
+       Texture2D image=GetMaterialImage(piece.finish.Substring(8));
+       if(image!=null){mat.mainTexture=image;mat.mainTextureScale=new Vector2(piece.textureTile,piece.textureTile);}
+      }else if(!string.IsNullOrEmpty(piece.finish)){
+       int i=Array.IndexOf(FinishNames,piece.finish);
+       if(i>=0)mat.color=FinishColors[i];
+      }
+     }
+     renderer.sharedMaterial=mat;
+    }
     var collider=meshObj.AddComponent<MeshCollider>();collider.sharedMesh=mesh;
     meshObj.transform.SetPositionAndRotation(piece.position,piece.rotation);
     return meshObj;
@@ -1487,6 +1542,15 @@ namespace WorldBuilder {
     water.transform.localScale=piece.scale;
     water.GetComponent<Renderer>().sharedMaterial=
      WorldBuilderShaders.NewOverlay(new Color(.24f,.58f,.74f,.67f));
+    if(!string.IsNullOrEmpty(piece.finish)){
+     Texture2D image=piece.finish.StartsWith("texture:",StringComparison.Ordinal)?
+      GetMaterialImage(piece.finish.Substring(8)):null;
+     if(image!=null){
+      var mat=WorldBuilderShaders.NewLit(new Color(.74f,.91f,1f,.84f));
+      mat.mainTexture=image;
+      water.GetComponent<Renderer>().sharedMaterial=mat;
+     }
+    }
     return water;
    }
    if(piece.kind=="light-point"||piece.kind=="light-spot"){
@@ -1509,6 +1573,7 @@ namespace WorldBuilder {
     try{
      string file=Path.Combine(AssetLibrary(),piece.assetId??"","model.obj");
      var objImported=ImportedObj.Load(file);
+     ApplyImportedFinish(objImported,piece);
      if(piece.fitToSurface){
       var pivot=new GameObject("WB_Imported_"+piece.assetId);
       AnchorImportedModel(pivot,objImported,ModelBounds(objImported));
@@ -1758,13 +1823,12 @@ namespace WorldBuilder {
    if(mode!=creativeMode)catalogOpenForMode[creativeMode]=showCatalog;
    creativeMode=mode;
    showStudio=false;
-   showCatalog=catalogOpenForMode[mode];
+   showCatalog=mode==0?false:catalogOpenForMode[mode];
    showInspector=selectedIndex>=0;
    if(mode==0){
-    SelectTool(Tool.Select);
+    showCatalog=false;SelectTool(Tool.Select);
     Notice("Build mode · shape your world");
    }else if(mode==1){
-    catalogCategory=0;
     SelectTool(Tool.Select);
     Notice("Decorate mode · browse furniture and materials");
    }else{
@@ -1845,12 +1909,12 @@ namespace WorldBuilder {
     Label(new Rect(x+270,line+153,325,25),"Undo available · keeps positions");
    }else if(studioTab==2){
     if(Button(new Rect(x+18,line,186,42),"Terrain Hill")){SelectTool(Tool.Terrain);showStudio=false;}
-    if(Button(new Rect(x+212,line,186,42),"Water")){SelectTool(Tool.Water);showStudio=false;}
+    if(Button(new Rect(x+212,line,186,42),"Water")){SelectTool(Tool.Water);showStudio=false;showInspector=true;}
     if(Button(new Rect(x+406,line,188,42),"Fog: "+(project.fog?"On":"Off"))){project.fog=!project.fog;ApplyEnvironment();}
     string[] names={"Day","Sunset","Night","Overcast"};
     for(int i=0;i<4;i++){int k=i;if(Button(new Rect(x+18+i*146,line+53,138,36),names[i],project.skyPreset==i)){project.skyPreset=k;ApplyEnvironment();}}
-    if(Button(new Rect(x+18,line+95,140,32),"Find Skyboxes")){ToggleAssetBrowser("Skyboxes");}
-    if(Button(new Rect(x+168,line+95,140,32),"My Skyboxes")){creativeMode=1;showCatalog=true;catalogCategory=12;showStudio=false;}
+    if(Button(new Rect(x+18,line+95,140,32),"Plant Tree")){SelectTool(Tool.Tree);showStudio=false;}
+    if(Button(new Rect(x+168,line+95,140,32),"Path / Driveway")){SelectTool(Tool.Path);showStudio=false;}
     Label(new Rect(x+19,line+133,300,24),"Terrain elevation: "+terrainAmplitude.ToString("F1")+" m");
     terrainAmplitude=GUI.HorizontalSlider(new Rect(x+22,line+160,285,19),terrainAmplitude,.25f,12f);
     Label(new Rect(x+330,line+133,265,24),"Sun angle: "+project.sunPitch.ToString("F0")+"°");
@@ -1944,11 +2008,11 @@ namespace WorldBuilder {
    Tool[] tools;
    string[] labels;
    if(creativeMode==1){
-    tools=new[]{Tool.Select,Tool.Imported,Tool.Paint,Tool.Light,Tool.Couch,Tool.Table,Tool.Erase};
-    labels=new[]{"SELECT","FURNITURE","MATERIALS","LIGHTING","SOFA","TABLE","ERASE"};
+    tools=new[]{Tool.Select,Tool.Imported,Tool.Imported,Tool.Paint,Tool.Paint,Tool.Light,Tool.Erase};
+    labels=new[]{"SELECT","MY ASSETS","FURNITURE","MATERIALS","TEXTURES","LIGHTING","ERASE"};
    }else if(creativeMode==2){
-    tools=new[]{Tool.Select,Tool.Terrain,Tool.Tree,Tool.Path,Tool.Water,Tool.Erase};
-    labels=new[]{"SELECT","TERRAIN","TREES","PATHS","WATER","ERASE"};
+    tools=new[]{Tool.Select,Tool.Terrain,Tool.Tree,Tool.Path,Tool.Water,Tool.Water,Tool.Erase};
+    labels=new[]{"SELECT","TERRAIN","TREES","PATHS","WATER","SKYBOXES","ERASE"};
    }else{
     tools=new[]{Tool.Select,Tool.Wall,Tool.Floor,Tool.Room,Tool.Door,Tool.Window,Tool.Garage,Tool.Stairs,Tool.Roof,Tool.Erase};
     labels=new[]{"SELECT","WALLS","FLOORS","ROOMS","DOORS","WINDOWS","GARAGE","STAIRS","ROOFS","ERASE"};
@@ -1964,18 +2028,29 @@ namespace WorldBuilder {
    int maxCount=Mathf.Min(tools.Length,Mathf.Max(0,Mathf.FloorToInt((railHeight-76f)/space)));
    for(int k=0;k<maxCount;k++){
     Tool choice=tools[k];
-    bool isActive=currentTool==choice||(choice==Tool.Imported&&currentTool==Tool.Imported);
+    bool isActive=creativeMode==1?(choice==Tool.Select&&k==0&&currentTool==Tool.Select)||
+     (k==1&&showCatalog&&catalogCategory==0)||
+     (k==2&&showCatalog&&catalogCategory==1)||
+     ((k==3||k==4)&&showCatalog&&catalogCategory==8)||
+     (k==5&&showCatalog&&catalogCategory==2):
+     creativeMode==2?(k==5&&showCatalog&&landscapeCategory==5):
+     currentTool==choice;
     GUIStyle choiceStyle=isActive?activeStyle:choice==Tool.Erase?destructiveStyle:railStyle;
     if(GUI.Button(new Rect(x+9,row+k*space,91,space-4f),labels[k],choiceStyle)){
-     if(choice==Tool.Imported){
-      showCatalog=true;catalogCategory=0;creativeMode=1;
-      Notice("Choose an object from your furniture library");
-     }else if(choice==Tool.Paint){
-      showCatalog=true;catalogCategory=8;SelectTool(Tool.Paint);
+     if(creativeMode==1&&k>=1&&k<=5){
+      showCatalog=true;catalogOpenForMode[1]=true;
+      catalogCategory=k==1?0:k==2?1:k==5?2:8;
+      if(k==3||k==4)SelectTool(Tool.Paint);
+      else SelectTool(Tool.Select);
+      Notice("Browsing "+labels[k].ToLowerInvariant());
+     }else if(creativeMode==2&&k==5){
+      showCatalog=true;catalogOpenForMode[2]=true;landscapeCategory=5;
+      SelectTool(Tool.Select);
+      Notice("Choose an HDRI skybox or find a new one");
      }else{
       SelectTool(choice);
-      
-      if(choice==Tool.Light){showStudio=false;showInspector=true;}
+      if(creativeMode==2){landscapeCategory=k;}
+      if(choice==Tool.Light||choice==Tool.Water){showStudio=false;showInspector=true;}
      }
     }
    }
@@ -2006,6 +2081,7 @@ namespace WorldBuilder {
     if(multiSelection.Count>1)contentH+=82f;
     if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?320f:130f;
     if(selectedPiece.kind=="wall")contentH+=176f;
+    if(selectedPiece.kind=="water")contentH+=102f;
     if(selectedPiece.kind=="light-point"||selectedPiece.kind=="light-spot")contentH+=215f;
     if(IsRoomFloor(selectedIndex))contentH+=91f;
     if(inspectorAdvanced)contentH+=245f;
@@ -2015,6 +2091,7 @@ namespace WorldBuilder {
     if(currentTool==Tool.Room)contentH+=140f;
     if(currentTool==Tool.Imported)contentH+=115f;
     if(currentTool==Tool.Light)contentH+=90f;
+    if(currentTool==Tool.Water)contentH+=100f;
     if(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage)contentH+=225f;
    }
    Rect view=new Rect(x+12,top+92,panelW-25,Mathf.Max(120f,panelH-111f));
@@ -2050,16 +2127,29 @@ namespace WorldBuilder {
       string id=piece.assetId;
       if(!string.IsNullOrEmpty(id)){
        GUI.Label(new Rect(ox,y,282,24),"ORGANIZE IN MY ASSETS",miniStyle);y+=29;
-       string[] groups={"Furniture","Lighting","Decor","Kitchen","Bathroom",
-        "Trees","Plants","Outdoor","Architecture","Other"};
+       string[] groups={"Furniture","Living Room","Bedroom","Kitchen","Bathroom",
+        "Dining Room","Office","Outdoor","Lighting","Decor","Other","Trees"};
        int current=Array.IndexOf(groups,AssetHub.Category(id));
-       int next=GUI.SelectionGrid(new Rect(ox,y,286,104),current,groups,3,railStyle);
+       int next=GUI.SelectionGrid(new Rect(ox,y,286,142),current,groups,3,railStyle);
        if(next>=0&&next!=current){
         try{AssetHub.SetCategory(id,groups[next]);Notice("Moved to "+groups[next]);}
         catch(Exception ex){Notice("Could not sort model: "+ex.Message);}
        }
-       y+=118;
+       y+=156;
       }
+     }
+    }
+    if(piece.kind=="water"){
+     GUI.Label(new Rect(ox,y,282,25),"WATER DEPTH",miniStyle);y+=29;
+     GUI.Label(new Rect(ox,y,282,24),piece.scale.y.ToString("F2")+" m",smallStyle);y+=25;
+     float depth=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),piece.scale.y,.15f,12f);y+=34;
+     if(Mathf.Abs(depth-piece.scale.y)>.01f){
+      RememberChange();
+      float surface=piece.position.y+piece.scale.y*.5f;
+      piece.scale.y=depth;
+      piece.position.y=surface-depth*.5f;
+      objects[selectedIndex].transform.position=piece.position+Vector3.up*.015f;
+      objects[selectedIndex].transform.localScale=piece.scale;
      }
     }
     if(piece.kind=="wall"){
@@ -2172,7 +2262,12 @@ namespace WorldBuilder {
      GUI.Label(new Rect(ox,y,282,24),"Rotation "+importedRotation.ToString("F0")+"°",smallStyle);y+=27;
      importedRotation=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),importedRotation,0f,360f);y+=40;
     }
-    if(currentTool==Tool.Light){
+    if(currentTool==Tool.Water){
+     GUI.Label(new Rect(ox,y,282,25),"NEW WATER DEPTH",miniStyle);y+=32;
+     GUI.Label(new Rect(ox,y,282,24),newWaterDepth.ToString("F2")+" m below the surface",smallStyle);y+=28;
+     newWaterDepth=GUI.HorizontalSlider(new Rect(ox+8,y,268,20),newWaterDepth,.15f,12f);y+=32;
+   }
+   if(currentTool==Tool.Light){
      GUI.Label(new Rect(ox,y,282,25),"NEW LIGHT",miniStyle);y+=32;
      GUI.Label(new Rect(ox,y,282,22),"Intensity "+lightBrightness.ToString("F1"),smallStyle);y+=26;
      lightBrightness=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),lightBrightness,0f,8f);y+=37;
@@ -2318,7 +2413,7 @@ namespace WorldBuilder {
    float width=w-left-13f;
    SoftPanel(new Rect(left,top,width,shelfHeight),trayStyle);
    bool building=creativeMode==0,landscaping=creativeMode==2;
-   string heading=building?"BUILD COLLECTION":landscaping?(landscapeObjects?"OUTDOOR OBJECTS":"LANDSCAPE COLLECTION"):
+   string heading=building?"BUILD COLLECTION":landscaping?(landscapeCategory==5?"SKYBOXES":landscapeObjects?"OUTDOOR OBJECTS":"LANDSCAPE COLLECTION"):
      catalogCategory==0?"MY ASSETS":catalogCategory==8?"SURFACE MATERIALS":
      catalogCategory==12?"SKYBOXES & HDRI":"OBJECT COLLECTION";
    GUI.Label(new Rect(left+19,top+13,290,30),heading,sectionStyle);
@@ -2329,6 +2424,10 @@ namespace WorldBuilder {
    }
    float cardY=top+103f;
    float cardH=Mathf.Max(123f,shelfHeight-118f);
+   if(landscaping&&landscapeCategory==5){
+    DrawSkyboxCollection(left,cardY,width-36f,cardH);
+    return;
+   }
    if(building||landscaping){
     if(landscaping){
      if(Button(new Rect(w-303,top+16,118,36),landscapeObjects?"LAND TOOLS":"MY PLANTS",landscapeObjects)){
@@ -2336,11 +2435,8 @@ namespace WorldBuilder {
       catalogScroll=Vector2.zero;
      }
     }
-    if(Button(new Rect(w-459,top+16,149,36),landscaping?"FIND "+(currentTool==Tool.Tree?"TREES":currentTool==Tool.Water?"WATER":currentTool==Tool.Terrain?"TERRAIN":"ASSETS"):"FIND BUILD ASSETS"))
-     ToggleAssetBrowser(landscaping?(currentTool==Tool.Tree?"Trees":currentTool==Tool.Water?"Water":currentTool==Tool.Terrain?"Terrain":"Outdoor"):"Architecture");
-    if(Button(new Rect(w-178,top+16,106,36),"STUDIO")){
-     showStudio=!showStudio;studioTab=building?0:2;
-    }
+    if(Button(new Rect(w-459,top+16,149,36),"FIND "+(currentTool==Tool.Tree?"TREES":currentTool==Tool.Water?"WATER":currentTool==Tool.Terrain?"TERRAIN":"ASSETS")))
+     ToggleAssetBrowser(currentTool==Tool.Tree?"Trees":currentTool==Tool.Water?"Water":currentTool==Tool.Terrain?"Terrain":"Outdoor");
     if(landscaping&&landscapeObjects){
      var filtered=new List<string>();
      foreach(string id in AssetHub.Catalog()){
@@ -2410,7 +2506,8 @@ namespace WorldBuilder {
     return;
    }
 
-   // Decorate: browse with readable, horizontally scrollable category tabs.
+   // The active left-hand collection owns the tray. Furniture is organized by
+   // room, not by a second redundant master list of unrelated item types.
    string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor",
     "Materials","Architecture","Other","Trees","Skyboxes"};
    float searchX=w-555f;
@@ -2422,19 +2519,23 @@ namespace WorldBuilder {
     else if(catalogCategory==8)ImportMaterialFile();
     else{showImport=true;showExport=false;}
    }
-   string browseCategory=catalogCategory==0?"Models":categories[catalogCategory];
-   if(Button(new Rect(w-239,top+13,165,36),"FIND "+(catalogCategory==8?"MATERIALS":catalogCategory==12?"SKYBOXES":catalogCategory==0?"ASSETS":"MORE")))
+   string[] rooms={"Living Room","Bedroom","Kitchen","Bathroom","Dining Room","Office","Outdoor","Other"};
+   string browseCategory=catalogCategory==1?rooms[Mathf.Clamp(furnitureRoom,0,rooms.Length-1)]:
+    catalogCategory==0?"Models":categories[catalogCategory];
+   if(Button(new Rect(w-239,top+13,165,36),"FIND "+(catalogCategory==0?"ASSETS":browseCategory.ToUpperInvariant())))
     ToggleAssetBrowser(browseCategory);
    float categoryLeft=left+16,categoryWidth=width-44;
+   string[] tabs=catalogCategory==1?rooms:new string[0];
    float total=0f;
-   for(int i=0;i<categories.Length;i++)total+=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f)+7f;
+   for(int i=0;i<tabs.Length;i++)total+=Mathf.Clamp(tabs[i].Length*9f+28f,92f,138f)+7f;
    catalogTabScroll=GUI.BeginScrollView(new Rect(categoryLeft,top+65,categoryWidth,37),
     catalogTabScroll,new Rect(0,0,Mathf.Max(categoryWidth-14,total+4f),34),true,false);
    float tabX=0f;
-   for(int i=0;i<categories.Length;i++){
-    int which=i;float tabWidth=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f);
-    if(Button(new Rect(tabX,0,tabWidth,31f),categories[i],catalogCategory==i))
-     ChooseCatalogCategory(which);
+   for(int i=0;i<tabs.Length;i++){
+    int which=i;float tabWidth=Mathf.Clamp(tabs[i].Length*9f+28f,92f,138f);
+    if(Button(new Rect(tabX,0,tabWidth,31f),tabs[i],furnitureRoom==i)){
+     furnitureRoom=which;catalogScroll=Vector2.zero;
+    }
     tabX+=tabWidth+7f;
    }
    GUI.EndScrollView();
@@ -2483,17 +2584,20 @@ namespace WorldBuilder {
     var ids=AssetHub.Catalog();
     var visible=new List<string>();
     foreach(string id in ids){
-     string category=catalogCategory==0?"All":categories[catalogCategory];
-     if(category!="All"&&AssetHub.Category(id)!=category)continue;
+     string category=catalogCategory==1?rooms[Mathf.Clamp(furnitureRoom,0,rooms.Length-1)]:
+      catalogCategory==0?"All":categories[catalogCategory];
+     string assetCategory=AssetHub.Category(id);
+     if(category!="All"&&assetCategory!=category&&
+      !(catalogCategory==1&&category=="Living Room"&&assetCategory=="Furniture"))continue;
      string keywords=AssetHub.Name(id)+" "+AssetHub.Category(id)+" "+AssetHub.Provider(id);
      if(catalogSearch.Length>0&&keywords.IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)<0)continue;
      visible.Add(id);
     }
     if(visible.Count==0){
      GUI.Label(new Rect(left+31,cardY+15,600,37),
-      "No "+categories[catalogCategory].ToLowerInvariant()+" models in your library yet",sectionStyle);
-     if(Button(new Rect(left+31,cardY+62,174,39),"FIND "+categories[catalogCategory].ToUpperInvariant()))
-      ToggleAssetBrowser(categories[catalogCategory]);
+      "No "+browseCategory.ToLowerInvariant()+" models in your library yet",sectionStyle);
+     if(Button(new Rect(left+31,cardY+62,215,39),"FIND "+browseCategory.ToUpperInvariant()))
+      ToggleAssetBrowser(browseCategory);
     }else{
      const float cell=170f;
      catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewportWidth,cardH+15),catalogScroll,
@@ -2654,16 +2758,7 @@ namespace WorldBuilder {
    DrawObjectHandles();
    if(showInspector)DrawProperties(w,h);
    if(showStudio)DrawStudio(w,h);
-   if(showCatalog)DrawCatalog(w,h);
-   else {
-    SoftPanel(new Rect(130,h-75,386,65),trayStyle);
-    if(Button(new Rect(138,h-67,203,46),"OPEN PALETTE")){
-     showCatalog=true;catalogOpenForMode[creativeMode]=true;
-    }
-    if(Button(new Rect(349,h-67,160,46),"IMPORT 3D")){
-     showImport=true;showExport=false;
-    }
-   }
+   if(showCatalog&&creativeMode!=0)DrawCatalog(w,h);
    if(showImport){
     float x=w*.5f-265;
     GUI.Box(new Rect(x,75,530,255),"",panelStyle);
