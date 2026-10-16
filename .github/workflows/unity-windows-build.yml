@@ -63,15 +63,16 @@ jobs:
             -p:PublishSingleFile=true -p:EnableWindowsTargeting=true \
             --output asset-browser/publish
           test -f asset-browser/publish/WorldBuilderAssetBrowser.exe
-          sudo cp -R asset-browser/publish/. unity/Build/
-          test -f unity/Build/WorldBuilderAssetBrowser.exe
+          sudo mkdir -p unity/Build/WorldBuilder_Data/AssetBrowser
+          sudo cp -R asset-browser/publish/. unity/Build/WorldBuilder_Data/AssetBrowser/
+          test -f unity/Build/WorldBuilder_Data/AssetBrowser/WorldBuilderAssetBrowser.exe
       - name: Validate Unity output and prepare signed-by-hash update assets
         shell: bash
         run: |
           set -euo pipefail
           test -f unity/Build/WorldBuilder.exe
           test -d unity/Build/WorldBuilder_Data
-          test -f unity/Build/WorldBuilderAssetBrowser.exe
+          test -f unity/Build/WorldBuilder_Data/AssetBrowser/WorldBuilderAssetBrowser.exe
           if [ -n "$WB_VERSION" ]; then
             [[ "$WB_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Expected version X.Y.Z"; exit 1; }
             python3 - <<'PY'
