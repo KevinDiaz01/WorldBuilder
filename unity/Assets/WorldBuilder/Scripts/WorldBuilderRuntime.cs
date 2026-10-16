@@ -268,7 +268,7 @@ namespace WorldBuilder {
    if(sceneCamera!=null)walkthrough=sceneCamera.GetComponent<WalkthroughCamera>();
    targetVrcProject=PlayerPrefs.GetString("WorldBuilder.VRChatProject","");
    AssetHub.Initialize();
-   polyHaven=gameObject.AddComponent<PolyHavenCatalog>();
+   // Asset websites now render through the embedded WebView2 browser.
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
    if(File.Exists(filePath))Load();
    BuildGrid();
