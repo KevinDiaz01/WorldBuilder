@@ -51,6 +51,8 @@ namespace WorldBuilder {
   private string status="Ready to build";
   private float statusUntil;
   private bool showLibrary=true;
+  private bool showCatalog=false;
+  private bool showInspector=false;
   private bool showProjects=false;
   private GameObject preview;
   private string importedId;
@@ -108,6 +110,7 @@ namespace WorldBuilder {
   }
   void SelectObject(int index){
    selectedIndex=index;
+   if(index>=0)showInspector=true;
    editingPiece=-1;
    RefreshSelectionOutline();
   }
@@ -634,7 +637,8 @@ namespace WorldBuilder {
   }
   void DrawProperties(float w,float h){
    float x=w-351;
-   GUI.Box(new Rect(x,96,335,h-325),"",panelStyle);
+   GUI.Box(new Rect(x,96,335,Mathf.Min(h-185f,615f)),"",panelStyle);
+   if(Button(new Rect(x+269,105,48,42),"X")){showInspector=false;return;}
    Label(new Rect(x+23,116,282,33),selectedIndex>=0?"Selected Object":"Tool Properties",true);
    string name=selectedIndex>=0&&selectedIndex<project.pieces.Count?project.pieces[selectedIndex].kind:currentTool.ToString();
    Label(new Rect(x+23,155,285,28),name.ToUpperInvariant());
@@ -728,6 +732,7 @@ namespace WorldBuilder {
    float shelfHeight=252f;
    float top=h-shelfHeight-10f;
    GUI.Box(new Rect(125,top,w-140,shelfHeight),"",panelStyle);
+   if(Button(new Rect(w-72,top+63,48,42),"X")){showCatalog=false;return;}
    string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials"};
    float x=139f;
    float availableForTabs=Mathf.Max(500f,w-570f);
@@ -825,8 +830,13 @@ namespace WorldBuilder {
    DrawToolbar(w);
    DrawLeft(h);
    DrawViewportControls(h);
-   DrawProperties(w,h);
-   DrawCatalog(w,h);
+   if(showInspector)DrawProperties(w,h);
+   if(showCatalog)DrawCatalog(w,h);
+   else {
+    GUI.Box(new Rect(127,h-62,344,54),"",panelStyle);
+    if(Button(new Rect(134,h-56,162,42),"Open Catalog"))showCatalog=true;
+    if(Button(new Rect(302,h-56,162,42),"Import OBJ")){showImport=true;showExport=false;}
+   }
    if(showImport){
     float x=w*.5f-265;
     GUI.Box(new Rect(x,75,530,255),"",panelStyle);
@@ -864,8 +874,9 @@ namespace WorldBuilder {
    if(Time.time<statusUntil&&!showPause&&!showSettings&&!showHelp){
     // Notifications float above, never across the asset shelf or its tabs.
     float noticeWidth=Mathf.Min(560f,w-550f);
-    GUI.Box(new Rect(140,h-314,noticeWidth,39),"",panelStyle);
-    GUI.Label(new Rect(156,h-308,noticeWidth-30,28),status,captionStyle);
+    float toastY=showCatalog?h-314f:h-113f;
+    GUI.Box(new Rect(140,toastY,noticeWidth,39),"",panelStyle);
+    GUI.Label(new Rect(156,toastY+6,noticeWidth-30,28),status,captionStyle);
    }
   }
  }
