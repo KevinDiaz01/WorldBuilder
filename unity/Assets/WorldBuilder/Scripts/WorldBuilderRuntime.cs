@@ -200,6 +200,59 @@ namespace WorldBuilder {
    SelectObject(project.pieces.Count-1);
    Notice("Object duplicated. Drag to reposition.");
   }
+  void NudgeSelection(Vector3 delta){
+   if(selectedIndex<0||selectedIndex>=project.pieces.Count||objects[selectedIndex]==null)return;
+   if(IsRoomFloor(selectedIndex)){Notice("Room groups move using drag-select");return;}
+   RememberChange();
+   var piece=project.pieces[selectedIndex];
+   piece.position+=delta;
+   objects[selectedIndex].transform.position=piece.position;
+   editingPiece=-1;
+   RefreshSelectionOutline();
+  }
+  void RotateSelected(float degrees){
+   if(selectedIndex<0||selectedIndex>=project.pieces.Count||objects[selectedIndex]==null)return;
+   if(IsRoomFloor(selectedIndex)){Notice("Room rotation is not available");return;}
+   RememberChange();
+   var piece=project.pieces[selectedIndex];
+   piece.rotation=Quaternion.Euler(0f,degrees,0f)*piece.rotation;
+   objects[selectedIndex].transform.rotation=piece.rotation;
+   RefreshSelectionOutline();
+  }
+  void ResizeSelected(float factor){
+   if(selectedIndex<0||selectedIndex>=project.pieces.Count||objects[selectedIndex]==null)return;
+   string type=project.pieces[selectedIndex].kind;
+   if(type=="wall"||type=="floor"||type=="roof"||type=="opening-frame"){
+    Notice("Use dimension fields to resize architectural pieces");return;
+   }
+   RememberChange();
+   var piece=project.pieces[selectedIndex];
+   piece.scale*=factor;
+   objects[selectedIndex].transform.localScale=piece.scale;
+   editingPiece=-1;
+   RefreshSelectionOutline();
+  }
+  void DrawObjectHandles(){
+   if(currentTool!=Tool.Select||selectedIndex<0||selectedIndex>=objects.Count||objects[selectedIndex]==null||sceneCamera==null)return;
+   if(showPause||showHelp||showSettings||showDiagnostics||showImport||showExport||showProjects)return;
+   var renderers=objects[selectedIndex].GetComponentsInChildren<Renderer>();
+   if(renderers.Length==0)return;
+   Bounds b=renderers[0].bounds;
+   for(int i=1;i<renderers.Length;i++)b.Encapsulate(renderers[i].bounds);
+   Vector3 world=b.center+Vector3.up*(b.extents.y+.4f);
+   Vector3 screen=sceneCamera.WorldToScreenPoint(world);
+   if(screen.z<=0f)return;
+   float px=screen.x/UIScale,py=(Screen.height-screen.y)/UIScale;
+   if(px<130f||py<92f||px>Screen.width/UIScale-370f||py>Screen.height/UIScale-290f)return;
+   GUI.Box(new Rect(px-92,py-65,184,120),"",panelStyle);
+   Label(new Rect(px-78,py-56,165,25),"MOVE · 0.25 m");
+   if(Button(new Rect(px-88,py-25,53,34),"X−"))NudgeSelection(new Vector3(-.25f,0,0));
+   if(Button(new Rect(px-30,py-25,53,34),"X+"))NudgeSelection(new Vector3(.25f,0,0));
+   if(Button(new Rect(px+28,py-25,53,34),"Y+"))NudgeSelection(new Vector3(0,.25f,0));
+   if(Button(new Rect(px-88,py+13,53,34),"Z−"))NudgeSelection(new Vector3(0,0,-.25f));
+   if(Button(new Rect(px-30,py+13,53,34),"Z+"))NudgeSelection(new Vector3(0,0,.25f));
+   if(Button(new Rect(px+28,py+13,53,34),"Y−"))NudgeSelection(new Vector3(0,-.25f,0));
+  }
   void RotateSelection(){
    if(selectedIndex<0||selectedIndex>=project.pieces.Count)return;
    var item=project.pieces[selectedIndex];
@@ -1243,6 +1296,15 @@ namespace WorldBuilder {
     if(Button(new Rect(x+23,y,137,43),"Duplicate"))DuplicateSelection();
     if(Button(new Rect(x+169,y,137,43),"Rotate 45°"))RotateSelection();
     y+=51;
+    if(p.kind=="imported"||p.kind=="couch"||p.kind=="table"){
+     if(Button(new Rect(x+23,y,88,36),"↺ 15°"))RotateSelected(-15f);
+     if(Button(new Rect(x+120,y,88,36),"15° ↻"))RotateSelected(15f);
+     if(Button(new Rect(x+217,y,88,36),"1.1×"))ResizeSelected(1.1f);
+     y+=45;
+     if(Button(new Rect(x+23,y,137,36),"Scale −10%"))ResizeSelected(.9f);
+     if(Button(new Rect(x+169,y,137,36),furnitureSnap?"Snap: ON":"Snap: OFF"))furnitureSnap=!furnitureSnap;
+     y+=45;
+    }
     if(p.kind=="wall"){
      if(Button(new Rect(x+23,y,283,42),"Standard VR Height  ·  2.70 m"))SetStandardWallHeight();
      y+=49;
@@ -1500,6 +1562,7 @@ namespace WorldBuilder {
    }
    DrawLeft(h);
    DrawViewportControls(h);
+   DrawObjectHandles();
    if(showInspector)DrawProperties(w,h);
    if(showCatalog)DrawCatalog(w,h);
    else {
@@ -1531,6 +1594,7 @@ namespace WorldBuilder {
     GUI.Box(new Rect(x,77,370,400),"",panelStyle);
     Label(new Rect(x+20,93,330,35),"Projects",true);
     if(Button(new Rect(x+15,131,340,34),"Reload last saved project"))Load();
+    if(Button(new Rect(x+15,407,340,34),"Restore latest recovery snapshot")){RestoreRecovery();showProjects=false;}
     string[] paths=Directory.GetFiles(ProjectsFolder(),"*.json");
     Array.Sort(paths);Array.Reverse(paths);
     for(int k=0;k<Mathf.Min(paths.Length,5);k++){
