@@ -139,7 +139,7 @@ namespace WorldBuilder {
      showPause||showConfirmExit||showSettings||showHelp||
      (showProjects&&p.x>w*.5f-200f&&p.x<w*.5f+210f&&p.y<505f)||
      ((showImport||showExport)&&p.x>w*.5f-275f&&p.x<w*.5f+275f&&p.y<335f)||
-     showAssets||(showStudio&&p.x>515f&&p.x<1165f&&p.y>90f&&p.y<420f);
+     showAssets||(showStudio&&p.x>515f&&p.x<1165f&&p.y>90f&&p.y<455f);
   }
   void ToggleAssetBrowser(){
    try{
@@ -663,7 +663,7 @@ namespace WorldBuilder {
       "2. Copy the CONTENTS of this package's Assets folder into that Unity project's Assets folder.\\r\\n"+
       "3. In Unity, select Tools > WorldBuilder > Import World. It will generate WorldBuilderWorld.unity automatically.\\r\\n"+
       "4. Review the spawn and any SDK warnings, then build and publish via VRChat SDK.\\r\\n"+
-      "Geometry, box colliders and basic colors are preserved. Third-party assets are not yet supported.\\r\\n");
+      "Export contains geometry, basic light settings, supported imported OBJ assets and texture maps. Review compatibility, baking and VRChat SDK interactions in Unity. Experimental features need testing.\\r\\n");
     string rootProject=targetVrcProject.Trim().Trim('"');
     if(rootProject.Length>0){
      string assetsTarget=Path.Combine(rootProject,"Assets");
@@ -1350,7 +1350,7 @@ namespace WorldBuilder {
   }
   void DrawStudio(float w,float h){
    float x=Mathf.Clamp((w-650f)*.5f,520f,Mathf.Max(520f,w-665f)),y=163f;
-   GUI.Box(new Rect(x,y,630,243),"",panelStyle);
+   GUI.Box(new Rect(x,y,630,285),"",panelStyle);
    Label(new Rect(x+19,y+9,380,30),"WorldBuilder 1.0 · Studios",true);
    if(Button(new Rect(x+568,y+6,45,32),"X")){showStudio=false;return;}
    string[] tabs={"Architecture","Lighting","Landscape","VRChat"};
@@ -1501,7 +1501,25 @@ namespace WorldBuilder {
      if(Button(new Rect(x+169,y,137,36),furnitureSnap?"Snap: ON":"Snap: OFF"))furnitureSnap=!furnitureSnap;
      y+=45;
     }
-    if(p.kind=="wall"){
+    if(p.kind=="light-point"||p.kind=="light-spot"){
+    Label(new Rect(x+23,y,282,25),"BRIGHTNESS "+p.lightIntensity.ToString("F2"));y+=26;
+    float intensity=GUI.HorizontalSlider(new Rect(x+23,y,282,24),p.lightIntensity,0f,8f);y+=35;
+    Label(new Rect(x+23,y,282,25),"RANGE "+p.lightRange.ToString("F1")+" m");y+=26;
+    float range=GUI.HorizontalSlider(new Rect(x+23,y,282,24),p.lightRange,1f,30f);y+=35;
+    if(Mathf.Abs(intensity-p.lightIntensity)>.001f||Mathf.Abs(range-p.lightRange)>.001f){
+     p.lightIntensity=intensity;p.lightRange=range;
+     Light component=objects[selectedIndex].GetComponent<Light>();
+     if(component!=null){component.intensity=intensity;component.range=range;}
+    }
+    if(Button(new Rect(x+23,y,283,34),"Light Color: Warm / White")){
+     RememberChange();
+     p.lightColor=p.lightColor.r>p.lightColor.b+.15f?Color.white:new Color(1f,.78f,.51f);
+     Light component=objects[selectedIndex].GetComponent<Light>();
+     if(component!=null)component.color=p.lightColor;
+    }
+    y+=40;
+   }
+   if(p.kind=="wall"){
      if(Button(new Rect(x+23,y,283,42),"Standard VR Height  ·  2.70 m"))SetStandardWallHeight();
      y+=49;
      if(Button(new Rect(x+23,y,137,42),"Copy Size"))CopyWallSize();
