@@ -25,6 +25,7 @@ namespace WorldBuilder {
    MeshImports();
    GltfMaterialRoundTrip();
    Geometry();
+   WaterBasins();
    Debug.Log("WorldBuilder regression checks passed: bundled shaders, tool switching, OBJ/glTF materials, polygon and terrain");
   }
   static void RuntimeShaders(){
@@ -224,6 +225,39 @@ namespace WorldBuilder {
    }finally{
     if(converted!=null)UnityEngine.Object.DestroyImmediate(converted);
     if(Directory.Exists(folder))Directory.Delete(folder,true);
+   }
+  }
+  static void WaterBasins(){
+   Mesh ground=null,interior=null,terrain=null;
+   try{
+    var footprint=new Rect(-2f,-3f,4f,6f);
+    ground=BasinGeometry.CreateMeadow(15f,new List<Rect>{footprint});
+    Expect(ground.vertexCount>=4&&ground.triangles.Length>0,
+     "scenic ground vanished with an excavated basin");
+    var vertices=ground.vertices;
+    var triangles=ground.triangles;
+    for(int i=0;i<triangles.Length;i+=3){
+     Vector3 center=(vertices[triangles[i]]+vertices[triangles[i+1]]+
+      vertices[triangles[i+2]])/3f;
+     Expect(!footprint.Contains(new Vector2(center.x,center.z)),
+      "scenic meadow still covers the water basin");
+    }
+    interior=BasinGeometry.CreateInterior();
+    Expect(interior.vertexCount==20&&interior.triangles.Length==30,
+     "pool interior must include a bottom and four walls");
+    Piece earth=new Piece("terrain",Vector3.zero,new Vector3(8f,2f,8f),Quaternion.identity);
+    Piece water=new Piece("water",new Vector3(0,-1,0),new Vector3(4f,2f,4f),Quaternion.identity);
+    terrain=TerrainGeometry.Create(12,8f,8f,2f,4);
+    BasinGeometry.CarveTerrain(terrain,earth,new List<Piece>{earth,water});
+    float minimum=999f;
+    foreach(Vector3 vertex in terrain.vertices)
+     if(Mathf.Abs(vertex.x)<.15f&&Mathf.Abs(vertex.z)<.15f)
+      minimum=Mathf.Min(minimum,vertex.y);
+    Expect(minimum<-.5f,"water basin does not lower underlying terrain");
+   }finally{
+    if(ground!=null)UnityEngine.Object.DestroyImmediate(ground);
+    if(interior!=null)UnityEngine.Object.DestroyImmediate(interior);
+    if(terrain!=null)UnityEngine.Object.DestroyImmediate(terrain);
    }
   }
   static void Geometry(){
