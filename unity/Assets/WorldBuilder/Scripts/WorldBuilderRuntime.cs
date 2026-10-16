@@ -1655,12 +1655,13 @@ namespace WorldBuilder {
    if(studioTab==0){
     if(Button(new Rect(x+15,line,188,40),polygonMode?"Room: Custom":"Room: Rectangle")){
      polygonMode=!polygonMode;polygonCorners.Clear();SelectTool(Tool.Room);
+     showStudio=false;
      Notice(polygonMode?"Click corners, press Enter to finish":"Rectangular room tool selected");
     }
     if(Button(new Rect(x+215,line,185,40),"Garage Opening")){
-     SelectTool(Tool.Garage);
+     SelectTool(Tool.Garage);showStudio=false;showInspector=true;
     }
-    if(Button(new Rect(x+413,line,195,40),"Custom Opening")){SelectTool(Tool.Door);}
+    if(Button(new Rect(x+413,line,195,40),"Custom Opening")){SelectTool(Tool.Door);showStudio=false;showInspector=true;}
     Label(new Rect(x+22,line+48,580,25),"Opening width: "+openingWidth.ToString("F2")+" m");
     openingWidth=GUI.HorizontalSlider(new Rect(x+28,line+75,555,21),openingWidth,.6f,5.5f);
     Label(new Rect(x+22,line+101,275,26),"Height: "+openingHeight.ToString("F2")+" m");
@@ -1668,8 +1669,8 @@ namespace WorldBuilder {
     Label(new Rect(x+313,line+101,280,26),"Bottom: "+openingBottom.ToString("F2")+" m");
     openingBottom=GUI.HorizontalSlider(new Rect(x+315,line+130,270,19),openingBottom,0f,2f);
    }else if(studioTab==1){
-    if(Button(new Rect(x+20,line,180,39),"Point Light")){lightMode=0;SelectTool(Tool.Light);}
-    if(Button(new Rect(x+212,line,180,39),"Spot Light")){lightMode=1;SelectTool(Tool.Light);}
+    if(Button(new Rect(x+20,line,180,39),"Point Light")){lightMode=0;SelectTool(Tool.Light);showStudio=false;showInspector=true;}
+    if(Button(new Rect(x+212,line,180,39),"Spot Light")){lightMode=1;SelectTool(Tool.Light);showStudio=false;showInspector=true;}
     if(Button(new Rect(x+405,line,190,39),"Night Sky")){project.skyPreset=2;ApplyEnvironment();}
     Label(new Rect(x+20,line+49,280,24),"Light intensity: "+lightBrightness.ToString("F1"));
     lightBrightness=GUI.HorizontalSlider(new Rect(x+24,line+76,268,22),lightBrightness,0f,8f);
@@ -1677,22 +1678,22 @@ namespace WorldBuilder {
     lightRadius=GUI.HorizontalSlider(new Rect(x+327,line+76,265,22),lightRadius,2f,30f);
     Label(new Rect(x+23,line+116,580,26),"Click the ground to place a light. Select it to adjust position and rotation.");
    }else if(studioTab==2){
-    if(Button(new Rect(x+18,line,186,42),"Terrain Hill"))SelectTool(Tool.Terrain);
-    if(Button(new Rect(x+212,line,186,42),"Water"))SelectTool(Tool.Water);
+    if(Button(new Rect(x+18,line,186,42),"Terrain Hill")){SelectTool(Tool.Terrain);showStudio=false;}
+    if(Button(new Rect(x+212,line,186,42),"Water")){SelectTool(Tool.Water);showStudio=false;}
     if(Button(new Rect(x+406,line,188,42),"Fog: "+(project.fog?"On":"Off"))){project.fog=!project.fog;ApplyEnvironment();}
     string[] names={"Day","Sunset","Night","Overcast"};
     for(int i=0;i<4;i++){int k=i;if(Button(new Rect(x+18+i*146,line+53,138,36),names[i],project.skyPreset==i)){project.skyPreset=k;ApplyEnvironment();}}
-    if(Button(new Rect(x+18,line+95,140,32),"Plant Tree"))SelectTool(Tool.Tree);
-    if(Button(new Rect(x+168,line+95,140,32),"Path / Driveway"))SelectTool(Tool.Path);
+    if(Button(new Rect(x+18,line+95,140,32),"Plant Tree")){SelectTool(Tool.Tree);showStudio=false;}
+    if(Button(new Rect(x+168,line+95,140,32),"Path / Driveway")){SelectTool(Tool.Path);showStudio=false;}
     Label(new Rect(x+19,line+133,300,24),"Terrain elevation: "+terrainAmplitude.ToString("F1")+" m");
     terrainAmplitude=GUI.HorizontalSlider(new Rect(x+22,line+160,285,19),terrainAmplitude,.25f,12f);
     Label(new Rect(x+330,line+133,265,24),"Sun angle: "+project.sunPitch.ToString("F0")+"°");
     float angle=GUI.HorizontalSlider(new Rect(x+334,line+160,255,19),project.sunPitch,5f,85f);
     if(Mathf.Abs(angle-project.sunPitch)>.01f){project.sunPitch=angle;ApplyEnvironment();}
    }else{
-    if(Button(new Rect(x+18,line,190,42),"Mirror"))SelectTool(Tool.Mirror);
-    if(Button(new Rect(x+218,line,190,42),"Seat / Station"))SelectTool(Tool.Seat);
-    if(Button(new Rect(x+418,line,190,42),"Spawn Point"))SelectTool(Tool.Spawn);
+    if(Button(new Rect(x+18,line,190,42),"Mirror")){SelectTool(Tool.Mirror);showStudio=false;}
+    if(Button(new Rect(x+218,line,190,42),"Seat / Station")){SelectTool(Tool.Seat);showStudio=false;}
+    if(Button(new Rect(x+418,line,190,42),"Spawn Point")){SelectTool(Tool.Spawn);showStudio=false;}
     Label(new Rect(x+22,line+58,570,56),"Place VRChat object markers in the scene. Mirrors and seats need the VRChat Worlds SDK when exported to Unity.");
     Label(new Rect(x+22,line+117,570,35),"Use VRChat Creator Companion to validate and publish the export.");
    }
@@ -1784,7 +1785,7 @@ namespace WorldBuilder {
      }else{
       SelectTool(choice);
       
-      if(choice==Tool.Light){showStudio=true;studioTab=1;}
+      if(choice==Tool.Light){showStudio=false;showInspector=true;}
      }
     }
    }
@@ -1824,6 +1825,7 @@ namespace WorldBuilder {
     if(currentTool==Tool.Room)contentH+=140f;
     if(currentTool==Tool.Imported)contentH+=115f;
     if(currentTool==Tool.Light)contentH+=90f;
+    if(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage)contentH+=225f;
    }
    Rect view=new Rect(x+12,top+92,panelW-25,Mathf.Max(120f,panelH-111f));
    inspectorScroll=GUI.BeginScrollView(view,inspectorScroll,new Rect(0,0,310,contentH));
@@ -1928,6 +1930,16 @@ namespace WorldBuilder {
     GUI.Label(new Rect(ox,y,280,30),"Currently: Floor "+(buildingLevel+1),smallStyle);y+=43;
     GUI.Label(new Rect(ox,y,280,24),"GRID SNAP  ·  "+gridSize.ToString("F2")+" m",miniStyle);y+=28;
     gridSize=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),gridSize,.25f,2f);y+=44;
+    if(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage){
+     GUI.Label(new Rect(ox,y,282,25),"OPENING SETTINGS",miniStyle);y+=33;
+     GUI.Label(new Rect(ox,y,282,24),"Width "+openingWidth.ToString("F2")+" m",smallStyle);y+=26;
+     openingWidth=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),openingWidth,.5f,5.5f);y+=35;
+     GUI.Label(new Rect(ox,y,282,24),"Height "+openingHeight.ToString("F2")+" m",smallStyle);y+=26;
+     openingHeight=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),openingHeight,.5f,4.2f);y+=35;
+     GUI.Label(new Rect(ox,y,282,24),"Sill height "+openingBottom.ToString("F2")+" m",smallStyle);y+=26;
+     openingBottom=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),openingBottom,0f,2f);y+=41;
+     GUI.Label(new Rect(ox,y,284,46),"Aim at a wall to make a "+currentTool.ToString().ToLowerInvariant()+" opening.",smallStyle);y+=53;
+    }
     if(currentTool==Tool.Wall){
      GUI.Label(new Rect(ox,y,282,26),"WALL SETTINGS",miniStyle);y+=32;
      GUI.Label(new Rect(ox,y,282,24),"Height "+wallHeight.ToString("F2")+" m",smallStyle);y+=26;
