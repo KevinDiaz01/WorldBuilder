@@ -94,7 +94,10 @@ namespace WorldBuilder {
   private Rect objectHandleArea;
   private bool objectHandleVisible=false;
   private float nextRecoveryTime=0f;
-  private const float RecoveryInterval=120f;
+  private const float RecoveryInterval=30f;
+  private bool recoverySessionStarted=false;
+  private RecoverySnapshot interruptedRecovery;
+  private bool showRecoveryPrompt=false;
   private string importedId;
   private float importedScale=1f;
   private float importedRotation=0f;
@@ -170,6 +173,11 @@ namespace WorldBuilder {
    Diagnostics.Add("ERROR",brief);
   }
   void OnApplicationQuit(){
+   if(recoverySessionStarted){
+    WriteRecovery();
+    try{RecoveryStore.EndSession();}catch(Exception ex){Debug.LogWarning("Recovery session cleanup: "+ex.Message);}
+    recoverySessionStarted=false;
+   }
    if(importedGhost!=null)Destroy(importedGhost);
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
    foreach(var tex in modelThumbnails.Values)if(tex!=null)Destroy(tex);
@@ -517,30 +525,43 @@ namespace WorldBuilder {
    return adjusted;
   }
   void WriteRecovery(){
+   if(!recoverySessionStarted||showRecoveryPrompt||project==null||project.pieces==null)return;
    try{
-    if(project.pieces==null||project.pieces.Count==0)return;
-    string directory=Path.Combine(Application.persistentDataPath,"Recovery");
-    Directory.CreateDirectory(directory);
-    string latest=Path.Combine(directory,"autosave.json");
-    string temporary=latest+".tmp";
-    File.WriteAllText(temporary,JsonUtility.ToJson(project,true));
-    if(File.Exists(latest))File.Delete(latest);
-    File.Move(temporary,latest);
-   }catch(Exception ex){Diagnostics.Add("WARN","Recovery save failed: "+ex.Message);}
+    RecoveryStore.WriteSnapshot(filePath,JsonUtility.ToJson(project,true),project.pieces.Count);
+   }catch(Exception ex){Diagnostics.Add("WARN","Recovery snapshot failed: "+ex.Message);}
   }
   void RestoreRecovery(){
    try{
-    string path=Path.Combine(Application.persistentDataPath,"Recovery","autosave.json");
-    if(!File.Exists(path)){Notice("No recovery snapshot available");return;}
-    var restored=JsonUtility.FromJson<Project>(File.ReadAllText(path));
-    if(restored==null||restored.schema!=2||restored.pieces==null)throw new InvalidDataException("Invalid recovery snapshot");
+    RecoverySnapshot candidate=interruptedRecovery??RecoveryStore.ReadLatest(filePath);
+    if(candidate==null){Notice("No recovery snapshot available");showRecoveryPrompt=false;return;}
+    var restored=JsonUtility.FromJson<Project>(candidate.projectJson);
+    if(restored==null||restored.schema!=2||restored.pieces==null)throw new InvalidDataException("Recovery file is invalid");
     RememberChange();
+    // Restore into the editor first, never overwrite the manually saved project.
     foreach(var obj in objects)if(obj!=null)Destroy(obj);
-    objects.Clear();SelectObject(-1);project=restored;
+    objects.Clear();SelectObject(-1);
+    project=restored;
+    filePath=candidate.sourcePath;
+    if(recoverySessionStarted)RecoveryStore.ChangeProject(filePath);
     foreach(var piece in project.pieces)objects.Add(Create(piece));
     ApplyEnvironment();
-    Notice("Recovery restored. Save your project to keep it.");
-   }catch(Exception ex){Diagnostics.Add("ERROR","Recovery restore: "+ex.Message);Notice("Could not restore recovery");}
+    showRecoveryPrompt=false;
+    showProjects=false;
+    interruptedRecovery=null;
+    nextRecoveryTime=Time.unscaledTime+RecoveryInterval;
+    Notice("Build recovered. Use Save to keep your restored changes.");
+    Diagnostics.Add("INFO","Restored recovery snapshot for "+Path.GetFileName(filePath));
+   }catch(Exception ex){
+    Diagnostics.Add("ERROR","Recovery restore failed: "+ex.Message);
+    showRecoveryPrompt=false;
+    Notice("Recovery failed. See F2 Diagnostics; backup files have been kept.");
+   }
+  }
+  void OnApplicationFocus(bool hasFocus){
+   if(!hasFocus)WriteRecovery();
+  }
+  void OnApplicationPause(bool paused){
+   if(paused)WriteRecovery();
   }
   void UpdatePreview(){
    bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
@@ -726,7 +747,7 @@ namespace WorldBuilder {
     filePath=Path.Combine(ProjectsFolder(),safe+".json");Save();}
    catch(Exception e){Notice("Save failed: "+e.Message);}
   }
-  void OpenProject(string path){filePath=path;Load();showProjects=false;}
+  void OpenProject(string path){filePath=path;if(recoverySessionStarted)RecoveryStore.ChangeProject(filePath);Load();showProjects=false;}
 
   void Start() {
    if(sceneCamera==null)sceneCamera=Camera.main;
@@ -735,7 +756,14 @@ namespace WorldBuilder {
    AssetHub.Initialize();
    // Asset websites now render through the embedded WebView2 browser.
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
+   try{
+    interruptedRecovery=RecoveryStore.FindInterrupted();
+    RecoveryStore.BeginSession(filePath);
+    recoverySessionStarted=true;
+   }catch(Exception ex){Diagnostics.Add("WARN","Recovery session could not start: "+ex.Message);}
    if(File.Exists(filePath))Load();
+   showRecoveryPrompt=interruptedRecovery!=null;
+   nextRecoveryTime=Time.unscaledTime+RecoveryInterval;
    ApplyEnvironment();
    BuildGrid();
   }
@@ -791,6 +819,7 @@ namespace WorldBuilder {
    }catch(Exception ex){Diagnostics.Add("WARN","Invalid room outline: "+ex.Message);Notice("Room outline invalid: "+ex.Message);}
   }
   void Update() {
+   if(showRecoveryPrompt)return;
    if(Time.unscaledTime>=nextRecoveryTime){
     nextRecoveryTime=Time.unscaledTime+RecoveryInterval;
     WriteRecovery();
@@ -1272,7 +1301,11 @@ namespace WorldBuilder {
    }
   }
   public bool Save(){
-   try{File.WriteAllText(filePath,JsonUtility.ToJson(project,true));Debug.Log("Saved "+filePath);Notice("Saved: "+Path.GetFileName(filePath));return true;}
+   try{
+    RecoveryStore.WriteAtomic(filePath,JsonUtility.ToJson(project,true));
+    if(recoverySessionStarted)RecoveryStore.ChangeProject(filePath);
+    Debug.Log("Saved "+filePath);Notice("Saved: "+Path.GetFileName(filePath));return true;
+   }
    catch(Exception e){Debug.LogError(e);Notice("Save failed: "+e.Message);return false;}
   }
   public void Load(){
@@ -1808,10 +1841,36 @@ namespace WorldBuilder {
    Label(new Rect(x+27,y+height-46,width-48,30),
      "Supported 3D: OBJ, GLB, glTF, ZIP   ·   Textures-only packages do not appear under My Assets.");
   }
+  void DrawRecoveryPrompt(float w,float h){
+   GUI.Box(new Rect(0,0,w,h),"",panelStyle);
+   float width=Mathf.Min(660f,w-48f);
+   float x=(w-width)*.5f,y=Mathf.Max(30f,(h-390f)*.5f);
+   GUI.Box(new Rect(x,y,width,390f),"",panelStyle);
+   Label(new Rect(x+30,y+23,width-60,40),"Recover your last build?",true);
+   Label(new Rect(x+30,y+78,width-60,54),
+      "WorldBuilder didn't close normally. A recovery copy of your work is available.");
+   string projectName=interruptedRecovery==null?"Your world":Path.GetFileNameWithoutExtension(interruptedRecovery.sourcePath);
+   string when="Last automatic snapshot";
+   if(interruptedRecovery!=null){
+    DateTime saved;
+    if(DateTime.TryParse(interruptedRecovery.savedUtc,out saved))
+     when="Saved "+saved.ToLocalTime().ToString("MMM d, h:mm tt")+"  ·  "+interruptedRecovery.objectCount+" objects";
+   }
+   GUI.Box(new Rect(x+28,y+146,width-56,87),"",panelStyle);
+   Label(new Rect(x+46,y+158,width-92,30),projectName,true);
+   Label(new Rect(x+46,y+191,width-92,27),when);
+   if(Button(new Rect(x+28,y+255,width-56,48),"Restore My Build"))RestoreRecovery();
+   if(Button(new Rect(x+28,y+308,width-56,42),"Open My Last Saved Project")){
+    showRecoveryPrompt=false;
+    Notice("Saved project opened. Recovery is still available in Projects.");
+   }
+   Label(new Rect(x+30,y+356,width-60,26),"Your saved project won't be overwritten unless you choose Save.");
+  }
   void OnGUI(){
    InitStyles();
    GUI.matrix=Matrix4x4.Scale(new Vector3(UIScale,UIScale,1f));
    float w=Screen.width/UIScale,h=Screen.height/UIScale;
+   if(showRecoveryPrompt){DrawRecoveryPrompt(w,h);return;}
    if(walkthrough!=null&&walkthrough.IsWalking){
     GUI.Box(new Rect(0,0,w,48),"",panelStyle);
     Label(new Rect(19,10,Mathf.Min(w-35,840),30),"LIVE PREVIEW     WASD Move   |   Mouse Look   |   Esc Return");
@@ -1861,7 +1920,7 @@ namespace WorldBuilder {
     GUI.Box(new Rect(x,77,370,400),"",panelStyle);
     Label(new Rect(x+20,93,330,35),"Projects",true);
     if(Button(new Rect(x+15,131,340,34),"Reload last saved project"))Load();
-    if(Button(new Rect(x+15,407,340,34),"Restore latest recovery snapshot")){RestoreRecovery();showProjects=false;}
+    if(Button(new Rect(x+15,407,340,34),interruptedRecovery!=null?"Recover Previous Session":"Restore Autosave")){RestoreRecovery();showProjects=false;}
     string[] paths=Directory.GetFiles(ProjectsFolder(),"*.json");
     Array.Sort(paths);Array.Reverse(paths);
     for(int k=0;k<Mathf.Min(paths.Length,5);k++){
