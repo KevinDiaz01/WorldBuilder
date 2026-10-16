@@ -57,7 +57,19 @@ public static class WorldBuilderSceneImporter {
    foreach(var p in world.pieces){
     if(p==null)continue;
     GameObject obj;
-    if(p.kind=="light-point"||p.kind=="light-spot"){
+    if(p.kind=="tree"){
+     obj=new GameObject("WB_Tree");
+     var trunk=GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+     trunk.name="Tree Trunk";trunk.transform.SetParent(obj.transform,false);
+     trunk.transform.localPosition=new Vector3(0,1.05f,0);
+     trunk.transform.localScale=new Vector3(.38f,1.05f,.38f);
+     var crown=GameObject.CreatePrimitive(PrimitiveType.Sphere);
+     crown.name="Tree Canopy";crown.transform.SetParent(obj.transform,false);
+     crown.transform.localPosition=new Vector3(0,2.9f,0);
+     crown.transform.localScale=new Vector3(2.6f,2.5f,2.6f);
+     trunk.GetComponent<Renderer>().sharedMaterial=MakeVegetationMaterial("Trunk",new Color(.34f,.21f,.13f));
+     crown.GetComponent<Renderer>().sharedMaterial=MakeVegetationMaterial("Canopy",new Color(.20f,.43f,.22f));
+    }else if(p.kind=="light-point"||p.kind=="light-spot"){
      obj=new GameObject("WB_"+p.kind);
      var lamp=obj.AddComponent<Light>();
      lamp.type=p.kind=="light-spot"?LightType.Spot:LightType.Point;
@@ -100,7 +112,7 @@ public static class WorldBuilderSceneImporter {
     if(p.kind=="floor" && position.y < .085f)position.y=.105f;
     obj.transform.SetPositionAndRotation(position,p.rotation);
     obj.transform.localScale=p.scale;
-    if(p.kind=="imported"||p.kind=="light-point"||p.kind=="light-spot")continue;
+    if(p.kind=="imported"||p.kind=="light-point"||p.kind=="light-spot"||p.kind=="tree")continue;
     if(p.kind=="vrc-mirror"){
      Type mirror=FindType("VRC.SDK3.Components.VRCMirrorReflection");
      if(mirror!=null)obj.AddComponent(mirror);
@@ -111,7 +123,7 @@ public static class WorldBuilderSceneImporter {
      if(station!=null)obj.AddComponent(station);
      else Debug.LogWarning("WorldBuilder seat station requires VRChat Worlds SDK.");
     }
-    Color color=p.kind=="wall"?new Color(.89f,.91f,.94f):p.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
+    Color color=p.kind=="wall"?new Color(.89f,.91f,.94f):p.kind=="floor"||p.kind=="polygon-floor"?new Color(.47f,.52f,.58f):p.kind=="terrain"?new Color(.30f,.52f,.27f):p.kind=="water"?new Color(.18f,.47f,.75f):p.kind=="path"?new Color(.47f,.43f,.38f):new Color(.25f,.6f,.7f);
     if(!string.IsNullOrEmpty(p.finish)){
      switch(p.finish){
       case "Warm White":color=new Color(.91f,.88f,.80f);break;
@@ -205,6 +217,14 @@ public static class WorldBuilderSceneImporter {
    EditorSceneManager.OpenScene(output,OpenSceneMode.Single);
    EditorUtility.DisplayDialog("WorldBuilder","Imported "+world.pieces.Length+" objects into "+output+". Check spawn and VRChat SDK readiness before publishing.","OK");
   }catch(Exception ex){Debug.LogException(ex);EditorUtility.DisplayDialog("WorldBuilder Import Error",ex.Message,"OK");}
+ }
+ private static Material MakeVegetationMaterial(string name,Color color){
+  Shader shader=Shader.Find("Standard");
+  if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+  if(shader==null)throw new Exception("Missing compatible shader for vegetation");
+  var material=new Material(shader);
+  material.name="WB_"+name;material.color=color;
+  return material;
  }
  // Initial OBJ material support: single diffuse material with optional MTL Kd/map_Kd.
  // Complex multi-material/normal-map imports require a later importer version.
