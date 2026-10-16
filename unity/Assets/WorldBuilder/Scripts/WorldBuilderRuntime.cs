@@ -73,16 +73,17 @@ namespace WorldBuilder {
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
   bool OverUI(){
    if(walkthrough!=null&&walkthrough.IsWalking)return true;
-   Vector2 p=new Vector2(Input.mousePosition.x,Screen.height-Input.mousePosition.y);
-   return p.y<66f||p.y>Screen.height-54f||
-     (showLibrary&&p.x<100f)||
-     (p.x>Screen.width-290f&&p.y<Screen.height-175f)||
-     (p.y>Screen.height-175f)||
-     showPause||showConfirmExit||showSettings||
-     (showProjects&&p.x>Screen.width-365f&&p.y<520f)||
-
-     ((showImport||showExport)&&p.x>Screen.width*.5f-265&&p.x<Screen.width*.5f+265&&p.y<330)||
-     (showAssets&&p.x>Screen.width*.5f-360&&p.x<Screen.width*.5f+360&&p.y<Screen.height-65);
+   float scale=UIScale;
+   float w=Screen.width/scale,h=Screen.height/scale;
+   Vector2 p=new Vector2(Input.mousePosition.x/scale,(Screen.height-Input.mousePosition.y)/scale);
+   return p.y<88f||p.y>h-221f||
+     (p.x<122f&&p.y>=94f)||
+     (p.x>w-359f&&p.y>=94f)||
+     (p.x>125f&&p.x<515f&&p.y<159f)||
+     showPause||showConfirmExit||showSettings||showHelp||
+     (showProjects&&p.x>w*.5f-200f&&p.x<w*.5f+210f&&p.y<505f)||
+     ((showImport||showExport)&&p.x>w*.5f-275f&&p.x<w*.5f+275f&&p.y<335f)||
+     showAssets;
   }
   void ToggleAssetBrowser(){
    try{
