@@ -386,6 +386,10 @@ namespace WorldBuilder {
   }
   void RememberChange(){
    if(restoringHistory)return;
+   // Save the result shortly after an edit; the normal 30-second interval
+   // remains a backup for sliders and other operations that bypass history.
+   if(recoverySessionStarted&&!showRecoveryPrompt)
+    nextRecoveryTime=Mathf.Min(nextRecoveryTime,Time.unscaledTime+5f);
    undoHistory.Push(JsonUtility.ToJson(project));
    if(undoHistory.Count>80){
     var snapshots=undoHistory.ToArray();
