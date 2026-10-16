@@ -38,7 +38,7 @@ namespace WorldBuilder {
    return 10;
   }
   static string Pick(string[] files){
-   string best=null;int score=0;
+   string best=null;int score=25;
    foreach(var file in files){
     if(!Image(file))continue;
     int rank=Rank(file);
@@ -93,11 +93,33 @@ namespace WorldBuilder {
    string[] images=Array.FindAll(Directory.GetFiles(path),Image);
    if(images.Length==0)return;
    Array.Sort(images,StringComparer.OrdinalIgnoreCase);
+   // A model's texture directory is not an architectural surface library.
+   // Only recognized albedo/color maps qualify for automatic folder materials.
    string albedo=Pick(images);
    if(albedo==null)return;
    string name=NiceName(Path.GetFileName(path));
    if(name==Path.GetFileName(path)&&name.Length<4)name=NiceName(albedo);
    Store("folder:"+path,name,provider,albedo,FindMap(images,"normal"),FindMap(images,"rough"),Signature(images));
+  }
+  static bool HasModelNearby(string folder,string providerRoot){
+   string current=folder;
+   string root=Path.GetFullPath(providerRoot).TrimEnd(Path.DirectorySeparatorChar);
+   while(!string.IsNullOrEmpty(current)&&
+     current.StartsWith(root,StringComparison.OrdinalIgnoreCase)){
+    foreach(string file in Directory.GetFiles(current)){
+     string ext=Path.GetExtension(file).ToLowerInvariant();
+     if(ext==".obj"||ext==".glb"||ext==".gltf"||ext==".fbx"||
+        ext==".blend"||ext==".mtl")return true;
+    }
+    if(string.Equals(current,root,StringComparison.OrdinalIgnoreCase))break;
+    current=Path.GetDirectoryName(current);
+   }
+   return false;
+  }
+  static bool IsObjectTextureName(string name){
+   name=(name??"").ToLowerInvariant();
+   return name.Contains("statue")||name.Contains("bust")||name.Contains("character")||
+    name.Contains("avatar")||name.Contains("sculpture")||name.Contains("figurine");
   }
   static bool IsModelArchive(string archive){
    try{
@@ -155,7 +177,7 @@ namespace WorldBuilder {
        string ext=Path.GetExtension(file).ToLowerInvariant();
        if(ext==".obj"||ext==".glb"||ext==".gltf"){hasModel=true;break;}
       }
-      if(!hasModel)ScanFolder(dir,provider);
+      if(!hasModel&&!HasModelNearby(dir,root)&&!IsObjectTextureName(dir))ScanFolder(dir,provider);
      }
      foreach(string zip in Directory.GetFiles(root,"*.zip",SearchOption.AllDirectories))
       try{ScanZip(zip,provider);}catch(Exception ex){
@@ -175,7 +197,9 @@ namespace WorldBuilder {
     string albedo=ColorFile(Path.GetFileName(dir));
     if(albedo==null)continue;
     string namePath=Path.Combine(dir,"name.txt"),providerPath=Path.Combine(dir,"provider.txt");
-    result.Add(new Entry{id=Path.GetFileName(dir),name=File.Exists(namePath)?File.ReadAllText(namePath):Path.GetFileName(dir),
+    string name=File.Exists(namePath)?File.ReadAllText(namePath):Path.GetFileName(dir);
+    if(IsObjectTextureName(name))continue;
+    result.Add(new Entry{id=Path.GetFileName(dir),name=name,
      provider=File.Exists(providerPath)?File.ReadAllText(providerPath):"Other"});
    }
    result.Sort((a,b)=>string.Compare(a.name,b.name,StringComparison.OrdinalIgnoreCase));
