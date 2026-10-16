@@ -1517,7 +1517,20 @@ namespace WorldBuilder {
     var filter=meshObj.AddComponent<MeshFilter>();filter.sharedMesh=mesh;
     var renderer=meshObj.AddComponent<MeshRenderer>();
     Shader shader=WorldBuilderShaders.Lit;
-    if(shader!=null){var mat=new Material(shader);mat.color=piece.kind=="terrain"?new Color(.30f,.52f,.27f):new Color(.60f,.61f,.60f);renderer.sharedMaterial=mat;}
+    if(shader!=null){
+     var mat=new Material(shader);
+     mat.color=piece.kind=="terrain"?new Color(.30f,.52f,.27f):new Color(.60f,.61f,.60f);
+     if(piece.kind=="terrain"){
+      if(!string.IsNullOrEmpty(piece.finish)&&piece.finish.StartsWith("texture:",StringComparison.Ordinal)){
+       Texture2D image=GetMaterialImage(piece.finish.Substring(8));
+       if(image!=null){mat.mainTexture=image;mat.mainTextureScale=new Vector2(piece.textureTile,piece.textureTile);}
+      }else if(!string.IsNullOrEmpty(piece.finish)){
+       int i=Array.IndexOf(FinishNames,piece.finish);
+       if(i>=0)mat.color=FinishColors[i];
+      }
+     }
+     renderer.sharedMaterial=mat;
+    }
     var collider=meshObj.AddComponent<MeshCollider>();collider.sharedMesh=mesh;
     meshObj.transform.SetPositionAndRotation(piece.position,piece.rotation);
     return meshObj;
@@ -2037,7 +2050,7 @@ namespace WorldBuilder {
      }else{
       SelectTool(choice);
       if(creativeMode==2){landscapeCategory=k;}
-      if(choice==Tool.Light){showStudio=false;showInspector=true;}
+      if(choice==Tool.Light||choice==Tool.Water){showStudio=false;showInspector=true;}
      }
     }
    }
