@@ -94,6 +94,7 @@ namespace WorldBuilder {
   private bool showInspector=false;
   private bool showProjects=false;
   private GameObject preview;
+  private LineRenderer openingGuide;
   private GameObject importedGhost;
   private string ghostAssetId="";
   private bool furnitureSnap=true;
@@ -610,8 +611,14 @@ namespace WorldBuilder {
     preview.name="Build cursor";
     Destroy(preview.GetComponent<Collider>());
     var m=new Material(Shader.Find("Sprites/Default"));
-    m.color=new Color(.15f,.8f,1f,.5f);
+    m.color=new Color(.24f,.54f,.91f,.45f);
     preview.GetComponent<Renderer>().material=m;
+    openingGuide=preview.AddComponent<LineRenderer>();
+    openingGuide.useWorldSpace=false;
+    openingGuide.positionCount=5;
+    openingGuide.startWidth=openingGuide.endWidth=.053f;
+    openingGuide.material=new Material(Shader.Find("Sprites/Default"));
+    openingGuide.enabled=false;
    }
    if(currentTool==Tool.Imported){
     preview.SetActive(false);
@@ -625,6 +632,8 @@ namespace WorldBuilder {
    }
    if(importedGhost!=null)importedGhost.SetActive(false);
    preview.SetActive(true);
+   if(openingGuide!=null)openingGuide.enabled=false;
+   preview.GetComponent<Renderer>().enabled=true;
    preview.transform.rotation=Quaternion.identity;
    if(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage){
     if(!FindOpeningWall(out int wallIndex,out Vector3 hitPoint)){preview.SetActive(false);return;}
@@ -644,7 +653,21 @@ namespace WorldBuilder {
     float facing=Vector3.Dot(sceneCamera.transform.position-wall.position,forward)>=0?1f:-1f;
     preview.transform.position=wall.position+wall.rotation*local+forward*(facing*(wall.scale.z*.5f+.04f));
     preview.transform.rotation=wall.rotation;
-    preview.transform.localScale=new Vector3(previewWidth,previewHeight,.07f);
+    preview.transform.localScale=Vector3.one;
+    preview.GetComponent<Renderer>().enabled=false;
+    if(openingGuide!=null){
+     openingGuide.enabled=true;
+     float l=-previewWidth*.5f,r=previewWidth*.5f;
+     float t=previewHeight*.5f,b=-previewHeight*.5f;
+     openingGuide.SetPosition(0,new Vector3(l,b,0));
+     openingGuide.SetPosition(1,new Vector3(l,t,0));
+     openingGuide.SetPosition(2,new Vector3(r,t,0));
+     openingGuide.SetPosition(3,new Vector3(r,b,0));
+     openingGuide.SetPosition(4,new Vector3(l,b,0));
+     Color line=currentTool==Tool.Garage?new Color(.95f,.68f,.29f,.95f):
+       currentTool==Tool.Window?new Color(.34f,.62f,.92f,.95f):new Color(.43f,.75f,.55f,.95f);
+     openingGuide.startColor=openingGuide.endColor=line;
+    }
    }else if(currentTool==Tool.Light||currentTool==Tool.Mirror||currentTool==Tool.Seat||currentTool==Tool.Spawn){
     float size=currentTool==Tool.Mirror?1.4f:.3f;
     preview.transform.position=p+Vector3.up*(currentTool==Tool.Light?2.35f:currentTool==Tool.Mirror?1.4f:.5f);
@@ -687,6 +710,7 @@ namespace WorldBuilder {
    }
    if(tool!=Tool.Imported&&importedGhost!=null)importedGhost.SetActive(false);
    if(preview!=null)preview.SetActive(false);
+   if(openingGuide!=null)openingGuide.enabled=false;
    Notice(tool==Tool.Garage?"GARAGE opening selected":tool==Tool.Door?"DOOR opening selected":
     tool==Tool.Window?"WINDOW opening selected":tool+" selected");
   }
