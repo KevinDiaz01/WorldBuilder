@@ -17,6 +17,7 @@ namespace WorldBuilder {
    WorkspaceLayout(runtime);
    SpanGestureEligibility();
    CatalogToolConsistency(runtime);
+   ImportedModelPaint();
    AssetCategories();
    SkyboxImports();
    ToolSwitching(runtime);
@@ -54,7 +55,8 @@ namespace WorldBuilder {
    Expect(catalog!=null&&modes!=null&&height!=null,"workspace layout controls missing");
    Expect(!(bool)catalog.GetValue(runtime),"Build viewport should initially be unobstructed");
    bool[] state=(bool[])modes.GetValue(runtime);
-   Expect(state.Length==3&&!state[0]&&state[1]&&!state[2],"mode palette defaults");
+   Expect(state.Length==3&&!state[0]&&!state[1]&&!state[2],
+    "mode palettes must start hidden; left rail opens contextual collections");
    Expect(Mathf.Abs((float)height.Invoke(runtime,new object[]{900f})-245f)<.01f,
      "catalog height should be capped at 245 pixels");
   }
@@ -79,6 +81,20 @@ namespace WorldBuilder {
    Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"My Assets should be non-painting");
    choose.Invoke(runtime,new object[]{12});
    Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"Skyboxes must not activate Paint");
+  }
+  static void ImportedModelPaint(){
+   MethodInfo apply=typeof(WorldBuilderRuntime).GetMethod("ApplyImportedFinish",
+    BindingFlags.Instance|BindingFlags.NonPublic);
+   Expect(apply!=null,"imported mesh paint integration missing");
+   // The finish property is serialized per placed piece, not per source
+   // asset, so the same imported model can have independent coatings.
+   Piece a=new Piece("imported",Vector3.zero,Vector3.one,Quaternion.identity);
+   Piece b=new Piece("imported",Vector3.one,Vector3.one,Quaternion.identity);
+   a.finish="texture:example";
+   Expect(b.finish!=a.finish,"painting one model must not repaint other instances");
+   var saved=JsonUtility.ToJson(a);
+   Expect(JsonUtility.FromJson<Piece>(saved).finish==a.finish,
+    "imported finish lost after saving");
   }
   static void AssetCategories(){
    string folder=Path.Combine(Application.temporaryCachePath,"WB-categories-"+Guid.NewGuid().ToString("N"));
