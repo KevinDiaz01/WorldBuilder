@@ -2319,7 +2319,8 @@ namespace WorldBuilder {
    SoftPanel(new Rect(left,top,width,shelfHeight),trayStyle);
    bool building=creativeMode==0,landscaping=creativeMode==2;
    string heading=building?"BUILD COLLECTION":landscaping?(landscapeObjects?"OUTDOOR OBJECTS":"LANDSCAPE COLLECTION"):
-     catalogCategory==8?"SURFACE MATERIALS":"FURNITURE & OBJECTS";
+     catalogCategory==0?"MY ASSETS":catalogCategory==8?"SURFACE MATERIALS":
+     catalogCategory==12?"SKYBOXES & HDRI":"OBJECT COLLECTION";
    GUI.Label(new Rect(left+19,top+13,290,30),heading,sectionStyle);
    GUI.Label(new Rect(left+23,top+46,300,20),
     building?"Shapes, walls and openings":landscaping?"Create the world around your home":"Browse models, decor and finishes",mutedStyle);
