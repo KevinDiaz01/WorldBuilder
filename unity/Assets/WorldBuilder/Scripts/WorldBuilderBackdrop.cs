@@ -6,6 +6,7 @@ namespace WorldBuilder {
  public sealed class WorldBuilderBackdrop : MonoBehaviour {
   private GameObject ground;
   private Material groundMaterial;
+  private Mesh cutGroundMesh;
   private Texture2D grassTexture;
   private Material skyMaterial;
   private Material panoramaMaterial;
@@ -19,7 +20,9 @@ namespace WorldBuilder {
    ground.name="Scenic ground (editor only)";
    ground.transform.SetParent(transform,false);
    ground.transform.position=new Vector3(0,-.12f,0);
-   ground.transform.localScale=new Vector3(22f,1f,22f);
+   ground.transform.localScale=Vector3.one;
+   cutGroundMesh=BasinGeometry.CreateMeadow(110f,new System.Collections.Generic.List<Rect>());
+   ground.GetComponent<MeshFilter>().sharedMesh=cutGroundMesh;
    Collider collider=ground.GetComponent<Collider>();
    if(collider!=null)Destroy(collider);
    // Shaders referenced only through Shader.Find get stripped in standalone builds.
@@ -92,12 +95,22 @@ namespace WorldBuilder {
    if(groundMaterial!=null)groundMaterial.color=preset==2?
     new Color(.52f,.59f,.67f):Color.white;
   }
+  public void SetWaterAreas(System.Collections.Generic.List<Piece> pieces){
+   if(ground==null)Initialize();
+   Mesh updated=BasinGeometry.CreateMeadow(110f,BasinGeometry.Footprints(pieces));
+   var filter=ground.GetComponent<MeshFilter>();
+   Mesh old=cutGroundMesh;
+   cutGroundMesh=updated;
+   filter.sharedMesh=updated;
+   if(old!=null)Destroy(old);
+  }
   public void SetVisible(bool enabled){
    visible=enabled;
    if(ground!=null)ground.SetActive(enabled);
   }
   void OnDestroy(){
    if(ground!=null)Destroy(ground);
+   if(cutGroundMesh!=null)Destroy(cutGroundMesh);
    if(groundMaterial!=null)Destroy(groundMaterial);
    if(grassTexture!=null)Destroy(grassTexture);
    if(skyMaterial!=null)Destroy(skyMaterial);

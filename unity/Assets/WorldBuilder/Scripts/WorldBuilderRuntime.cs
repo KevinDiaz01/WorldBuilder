@@ -147,6 +147,7 @@ namespace WorldBuilder {
   private float lightRadius=7f;
   private float terrainAmplitude=2.5f;
   private float newWaterDepth=1.5f;
+  private int basinFingerprint=int.MinValue;
   private Light editorSun;
   private WorldBuilderBackdrop scenicBackdrop;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
@@ -1013,8 +1014,39 @@ namespace WorldBuilder {
     Notice("Custom room created with "+local.Count+" corners");
    }catch(Exception ex){Diagnostics.Add("WARN","Invalid room outline: "+ex.Message);Notice("Room outline invalid: "+ex.Message);}
   }
+  void SyncWaterBasins(){
+   if(project==null||scenicBackdrop==null)return;
+   unchecked{
+    int hash=17;
+    foreach(Piece p in project.pieces){
+     if(p.kind!="water"&&p.kind!="terrain")continue;
+     hash=hash*31+p.kind.GetHashCode();
+     hash=hash*31+p.position.GetHashCode();
+     hash=hash*31+p.scale.GetHashCode();
+    }
+    if(hash==basinFingerprint)return;
+    basinFingerprint=hash;
+   }
+   scenicBackdrop.SetWaterAreas(project.pieces);
+   for(int i=0;i<project.pieces.Count&&i<objects.Count;i++){
+    Piece p=project.pieces[i];
+    if(p.kind!="terrain"||objects[i]==null)continue;
+    var filter=objects[i].GetComponent<MeshFilter>();
+    var collider=objects[i].GetComponent<MeshCollider>();
+    if(filter==null)continue;
+    Mesh fresh=TerrainGeometry.Create(32,Mathf.Max(2,p.scale.x),
+     Mathf.Max(2,p.scale.z),p.scale.y,
+     Mathf.RoundToInt(p.position.x*13f+p.position.z*17f));
+    BasinGeometry.CarveTerrain(fresh,p,project.pieces);
+    Mesh old=filter.sharedMesh;
+    filter.sharedMesh=fresh;
+    if(collider!=null){collider.sharedMesh=null;collider.sharedMesh=fresh;}
+    if(old!=null)Destroy(old);
+   }
+  }
   void Update() {
    if(showRecoveryPrompt)return;
+   SyncWaterBasins();
    if(Time.unscaledTime>=nextRecoveryTime){
     nextRecoveryTime=Time.unscaledTime+RecoveryInterval;
     WriteRecovery();
@@ -1572,6 +1604,14 @@ namespace WorldBuilder {
     water.transform.localScale=piece.scale;
     water.GetComponent<Renderer>().sharedMaterial=
      WorldBuilderShaders.NewOverlay(new Color(.24f,.58f,.74f,.67f));
+    // An actual sunken bottom and side banks, scaled with water depth.
+    // Unlike a plain blue plane, this volume has a visible physical basin.
+    var basin=new GameObject("Pool / shoreline interior");
+    basin.transform.SetParent(water.transform,false);
+    var basinFilter=basin.AddComponent<MeshFilter>();
+    basinFilter.sharedMesh=BasinGeometry.CreateInterior();
+    basin.AddComponent<MeshRenderer>().sharedMaterial=
+     WorldBuilderShaders.NewLit(new Color(.68f,.62f,.50f));
     if(!string.IsNullOrEmpty(piece.finish)){
      Texture2D image=piece.finish.StartsWith("texture:",StringComparison.Ordinal)?
       GetMaterialImage(piece.finish.Substring(8)):null;
