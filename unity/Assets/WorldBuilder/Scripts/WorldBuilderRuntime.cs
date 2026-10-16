@@ -294,7 +294,7 @@ namespace WorldBuilder {
   void UpdatePreview(){
    bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
    bool onGround=MouseOnGround(out Vector3 p);
-   if(OverUI()||currentTool==Tool.Erase||(!onGround&&!aimedAtWall)){
+   if(OverUI()||currentTool==Tool.Erase||currentTool==Tool.Paint||(!onGround&&!aimedAtWall)){
     if(preview!=null)preview.SetActive(false);
     return;
    }
@@ -489,6 +489,7 @@ namespace WorldBuilder {
    if(Input.GetKeyDown(KeyCode.Alpha4)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Table);
    if(Input.GetKeyDown(KeyCode.Alpha5)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Erase);
    if(Input.GetKeyDown(KeyCode.Alpha6)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Room);
+   if(Input.GetKeyDown(KeyCode.M)&&!showPause&&!showSettings&&!showHelp){catalogCategory=8;showCatalog=true;SelectTool(Tool.Paint);}
    if(Input.GetKeyDown(KeyCode.Escape)){
     if(showConfirmExit){showConfirmExit=false;showPause=true;}
     else if(showImport||showExport||showProjects||showSettings||showHelp){
@@ -721,7 +722,7 @@ namespace WorldBuilder {
    if(index<0){Notice("Choose a WorldBuilder surface to paint");return;}
    Piece p=project.pieces[index];
    if(p.kind!="wall"&&p.kind!="floor"&&p.kind!="roof"){Notice("Paint currently supports walls, floors and roofs");return;}
-   if(p.finish==FinishNames[selectedFinish])return;
+   if((string.IsNullOrEmpty(p.finish)&&selectedFinish==0)||p.finish==FinishNames[selectedFinish])return;
    RememberChange();
    p.finish=FinishNames[selectedFinish];
    if(objects[index]!=null)Destroy(objects[index]);
@@ -1207,7 +1208,7 @@ namespace WorldBuilder {
    Label(new Rect(x+25,y+18,455,35),"Settings & Help",true);
    Label(new Rect(x+25,y+64,455,28),"BUILD CONTROLS");
    Label(new Rect(x+25,y+100,455,27),"1 Walls   2 Floors   3 Sofa   4 Table   5 Erase");
-   Label(new Rect(x+25,y+133,455,27),"0 Select   6 Rooms   G Grid   Ctrl+Z Undo   Ctrl+Y Redo");
+   Label(new Rect(x+25,y+133,455,27),"0 Select   6 Rooms   M Materials   G Grid");
    Label(new Rect(x+25,y+185,455,27),"Drag object   R Rotate   Ctrl+D Duplicate   Del Remove");
    Label(new Rect(x+25,y+167,455,27),"Ctrl+S Save   Ctrl+O Reload   Esc Menu   T/P Views");
    Label(new Rect(x+25,y+206,455,26),"CAMERA");
