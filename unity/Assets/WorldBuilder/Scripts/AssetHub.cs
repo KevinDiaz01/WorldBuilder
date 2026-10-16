@@ -32,6 +32,35 @@ namespace WorldBuilder {
    string file=Path.Combine(Library,id,"asset-name.txt");
    return File.Exists(file)?File.ReadAllText(file):id;
   }
+  public static readonly string[] Categories={"All","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Architecture","Other"};
+  public static string Category(string id){
+   string path=Path.Combine(Library,id,"asset-category.txt");
+   if(File.Exists(path)){
+    string category=File.ReadAllText(path).Trim();
+    if(Array.IndexOf(Categories,category)>=0)return category;
+   }
+   return GuessCategory(Name(id));
+  }
+  public static string Provider(string id){
+   string path=Path.Combine(Library,id,"asset-source.txt");
+   return File.Exists(path)?File.ReadAllText(path).Trim():"Other";
+  }
+  public static string GuessCategory(string filename){
+   string t=(filename??"").Replace('_',' ').Replace('-',' ').ToLowerInvariant();
+   if(HasAny(t,"sofa","couch","chair","armchair","table","desk","bed ","mattress","cabinet","shelf","dresser","stool","bench","furniture"))return "Furniture";
+   if(HasAny(t,"lamp","chandelier","light fixture","lantern","sconce"))return "Lighting";
+   if(HasAny(t,"fridge","refrigerator","oven","stove","sink","kitchen","microwave","toaster"))return "Kitchen";
+   if(HasAny(t,"bathtub","toilet","shower","bathroom","washbasin"))return "Bathroom";
+   if(HasAny(t,"tree","plant","flower","bush","grass","fern","succulent","palm","foliage"))return "Plants";
+   if(HasAny(t,"rock","boulder","patio","fence","garden","outdoor","street"))return "Outdoor";
+   if(HasAny(t,"wall","floor","window","door","stair","roof","building","house","architecture"))return "Architecture";
+   if(HasAny(t,"vase","painting","art","candle","rug","carpet","pillow","curtain","mirror","decor"))return "Decor";
+   return "Other";
+  }
+  static bool HasAny(string text,params string[] terms){
+   foreach(string term in terms)if(text.Contains(term))return true;
+   return false;
+  }
   public static List<string> Catalog(){
    var found=new List<string>();
    foreach(var folder in Directory.GetDirectories(Library)){
@@ -160,6 +189,7 @@ namespace WorldBuilder {
     string displayName=Path.GetFileNameWithoutExtension(source);
     File.WriteAllText(Path.Combine(destination,"asset-name.txt"),displayName);
     File.WriteAllText(Path.Combine(destination,"asset-source.txt"),provider);
+    File.WriteAllText(Path.Combine(destination,"asset-category.txt"),GuessCategory(displayName));
     GameObject check=ImportedObj.Load(Path.Combine(destination,"model.obj"));
     ThumbnailUtility.Save(check,Path.Combine(destination,"thumbnail.png"));
     UnityEngine.Object.Destroy(check);
