@@ -47,6 +47,10 @@ namespace WorldBuilder {
   private string importError="";
   private string targetVrcProject="";
   private bool showImport=false;
+  private bool showAssets=false;
+  private float nextAssetScan=0f;
+  private string assetStatus="Drop ZIP/OBJ files into a provider Downloads folder";
+  private Vector2 assetScroll;
   private bool showExport=false;
   private bool showGrid=true;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
@@ -57,7 +61,8 @@ namespace WorldBuilder {
      (showLibrary&&p.x<205f)||
      (showProjects&&p.x>Screen.width-365f&&p.y<520f)||
      (showHelp&&p.x>Screen.width-380f&&p.y>Screen.height-215f)||
-     ((showImport||showExport)&&p.x>Screen.width*.5f-265&&p.x<Screen.width*.5f+265&&p.y<310);
+     ((showImport||showExport)&&p.x>Screen.width*.5f-265&&p.x<Screen.width*.5f+265&&p.y<330)||
+     (showAssets&&p.x>Screen.width*.5f-360&&p.x<Screen.width*.5f+360&&p.y<Screen.height-65);
   }
   void UndoLast(){
    int i=objects.Count-1;
@@ -238,6 +243,7 @@ namespace WorldBuilder {
    if(sceneCamera==null)sceneCamera=Camera.main;
    if(sceneCamera!=null)walkthrough=sceneCamera.GetComponent<WalkthroughCamera>();
    targetVrcProject=PlayerPrefs.GetString("WorldBuilder.VRChatProject","");
+   AssetHub.Initialize();
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
    if(File.Exists(filePath))Load();
    BuildGrid();
@@ -253,12 +259,18 @@ namespace WorldBuilder {
   }
   void Update() {
    if(walkthrough!=null&&walkthrough.IsWalking)return;
+   if(Time.unscaledTime>=nextAssetScan){
+    nextAssetScan=Time.unscaledTime+6f;
+    string msg;
+    int count=AssetHub.Scan(out msg);
+    if(msg.Length>0){assetStatus=msg;if(count>0)Notice(msg);}
+   }
    if(Input.GetKeyDown(KeyCode.Alpha1))SelectTool(Tool.Wall);
    if(Input.GetKeyDown(KeyCode.Alpha2))SelectTool(Tool.Floor);
    if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
    if(Input.GetKeyDown(KeyCode.Alpha4))SelectTool(Tool.Table);
    if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
-   if(Input.GetKeyDown(KeyCode.Escape)){anchor=null;showImport=false;showExport=false;}
+   if(Input.GetKeyDown(KeyCode.Escape)){anchor=null;showImport=false;showExport=false;showAssets=false;}
    if(Input.GetKeyDown(KeyCode.F1))showHelp=!showHelp;
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Z))UndoLast();
@@ -351,6 +363,7 @@ namespace WorldBuilder {
     GUI.Box(new Rect(0,h-54,w,54),"Avatar height: "+avatarHeight.ToString("F2")+" m  |  Spatial scale preview, not a full VRChat simulator");
     return;
    }
+   if(GUI.Button(new Rect(w-966,15,123,36),"Assets")){showAssets=!showAssets;showImport=false;showExport=false;}
    if(GUI.Button(new Rect(w-835,15,137,36),"Import OBJ")){showImport=!showImport;showExport=false;}
    if(GUI.Button(new Rect(w-690,15,127,36),"Export Unity")){showExport=!showExport;showImport=false;}
    if(GUI.Button(new Rect(w-555,15,120,36),"Walk Preview")){
@@ -384,6 +397,42 @@ namespace WorldBuilder {
     GUI.Label(new Rect(14,h-158,180,24),"AVATAR HEIGHT");
     GUI.Label(new Rect(14,h-132,180,22),avatarHeight.ToString("F2")+" m");
     avatarHeight=GUI.HorizontalSlider(new Rect(14,h-108,176,20),avatarHeight,1.2f,2.2f);
+   }
+   if(showAssets){
+    float x=Mathf.Max(210,w*.5f-360),y=75;
+    float panelWidth=720;
+    GUI.Box(new Rect(x,y,panelWidth,h-145),"ASSET HUB   |   Source downloads + My Assets");
+    GUI.Label(new Rect(x+20,y+35,680,25),"Choose source folder, then save the site's ZIP/OBJ download there.");
+    string[] providers=AssetHub.Providers;
+    for(int i=0;i<providers.Length;i++){
+     int col=i%3,row=i/3;
+     float px=x+20+col*228,py=y+68+row*44;
+     string provider=providers[i];
+     if(GUI.Button(new Rect(px,py,216,36),provider+" Folder"))
+      Application.OpenURL(new Uri(AssetHub.Downloads(provider)).AbsoluteUri);
+    }
+    if(GUI.Button(new Rect(x+20,y+168,175,38),"Open Assets Folder"))
+     Application.OpenURL(new Uri(AssetHub.Root).AbsoluteUri);
+    if(GUI.Button(new Rect(x+205,y+168,175,38),"Scan Downloads")){
+     string msg;int n=AssetHub.Scan(out msg);
+     assetStatus=n>0?msg:msg.Length>0?msg:"No new supported OBJ/ZIP downloads found";
+    }
+    if(GUI.Button(new Rect(x+390,y+168,175,38),"Close"))showAssets=false;
+    GUI.Label(new Rect(x+20,y+213,660,42),assetStatus);
+    GUI.Label(new Rect(x+20,y+255,680,27),"MY ASSETS - click an imported model to place it");
+    var catalog=AssetHub.Catalog();
+    float listHeight=Mathf.Max(90,h-y-390);
+    assetScroll=GUI.BeginScrollView(new Rect(x+20,y+287,680,listHeight),assetScroll,
+     new Rect(0,0,650,Mathf.Max(listHeight,catalog.Count*40)));
+    for(int i=0;i<catalog.Count;i++){
+     string id=catalog[i];
+     if(GUI.Button(new Rect(0,i*40,625,35),AssetHub.Name(id))){
+      importedId=id;currentTool=Tool.Imported;showAssets=false;
+      Notice("Click the ground to place "+AssetHub.Name(id));
+     }
+    }
+    GUI.EndScrollView();
+    GUI.Label(new Rect(x+20,h-111,680,24),"Supported now: OBJ and ZIP containing OBJ. Provider website tabs are planned.");
    }
    if(showImport){
     float x=w*.5f-265;
