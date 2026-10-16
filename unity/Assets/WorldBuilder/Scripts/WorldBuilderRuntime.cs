@@ -470,6 +470,17 @@ namespace WorldBuilder {
     string msg;
     int count=AssetHub.Scan(out msg);
     if(msg.Length>0){assetStatus=msg;if(count>0)Notice(msg);}
+    // Upgrade pre-existing imports with thumbnails, one model at a time.
+    foreach(string id in AssetHub.Catalog()){
+     string previewPath=Path.Combine(AssetLibrary(),id,"thumbnail.png");
+     if(File.Exists(previewPath))continue;
+     try{
+      GameObject thumbnailModel=ImportedObj.Load(Path.Combine(AssetLibrary(),id,"model.obj"));
+      ThumbnailUtility.Save(thumbnailModel,previewPath);
+      Destroy(thumbnailModel);
+     }catch(Exception ex){Debug.LogWarning("Could not preview "+id+": "+ex.Message);}
+     break;
+    }
    }
    if(Input.GetKeyDown(KeyCode.Alpha0)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Select);
    if(Input.GetKeyDown(KeyCode.T)&&!showPause&&!showSettings&&!showHelp)SetCameraView(true);
