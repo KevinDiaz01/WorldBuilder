@@ -7,7 +7,7 @@ using UnityEngine;
 namespace WorldBuilder {
  // First-stage offline asset hub. A future embedded browser will direct its downloads here.
  public static class AssetHub {
-  public static readonly string[] Providers={"Poly Haven","Unity Asset Store","ambientCG","Other"};
+  public static readonly string[] Providers={"Poly Haven","Sketchfab","ambientCG","Other"};
   public static string Root {
    get {
     string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"WorldBuilder Assets");
