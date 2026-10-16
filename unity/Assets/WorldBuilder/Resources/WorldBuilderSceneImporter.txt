@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -15,6 +16,7 @@ public static class WorldBuilderSceneImporter {
   public Vector3 scale;
   public Quaternion rotation;
   public string assetId;
+  public bool fitToSurface;
   public string finish;
   public System.Collections.Generic.List<Vector3> vertices;
   public float lightIntensity;
@@ -96,12 +98,22 @@ public static class WorldBuilderSceneImporter {
      if(obj==null)throw new Exception("Unable to place imported OBJ prefab");
      obj.name="WB_Imported_"+p.assetId;
      AssignSimpleObjMaterial(obj,p.assetId,modelPath);
-     // Keep Unity's model import as the source of truth for exported mesh and hierarchy.
-     // Configure colliders for meshes while preserving all children and materials.
+     // Keep Unity model hierarchy and per-material submeshes intact.
      foreach(var filter in obj.GetComponentsInChildren<MeshFilter>()){
-      if(filter.sharedMesh!=null && filter.GetComponent<Collider>()==null){
+      if(filter.sharedMesh!=null&&filter.GetComponent<Collider>()==null){
        var meshCollider=filter.gameObject.AddComponent<MeshCollider>();
        meshCollider.sharedMesh=filter.sharedMesh;
+      }
+     }
+     if(p.fitToSurface){
+      var renderers=obj.GetComponentsInChildren<Renderer>();
+      if(renderers.Length>0){
+       Bounds bounds=renderers[0].bounds;
+       for(int i=1;i<renderers.Length;i++)bounds.Encapsulate(renderers[i].bounds);
+       GameObject pivot=new GameObject("WB_ImportPivot");
+       obj.transform.SetParent(pivot.transform,false);
+       obj.transform.localPosition=new Vector3(-bounds.center.x,-bounds.min.y,-bounds.center.z);
+       obj=pivot;
       }
      }
     }else obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -239,49 +251,75 @@ public static class WorldBuilderSceneImporter {
   }
   material.color=color;EditorUtility.SetDirty(material);return material;
  }
- // Initial OBJ material support: single diffuse material with optional MTL Kd/map_Kd.
- // Complex multi-material/normal-map imports require a later importer version.
+ // Apply each OBJ usemtl assignment to the corresponding Unity mesh submesh.
+ // Retains diffuse texture/color on compatible static imported models.
+ private sealed class MtlSurface {
+  public Color color=Color.white;
+  public string diffuse;
+ }
  private static void AssignSimpleObjMaterial(GameObject obj,string assetId,string modelPath){
   string directory=Path.GetDirectoryName(modelPath).Replace('\\','/');
-  string source=File.ReadAllText(modelPath);
+  if(!File.Exists(modelPath))return;
+  string[] lines=File.ReadAllLines(modelPath);
   string mtlName=null;
-  foreach(string line in source.Split('\n')){
+  var used=new List<string>();
+  foreach(string line in lines){
    string t=line.Trim();
-   if(t.StartsWith("mtllib ",StringComparison.Ordinal)){mtlName=Path.GetFileName(t.Substring(7).Trim());break;}
+   if(t.StartsWith("mtllib ",StringComparison.Ordinal)){mtlName=Path.GetFileName(t.Substring(7).Trim().Replace('\\','/'));}
+   if(t.StartsWith("usemtl ",StringComparison.Ordinal)){
+    string name=t.Substring(7).Trim();
+    if(!used.Contains(name))used.Add(name);
+   }
   }
   if(string.IsNullOrEmpty(mtlName))return;
   string mtlPath=directory+"/"+mtlName;
   if(!File.Exists(mtlPath))return;
-  Color color=Color.white;
-  string diffuse=null;
-  foreach(string line in File.ReadAllLines(mtlPath)){
-   string t=line.Trim();
-   if(t.StartsWith("Kd ",StringComparison.Ordinal)){
+  var surfaces=new Dictionary<string,MtlSurface>(StringComparer.Ordinal);
+  MtlSurface surface=null;
+  foreach(string raw in File.ReadAllLines(mtlPath)){
+   string t=raw.Trim();
+   if(t.StartsWith("newmtl ",StringComparison.Ordinal)){
+    string name=t.Substring(7).Trim();
+    surface=new MtlSurface();surfaces[name]=surface;
+   }else if(surface!=null&&t.StartsWith("Kd ",StringComparison.Ordinal)){
     var parts=t.Split((char[])null,StringSplitOptions.RemoveEmptyEntries);
-    if(parts.Length>=4)color=new Color(
+    if(parts.Length>=4)surface.color=new Color(
      float.Parse(parts[1],System.Globalization.CultureInfo.InvariantCulture),
      float.Parse(parts[2],System.Globalization.CultureInfo.InvariantCulture),
      float.Parse(parts[3],System.Globalization.CultureInfo.InvariantCulture));
-   }else if(t.StartsWith("map_Kd ",StringComparison.Ordinal))diffuse=Path.GetFileName(t.Substring(7).Trim());
+   }else if(surface!=null&&t.StartsWith("map_Kd ",StringComparison.Ordinal)){
+    string name=t.Substring(7).Trim();
+    if(name.StartsWith("-",StringComparison.Ordinal)){
+     var words=name.Split((char[])null,StringSplitOptions.RemoveEmptyEntries);
+     if(words.Length>0)name=words[words.Length-1];
+    }
+    surface.diffuse=Path.GetFileName(name.Replace('\\','/'));
+   }
   }
-  string destination=directory+"/WB_ImportedMaterial.mat";
-  Material material=AssetDatabase.LoadAssetAtPath<Material>(destination);
-  if(material==null){
-   var shader=Shader.Find("Standard");
-   if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
-   if(shader==null)return;
-   material=new Material(shader);
-   AssetDatabase.CreateAsset(material,destination);
+  Shader shader=Shader.Find("Standard");
+  if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+  if(shader==null)return;
+  var materials=new Dictionary<string,Material>(StringComparer.Ordinal);
+  foreach(string name in used){
+   if(!surfaces.TryGetValue(name,out MtlSurface src))continue;
+   string destination=directory+"/WB_Mat_"+materials.Count+".mat";
+   Material mat=AssetDatabase.LoadAssetAtPath<Material>(destination);
+   if(mat==null){mat=new Material(shader);AssetDatabase.CreateAsset(mat,destination);}
+   mat.color=src.color;
+   if(!string.IsNullOrEmpty(src.diffuse)){
+    string file=directory+"/"+src.diffuse;
+    AssetDatabase.ImportAsset(file,ImportAssetOptions.ForceSynchronousImport);
+    Texture2D image=AssetDatabase.LoadAssetAtPath<Texture2D>(file);
+    if(image!=null)mat.mainTexture=image;
+   }
+   EditorUtility.SetDirty(mat);materials[name]=mat;
   }
-  material.color=color;
-  if(!string.IsNullOrEmpty(diffuse)){
-   string texturePath=directory+"/"+diffuse;
-   AssetDatabase.ImportAsset(texturePath,ImportAssetOptions.ForceSynchronousImport);
-   var texture=AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-   if(texture!=null)material.mainTexture=texture;
+  foreach(var renderer in obj.GetComponentsInChildren<MeshRenderer>()){
+   Material[] existing=renderer.sharedMaterials;
+   for(int i=0;i<existing.Length&&i<used.Count;i++)
+    if(materials.TryGetValue(used[i],out Material m))existing[i]=m;
+   renderer.sharedMaterials=existing;
   }
-  EditorUtility.SetDirty(material);
-  foreach(var renderer in obj.GetComponentsInChildren<MeshRenderer>())renderer.sharedMaterial=material;
  }
  private static Type FindType(string name){
   foreach(var assembly in AppDomain.CurrentDomain.GetAssemblies()){
