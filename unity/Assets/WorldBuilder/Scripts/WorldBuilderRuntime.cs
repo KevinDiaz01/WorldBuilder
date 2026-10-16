@@ -143,6 +143,8 @@ namespace WorldBuilder {
   private Light editorSun;
   private WorldBuilderBackdrop scenicBackdrop;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
+  // Camera movement and scroll should never consume input over a tray or modal.
+  public bool BlocksCameraPointer(){return OverUI();}
   bool OverUI(){
    if(walkthrough!=null&&walkthrough.IsWalking)return true;
    if(showDiagnostics)return true;
