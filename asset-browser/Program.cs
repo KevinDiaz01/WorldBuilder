@@ -21,6 +21,7 @@ internal static class Program {
 internal sealed class BrowserWindow : Form {
  const int GWL_STYLE=-16, WS_CHILD=0x40000000, WS_POPUP=unchecked((int)0x80000000);
  [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr child,IntPtr parent);
+ [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hwnd);
  [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hwnd,int index);
  [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr hwnd,int index,int value);
  [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hwnd,out RECT rect);
@@ -144,14 +145,32 @@ internal sealed class BrowserWindow : Form {
   }catch(Exception ex){status.Text="Download error: "+ex.Message;}
  }
  void Attach(){
-  if(!IsWindow(unity))return;
-  var h=Handle;
-  int style=GetWindowLong(h,GWL_STYLE);
-  SetWindowLong(h,GWL_STYLE,(style|WS_CHILD)&~WS_POPUP);
-  SetParent(h,unity);
-  Position();
+  if(!IsWindow(unity)){
+   FallbackWindow("Unity window was unavailable");
+   return;
+  }
+  try{
+   var h=Handle;
+   int style=GetWindowLong(h,GWL_STYLE);
+   SetWindowLong(h,GWL_STYLE,(style|WS_CHILD)&~WS_POPUP);
+   SetParent(h,unity);
+   if(GetParent(h)!=unity){
+    SetWindowLong(h,GWL_STYLE,(style|WS_POPUP)&~WS_CHILD);
+    FallbackWindow("Embedded browser not supported on this display");
+    return;
+   }
+   Position();
+  }catch(Exception e){FallbackWindow("Embedded browser unavailable: "+e.Message);}
+ }
+ void FallbackWindow(string reason){
+  FormBorderStyle=FormBorderStyle.Sizable;
+  ShowInTaskbar=true;
+  StartPosition=FormStartPosition.CenterScreen;
+  Size=new Size(1200,740);
+  status.Text=reason+" · showing separate window";
  }
  void Position(){
+  if(FormBorderStyle!=FormBorderStyle.None)return;
   if(!IsWindow(unity)){Close();return;}
   if(!GetClientRect(unity,out var rect))return;
   int width=Math.Max(480,rect.Right-rect.Left-149);
