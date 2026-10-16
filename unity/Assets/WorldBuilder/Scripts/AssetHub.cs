@@ -73,6 +73,18 @@ namespace WorldBuilder {
   static readonly Dictionary<string,string> observed=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> reportedUnsupported=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> reportedTextureFolders=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+  static bool TextureOnlyZip(string source){
+   if(!string.Equals(Path.GetExtension(source),".zip",StringComparison.OrdinalIgnoreCase))return false;
+   using(var zip=ZipFile.OpenRead(source)){
+    bool textures=false;
+    foreach(var entry in zip.Entries){
+     string ext=Path.GetExtension(entry.Name).ToLowerInvariant();
+     if(ext==".obj"||ext==".glb"||ext==".gltf")return false;
+     if(ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".tga"||ext==".exr")textures=true;
+    }
+    return textures;
+   }
+  }
   public static int Scan(out string message){
    Initialize();
    int count=0;
@@ -117,6 +129,10 @@ namespace WorldBuilder {
        observed[source]=fingerprint;continue;
       }
       using(var handle=new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.None)){}
+      if(ext==".zip"&&TextureOnlyZip(source)){
+       // MaterialLibrary handles these; do not flag them as failed 3D models.
+       observed.Remove(source);continue;
+      }
       string id=Import(source,provider);
       File.WriteAllText(marker,fingerprint);
       observed.Remove(source);
