@@ -184,9 +184,18 @@ public static class WorldBuilderSceneImporter {
    Color[] skies={new Color(.48f,.70f,.92f),new Color(.92f,.54f,.31f),new Color(.045f,.064f,.14f),new Color(.70f,.77f,.81f)};
    Color sky=skies[Mathf.Clamp(world.skyPreset,0,skies.Length-1)];
    RenderSettings.fog=world.fog;RenderSettings.fogColor=sky;RenderSettings.fogDensity=.009f;
-   var environmentCamera=new GameObject("WorldBuilder Environment Camera").AddComponent<Camera>();
-   environmentCamera.clearFlags=CameraClearFlags.SolidColor;environmentCamera.backgroundColor=sky;
-   environmentCamera.enabled=false;
+   Shader skyShader=Shader.Find("Skybox/Procedural");
+   if(skyShader!=null){
+    string skyPath=materialDir+"/WB_EnvironmentSky.mat";
+    Material skyMaterial=AssetDatabase.LoadAssetAtPath<Material>(skyPath);
+    if(skyMaterial==null){skyMaterial=new Material(skyShader);AssetDatabase.CreateAsset(skyMaterial,skyPath);}
+    skyMaterial.SetColor("_SkyTint",sky);
+    skyMaterial.SetColor("_GroundColor",world.skyPreset==2?new Color(.09f,.11f,.20f):new Color(.45f,.49f,.50f));
+    skyMaterial.SetFloat("_AtmosphereThickness",world.skyPreset==2?.35f:1f);
+    skyMaterial.SetFloat("_Exposure",world.skyPreset==2?.22f:world.skyPreset==1?.82f:1.25f);
+    RenderSettings.skybox=skyMaterial;EditorUtility.SetDirty(skyMaterial);
+   }
+   else Debug.LogWarning("WorldBuilder: procedural skybox shader unavailable; using ambient/fog colors.");
    var spawn=new GameObject("WorldBuilder Spawn");
    // Place spawn above a floor if one exists, otherwise above origin.
    Vector3 spawnPos=new Vector3(0,1.05f,0);
@@ -219,12 +228,16 @@ public static class WorldBuilderSceneImporter {
   }catch(Exception ex){Debug.LogException(ex);EditorUtility.DisplayDialog("WorldBuilder Import Error",ex.Message,"OK");}
  }
  private static Material MakeVegetationMaterial(string name,Color color){
-  Shader shader=Shader.Find("Standard");
-  if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
-  if(shader==null)throw new Exception("Missing compatible shader for vegetation");
-  var material=new Material(shader);
-  material.name="WB_"+name;material.color=color;
-  return material;
+  string path="Assets/WorldBuilderExport/Materials/WB_"+name+".mat";
+  Material material=AssetDatabase.LoadAssetAtPath<Material>(path);
+  if(material==null){
+   Shader shader=Shader.Find("Standard");
+   if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+   if(shader==null)throw new Exception("Missing compatible shader for vegetation");
+   material=new Material(shader);
+   AssetDatabase.CreateAsset(material,path);
+  }
+  material.color=color;EditorUtility.SetDirty(material);return material;
  }
  // Initial OBJ material support: single diffuse material with optional MTL Kd/map_Kd.
  // Complex multi-material/normal-map imports require a later importer version.
