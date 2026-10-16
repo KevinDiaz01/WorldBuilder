@@ -62,15 +62,25 @@ public static class WorldBuilderSceneImporter {
     if(p.kind=="tree"){
      obj=new GameObject("WB_Tree");
      var trunk=GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-     trunk.name="Tree Trunk";trunk.transform.SetParent(obj.transform,false);
-     trunk.transform.localPosition=new Vector3(0,1.05f,0);
-     trunk.transform.localScale=new Vector3(.38f,1.05f,.38f);
-     var crown=GameObject.CreatePrimitive(PrimitiveType.Sphere);
-     crown.name="Tree Canopy";crown.transform.SetParent(obj.transform,false);
-     crown.transform.localPosition=new Vector3(0,2.9f,0);
-     crown.transform.localScale=new Vector3(2.6f,2.5f,2.6f);
-     trunk.GetComponent<Renderer>().sharedMaterial=MakeVegetationMaterial("Trunk",new Color(.34f,.21f,.13f));
-     crown.GetComponent<Renderer>().sharedMaterial=MakeVegetationMaterial("Canopy",new Color(.20f,.43f,.22f));
+     trunk.name="Natural Trunk";trunk.transform.SetParent(obj.transform,false);
+     trunk.transform.localPosition=new Vector3(0,1.06f,0);
+     trunk.transform.localScale=new Vector3(.30f,1.06f,.30f);
+     trunk.GetComponent<Renderer>().sharedMaterial=MakeVegetationMaterial("Trunk",new Color(.35f,.26f,.17f));
+     Vector3[] centers={
+      new Vector3(0,3.02f,0),new Vector3(-.82f,2.56f,.17f),
+      new Vector3(.79f,2.62f,-.1f),new Vector3(.19f,3.59f,.15f),new Vector3(-.24f,2.83f,-.66f)};
+     Vector3[] sizes={
+      new Vector3(1.85f,1.75f,1.6f),new Vector3(1.45f,1.25f,1.42f),
+      new Vector3(1.42f,1.35f,1.28f),new Vector3(1.3f,1.18f,1.2f),
+      new Vector3(1.24f,1.34f,1.38f)};
+     for(int n=0;n<centers.Length;n++){
+      var crown=GameObject.CreatePrimitive(PrimitiveType.Sphere);
+      crown.name="Leaf Cluster "+(n+1);
+      crown.transform.SetParent(obj.transform,false);
+      crown.transform.localPosition=centers[n];crown.transform.localScale=sizes[n];
+      crown.GetComponent<Renderer>().sharedMaterial=MakeVegetationMaterial(
+        n%2==0?"CanopyA":"CanopyB",new Color(.28f,.47f,.24f)*(n%2==0?1.06f:.88f));
+     }
     }else if(p.kind=="light-point"||p.kind=="light-spot"){
      obj=new GameObject("WB_"+p.kind);
      var lamp=obj.AddComponent<Light>();
@@ -183,16 +193,26 @@ public static class WorldBuilderSceneImporter {
      EditorUtility.SetDirty(mat);
      palette[materialKey]=mat;
     }
+    if(p.kind=="water"){
+     mat.color=new Color(.24f,.58f,.74f,.67f);
+     if(mat.HasProperty("_Mode"))mat.SetFloat("_Mode",3f);
+     if(mat.HasProperty("_Surface"))mat.SetFloat("_Surface",1f);
+     mat.SetInt("_SrcBlend",(int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+     mat.SetInt("_DstBlend",(int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+     mat.SetInt("_ZWrite",0);
+     mat.DisableKeyword("_ALPHATEST_ON");mat.EnableKeyword("_ALPHABLEND_ON");
+     mat.renderQueue=(int)UnityEngine.Rendering.RenderQueue.Transparent;
+    }
     var surfaceRenderer=obj.GetComponent<Renderer>();
     if(surfaceRenderer!=null)surfaceRenderer.sharedMaterial=mat;
     // Primitive BoxColliders already provide physical collision.
    }
    var sun=new GameObject("Sun").AddComponent<Light>();
    sun.type=LightType.Directional;
-   sun.intensity=world.skyPreset==2?.14f:world.skyPreset==1?.68f:1.05f;
+   sun.intensity=world.skyPreset==2?.025f:world.skyPreset==1?.42f:world.skyPreset==3?.43f:.70f;
    sun.transform.rotation=Quaternion.Euler(world.sunPitch==0?48f:world.sunPitch,world.sunYaw,0);
    RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;
-   RenderSettings.ambientLight=world.skyPreset==2?new Color(.19f,.24f,.38f):new Color(.60f,.66f,.72f);
+   RenderSettings.ambientLight=world.skyPreset==2?new Color(.07f,.10f,.18f):world.skyPreset==1?new Color(.32f,.28f,.27f):new Color(.34f,.38f,.44f);
    Color[] skies={new Color(.48f,.70f,.92f),new Color(.92f,.54f,.31f),new Color(.045f,.064f,.14f),new Color(.70f,.77f,.81f)};
    Color sky=skies[Mathf.Clamp(world.skyPreset,0,skies.Length-1)];
    RenderSettings.fog=world.fog;RenderSettings.fogColor=sky;RenderSettings.fogDensity=.009f;
@@ -396,10 +416,12 @@ internal static class WBTerrainGeometry {
    for(int z=0;z<=n;z++)for(int x=0;x<=n;x++){
     float tx=(float)x/n,tz=(float)z/n;
     float edge=Mathf.Min(Mathf.Min(tx,1f-tx),Mathf.Min(tz,1f-tz));
-    float taper=Mathf.SmoothStep(0f,1f,Mathf.Clamp01(edge*5f));
-    float noise=Mathf.PerlinNoise(tx*4f+seed*.027f,tz*4f+seed*.043f);
+    float taper=Mathf.SmoothStep(0f,1f,Mathf.Clamp01(edge*3.4f));
+    float broad=Mathf.PerlinNoise(tx*2.1f+seed*.027f,tz*2.1f+seed*.043f);
+    float detail=Mathf.PerlinNoise(tx*5.2f+seed*.061f,tz*5.2f+seed*.078f);
+    float noise=Mathf.Clamp01((broad*.78f+detail*.22f-.19f)*1.15f);
     int k=z*side+x;
-    vertices[k]=new Vector3((tx-.5f)*width,(noise-.45f)*height*taper,(tz-.5f)*depth);
+    vertices[k]=new Vector3((tx-.5f)*width,noise*height*taper,(tz-.5f)*depth);
     uv[k]=new Vector2(tx*width*.2f,tz*depth*.2f);
    }
    int t=0;
