@@ -7,7 +7,7 @@ using UnityEngine;
 namespace WorldBuilder {
  // First-stage offline asset hub. A future embedded browser will direct its downloads here.
  public static class AssetHub {
-  public static readonly string[] Providers={"Poly Haven","Sketchfab","Fab","Unity Asset Store","Other"};
+  public static readonly string[] Providers={"Poly Haven","Kenney","ambientCG","Other"};
   public static string Root {
    get {
     string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"WorldBuilder Assets");
@@ -17,7 +17,7 @@ namespace WorldBuilder {
   }
   public static string Downloads(string provider){
    if(Array.IndexOf(Providers,provider)<0)throw new InvalidDataException("Unrecognized asset provider");
-   string folder=Path.Combine(Root,provider,"Downloads");
+   string folder=Path.Combine(Root,provider);
    Directory.CreateDirectory(folder);
    return folder;
   }
@@ -45,7 +45,10 @@ namespace WorldBuilder {
    int count=0;
    message="";
    foreach(string provider in Providers){
-    foreach(string source in Directory.GetFiles(Downloads(provider))){
+    var folders=new List<string>{Downloads(provider)};
+    string older=Path.Combine(Downloads(provider),"Downloads");
+    if(Directory.Exists(older))folders.Add(older);
+    foreach(string folder in folders)foreach(string source in Directory.GetFiles(folder)){
      string ext=Path.GetExtension(source).ToLowerInvariant();
      if(ext!=".zip"&&ext!=".obj")continue;
      string marker=source+".worldbuilder-imported";
