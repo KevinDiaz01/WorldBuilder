@@ -13,7 +13,8 @@ STAGE = HOME / ".3d-stage"
 JOURNAL = HOME / ".3d-recovery.json"
 FILES = ("WorldBuilder.exe", "WorldBuilder_Data", "UnityPlayer.dll",
          "UnityCrashHandler64.exe", "MonoBleedingEdge", "D3D12",
-         "dstorage.dll", "dstoragecore.dll", "WorldBuilder-Launcher.pyw")
+         "dstorage.dll", "dstoragecore.dll", "WorldBuilder-Launcher.pyw",
+         "WorldBuilderBrowser")
 URL = "https://api.github.com/repos/KevinDiaz01/WorldBuilder/releases/latest"
 
 def remove(p):
