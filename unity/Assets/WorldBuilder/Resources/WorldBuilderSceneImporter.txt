@@ -15,6 +15,7 @@ public static class WorldBuilderSceneImporter {
   public Vector3 scale;
   public Quaternion rotation;
   public string assetId;
+  public string finish;
  }
  [Serializable] private class World {
   public int schema;
@@ -74,9 +75,21 @@ public static class WorldBuilderSceneImporter {
     obj.transform.localScale=p.scale;
     if(p.kind=="imported")continue;
     Color color=p.kind=="wall"?new Color(.89f,.91f,.94f):p.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
+    if(!string.IsNullOrEmpty(p.finish)){
+     switch(p.finish){
+      case "Warm White":color=new Color(.91f,.88f,.80f);break;
+      case "Stone":color=new Color(.58f,.62f,.63f);break;
+      case "Charcoal":color=new Color(.19f,.23f,.28f);break;
+      case "Sand":color=new Color(.77f,.67f,.51f);break;
+      case "Terracotta":color=new Color(.67f,.34f,.26f);break;
+      case "Sage":color=new Color(.38f,.52f,.43f);break;
+      case "Ocean":color=new Color(.22f,.47f,.62f);break;
+     }
+    }
     Material mat;
-    if(!palette.TryGetValue(p.kind,out mat)){
-     string matPath=materialDir+"/WB_"+(p.kind=="wall"?"Wall":p.kind=="floor"?"Floor":"Object")+".mat";
+    string materialKey=p.kind+"_"+(p.finish??"Default");
+    if(!palette.TryGetValue(materialKey,out mat)){
+     string matPath=materialDir+"/WB_"+(p.kind=="wall"?"Wall":p.kind=="floor"?"Floor":"Object")+"_"+(string.IsNullOrEmpty(p.finish)?"Default":p.finish.Replace(" ",""))+".mat";
      mat=AssetDatabase.LoadAssetAtPath<Material>(matPath);
      if(mat==null){
       Shader shader=Shader.Find("Standard");
@@ -87,7 +100,7 @@ public static class WorldBuilderSceneImporter {
      }
      mat.color=color;
      EditorUtility.SetDirty(mat);
-     palette[p.kind]=mat;
+     palette[materialKey]=mat;
     }
     obj.GetComponent<Renderer>().sharedMaterial=mat;
     // Primitive BoxColliders already provide physical collision.
