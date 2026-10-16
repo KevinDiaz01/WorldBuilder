@@ -1828,7 +1828,18 @@ namespace WorldBuilder {
    if(Button(new Rect(x+507,y,40,44),"−"))buildingLevel=Mathf.Max(0,buildingLevel-1);
    GUI.Label(new Rect(x+551,y+12,91,26),"LEVEL "+(buildingLevel+1),miniStyle);
    if(Button(new Rect(x+646,y,43,44),"+"))buildingLevel=Mathf.Min(8,buildingLevel+1);
+   // Always accessible, even if the bottom palette is collapsed.
+   if(wideViewportAvailable()){
+    string category=creativeMode==2?
+      (currentTool==Tool.Tree?"Trees":currentTool==Tool.Water?"Water":
+       currentTool==Tool.Terrain?"Terrain":currentTool==Tool.Path?"Outdoor":"Plants"):
+      creativeMode==1?(currentTool==Tool.Paint?"Materials":
+       currentTool==Tool.Light?"Lighting":"Furniture"):"Architecture";
+    if(Button(new Rect(x+712,y,172,44),"FIND "+category.ToUpperInvariant()))
+     ToggleAssetBrowser(category);
+   }
   }
+  bool wideViewportAvailable(){return Screen.width/UIScale>=1330f;}
   string ToolGuidance(){
    if(currentTool==Tool.Room&&polygonMode)return "Click corners to shape a room · Enter to finish · Backspace to undo corner";
    switch(currentTool){
