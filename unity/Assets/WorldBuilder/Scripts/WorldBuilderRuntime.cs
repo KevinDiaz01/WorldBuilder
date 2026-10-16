@@ -322,8 +322,8 @@ namespace WorldBuilder {
    SelectTool(Tool.Imported);
    Notice("Placing "+AssetHub.Name(id)+" · R/E rotate · click to place");
   }
-  float PlacementHeight(){
-   if(sceneCamera==null)return 0;
+  Vector3 PlacementSurface(Vector3 ground){
+   if(sceneCamera==null)return ground;
    Ray ray=sceneCamera.ScreenPointToRay(Input.mousePosition);
    RaycastHit[] hits=Physics.RaycastAll(ray,500f);
    Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
@@ -331,16 +331,15 @@ namespace WorldBuilder {
     for(int i=0;i<objects.Count;i++){
      if(objects[i]==null||project.pieces[i].kind!="floor")continue;
      if(hit.collider.gameObject==objects[i]||hit.collider.transform.IsChildOf(objects[i].transform))
-      return hit.point.y;
+      return hit.point;
     }
    }
-   return 0f;
+   return ground;
   }
   Vector3 ImportedPlacement(Vector3 ground){
    float lower=importedBoundsReady?importedBounds.min.y*importedScale:0f;
-   float targetY=PlacementHeight()-lower;
-   Vector3 result=new Vector3(ground.x,targetY,ground.z);
-   return result;
+   Vector3 surface=PlacementSurface(ground);
+   return new Vector3(surface.x,surface.y-lower,surface.z);
   }
   void UpdatePreview(){
    bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
