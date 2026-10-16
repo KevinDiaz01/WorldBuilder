@@ -133,6 +133,7 @@ namespace WorldBuilder {
   private float lightRadius=11f;
   private float terrainAmplitude=2.5f;
   private Light editorSun;
+  private WorldBuilderBackdrop scenicBackdrop;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
   bool OverUI(){
    if(walkthrough!=null&&walkthrough.IsWalking)return true;
@@ -140,11 +141,11 @@ namespace WorldBuilder {
    float scale=UIScale;
    float w=Screen.width/scale,h=Screen.height/scale;
    Vector2 p=new Vector2(Input.mousePosition.x/scale,(Screen.height-Input.mousePosition.y)/scale);
-   return (objectHandleVisible&&objectHandleArea.Contains(p))||p.y<88f||(showCatalog&&p.y>h-272f)||
+   return (objectHandleVisible&&objectHandleArea.Contains(p))||p.y<88f||(showCatalog&&p.y>h-Mathf.Min(270f,h*.34f)-14f)||
      (!showCatalog&&p.y>h-70f&&p.x<480f)||
      (showLibrary&&p.x<122f&&p.y>=94f&&p.y<735f)||
-     (showInspector&&p.x>w-359f&&p.y>=94f&&p.y<h-175f)||
-     (p.x>125f&&p.x<515f&&p.y<159f)||
+     (showInspector&&p.x>w-373f&&p.y>=94f&&p.y<(showCatalog?h-Mathf.Min(270f,h*.34f)-6f:h-90f))||
+     (p.x>125f&&p.x<650f&&p.y<159f)||
      showPause||showConfirmExit||showSettings||showHelp||
      (showProjects&&p.x>w*.5f-200f&&p.x<w*.5f+210f&&p.y<505f)||
      ((showImport||showExport)&&p.x>w*.5f-275f&&p.x<w*.5f+275f&&p.y<335f)||
@@ -183,6 +184,7 @@ namespace WorldBuilder {
     recoverySessionStarted=false;
    }
    if(importedGhost!=null)Destroy(importedGhost);
+   if(scenicBackdrop!=null)Destroy(scenicBackdrop.gameObject);
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
    foreach(var tex in modelThumbnails.Values)if(tex!=null)Destroy(tex);
    modelThumbnails.Clear();
@@ -441,7 +443,7 @@ namespace WorldBuilder {
      var line=go.AddComponent<LineRenderer>();
      line.material=new Material(Shader.Find("Sprites/Default"));
      line.positionCount=2;line.startWidth=.012f;line.endWidth=.012f;
-     line.startColor=line.endColor=new Color(.45f,.6f,.7f,.28f);
+     line.startColor=line.endColor=new Color(.58f,.64f,.70f,.19f);
      line.SetPosition(0,axis==0?new Vector3(-20,.012f,i):new Vector3(i,.012f,-20));
      line.SetPosition(1,axis==0?new Vector3(20,.012f,i):new Vector3(i,.012f,20));
      gridMarkers.Add(go);
@@ -787,6 +789,11 @@ namespace WorldBuilder {
    point=Snap(ray.GetPoint(distance));return true;
   }
   void ApplyEnvironment(){
+   if(scenicBackdrop==null){
+    var backdropObject=new GameObject("WorldBuilder Scenic Environment");
+    scenicBackdrop=backdropObject.AddComponent<WorldBuilderBackdrop>();
+    scenicBackdrop.Initialize();
+   }
    if(sceneCamera!=null){
     sceneCamera.clearFlags=CameraClearFlags.SolidColor;
     Color[] palettes={new Color(.48f,.70f,.92f),new Color(.92f,.54f,.31f),new Color(.045f,.064f,.14f),new Color(.7f,.77f,.81f)};
@@ -805,6 +812,7 @@ namespace WorldBuilder {
    }
    editorSun.intensity=project.skyPreset==2?.14f:project.skyPreset==1?.68f:1.05f;
    editorSun.transform.rotation=Quaternion.Euler(project.sunPitch,project.sunYaw,0);
+   if(scenicBackdrop!=null)scenicBackdrop.ApplySceneMood(project.skyPreset,sceneCamera);
   }
   void CompletePolygonRoom(){
    if(polygonCorners.Count<3){Notice("Click at least three corners");return;}
@@ -1555,11 +1563,46 @@ namespace WorldBuilder {
    }
   }
   void DrawViewportControls(float h){
-   float x=132f,y=99f;
-   GUI.Box(new Rect(x-7,y-6,368,58),"",panelStyle);
-   if(Button(new Rect(x,y,119,46),"Perspective"))SetCameraView(false);
-   if(Button(new Rect(x+127,y,106,46),"Top View"))SetCameraView(true);
-   if(Button(new Rect(x+241,y,115,46),showGrid?"Grid On":"Grid Off"))ToggleGrid();
+   float x=135f,y=99f;
+   SoftPanel(new Rect(x-7,y-6,499,58),panelStyle);
+   if(Button(new Rect(x,y,112,44),"3D VIEW"))SetCameraView(false);
+   if(Button(new Rect(x+118,y,102,44),"TOP VIEW"))SetCameraView(true);
+   if(Button(new Rect(x+226,y,105,44),showGrid?"GRID ON":"GRID OFF"))ToggleGrid();
+   bool scenery=scenicBackdrop==null||scenicBackdrop.Visible;
+   if(Button(new Rect(x+337,y,145,44),scenery?"MEADOW ON":"MEADOW OFF")){
+    if(scenicBackdrop!=null)scenicBackdrop.SetVisible(!scenery);
+   }
+  }
+  string ToolGuidance(){
+   if(currentTool==Tool.Room&&polygonMode)return "Click corners to shape a room · Enter to finish · Backspace to undo corner";
+   switch(currentTool){
+    case Tool.Select:return "Click an object to edit it · Shift-click multiple objects";
+    case Tool.Wall:return "Click and drag to create walls · Change height in Details";
+    case Tool.Floor:return "Click two corners to create a floor";
+    case Tool.Room:return "Drag a room · Choose Freeform for custom shapes";
+    case Tool.Garage:return "Aim at a wall · Click to create a garage-sized opening";
+    case Tool.Door:case Tool.Window:return "Aim at a wall · Click to create an opening";
+    case Tool.Imported:return "Move your mouse to preview · Q/E rotate · Click to place";
+    case Tool.Paint:return "Choose a finish below · Click a wall or floor";
+    case Tool.Terrain:return "Drag to create rolling terrain · Tune elevation in Studio";
+    case Tool.Water:return "Drag a water area onto the landscape";
+    case Tool.Path:return "Drag to make a garden path or driveway";
+    case Tool.Tree:return "Click to plant trees";
+    case Tool.Light:return "Click to place a light · Adjust its settings in Details";
+    default:return "Click or drag in the world to use "+currentTool.ToString();
+   }
+  }
+  void DrawGuidanceStrip(float w,float h){
+   float top=showCatalog?h-Mathf.Min(270f,h*.34f)-9f:h-9f;
+   float width=Mathf.Min(w-300f,690f);
+   float left=135f;
+   float y=top-51f;
+   if(y<169f)return;
+   GUI.Box(new Rect(left,y,width,42f),"",panelStyle);
+   bool notification=Time.time<statusUntil;
+   string message=notification?status:ToolGuidance();
+   if(message.Length>91)message=message.Substring(0,88)+"...";
+   GUI.Label(new Rect(left+16,y+9,width-27,26),message,miniStyle);
   }
   void ChoosePaletteTool(Tool tool){
    SelectTool(tool);
@@ -2146,13 +2189,7 @@ namespace WorldBuilder {
     }
     if(Button(new Rect(x+15,367,340,29),"Close"))showProjects=false;
    }
-   if(Time.time<statusUntil&&!showPause&&!showSettings&&!showHelp){
-    // Notifications float above, never across the asset shelf or its tabs.
-    float noticeWidth=Mathf.Min(560f,w-550f);
-    float toastY=showCatalog?h-314f:h-113f;
-    GUI.Box(new Rect(140,toastY,noticeWidth,39),"",panelStyle);
-    GUI.Label(new Rect(156,toastY+6,noticeWidth-30,28),status,captionStyle);
-   }
+   DrawGuidanceStrip(w,h);
   }
  }
 }
