@@ -44,6 +44,7 @@ namespace WorldBuilder {
   private float importedScale=1f;
   private float importedRotation=0f;
   private string importPath="";
+  private string importError="";
   private string targetVrcProject="";
   private bool showImport=false;
   private bool showExport=false;
@@ -133,10 +134,27 @@ namespace WorldBuilder {
   void Notice(string message){status=message;statusUntil=Time.time+5f;}
   void SelectTool(Tool tool){currentTool=tool;anchor=null;Notice(tool+" tool selected");}
   string AssetLibrary(){string d=Path.Combine(Application.persistentDataPath,"ImportedAssets");Directory.CreateDirectory(d);return d;}
+  void BrowseObj(){
+   try{
+    var psi=new System.Diagnostics.ProcessStartInfo();
+    psi.FileName="powershell.exe";
+    psi.Arguments="-NoProfile -STA -Command \"Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Wavefront OBJ (*.obj)|*.obj'; $d.CheckFileExists=$true; if($d.ShowDialog() -eq 'OK') { [Console]::Write($d.FileName) }\"";
+    psi.UseShellExecute=false;
+    psi.CreateNoWindow=true;
+    psi.RedirectStandardOutput=true;
+    using(var process=System.Diagnostics.Process.Start(psi)){
+     string picked=process.StandardOutput.ReadToEnd();
+     process.WaitForExit();
+     if(!string.IsNullOrWhiteSpace(picked)){importPath=picked.Trim();importError="";}
+    }
+   }catch(Exception e){importError="Browse failed: "+e.Message;}
+  }
   void ImportObj(){
    try{
     string path=importPath.Trim().Trim('"');
-    if(!File.Exists(path)||Path.GetExtension(path).ToLowerInvariant()!=".obj")throw new FileNotFoundException("Choose an existing .obj file");
+    if(!File.Exists(path))throw new FileNotFoundException("File not found. Choose an existing OBJ file, not a folder.");
+    if(!string.Equals(Path.GetExtension(path),".obj",StringComparison.OrdinalIgnoreCase))
+     throw new InvalidDataException("This file is "+Path.GetExtension(path)+", not .obj.");
     string id=Guid.NewGuid().ToString("N");
     string directory=Path.Combine(AssetLibrary(),id);
     Directory.CreateDirectory(directory);
@@ -149,10 +167,11 @@ namespace WorldBuilder {
     GameObject test=ImportedObj.Load(model);
     Destroy(test);
     importedId=id;
+    importError="";
     currentTool=Tool.Imported;
     showImport=false;
     Notice("OBJ imported. Click ground to place.");
-   }catch(Exception e){Debug.LogException(e);Notice("Import failed: "+e.Message);}
+   }catch(Exception e){Debug.LogException(e);importError=e.Message;Notice("Import failed: "+e.Message);}
   }
   void CopyTree(string source,string destination){
    Directory.CreateDirectory(destination);
@@ -368,11 +387,13 @@ namespace WorldBuilder {
    }
    if(showImport){
     float x=w*.5f-265;
-    GUI.Box(new Rect(x,75,530,205),"IMPORT OBJ MODEL");
-    GUI.Label(new Rect(x+20,111,490,25),"Paste the full file path to a .obj model:");
-    importPath=GUI.TextField(new Rect(x+20,142,490,32),importPath);
+    GUI.Box(new Rect(x,75,530,255),"IMPORT OBJ MODEL");
+    GUI.Label(new Rect(x+20,108,490,25),"Select an OBJ file. Keep its textures and MTL beside it.");
+    importPath=GUI.TextField(new Rect(x+20,139,350,32),importPath);
+    if(GUI.Button(new Rect(x+380,139,130,32),"Browse Files"))BrowseObj();
     if(GUI.Button(new Rect(x+20,187,235,36),"Import and Select"))ImportObj();
     if(GUI.Button(new Rect(x+275,187,235,36),"Cancel"))showImport=false;
+    if(importError.Length>0)GUI.Label(new Rect(x+20,236,490,72),importError);
    }
    if(showExport){
     float x=w*.5f-265;
