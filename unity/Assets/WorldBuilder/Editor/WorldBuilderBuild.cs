@@ -20,6 +20,7 @@ namespace WorldBuilder {
    var root=new GameObject("WorldBuilder");
    var runtime=root.AddComponent<WorldBuilderRuntime>();
    runtime.sceneCamera=camera;
+   WorldBuilderRegressionChecks.Run(runtime);
    const string scenePath="Assets/WorldBuilder/WorldBuilderPrototype.unity";
    if(!EditorSceneManager.SaveScene(scene,scenePath))
     throw new Exception("Could not save prototype scene");
