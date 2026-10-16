@@ -1321,7 +1321,15 @@ namespace WorldBuilder {
     foreach(var obj in objects)if(obj!=null)Destroy(obj);
     objects.Clear();SelectObject(-1);project=loaded;
     foreach(var piece in project.pieces)objects.Add(Create(piece));ApplyEnvironment();Notice("Loaded: "+Path.GetFileName(filePath));
-   }catch(Exception e){Debug.LogError("Load failed: "+e.Message);Notice("Load failed: "+e.Message);}
+   }catch(Exception e){
+    Debug.LogError("Load failed: "+e.Message);
+    Diagnostics.Add("ERROR","Project could not be loaded: "+e.Message);
+    if(interruptedRecovery==null)interruptedRecovery=RecoveryStore.ReadLatest(filePath);
+    if(interruptedRecovery!=null){
+     showRecoveryPrompt=true;
+     Notice("The saved project could not load; a recovery copy is available.");
+    }else Notice("Load failed: "+e.Message);
+   }
   }
   // Premium rounded glass UI generated at runtime; no external font or art packages required.
   private GUIStyle panelStyle, headingStyle, captionStyle, menuStyle, activeStyle, regularStyle, sectionStyle, smallStyle;
