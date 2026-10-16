@@ -298,6 +298,33 @@ namespace WorldBuilder {
    objects[selectedIndex].transform.rotation=piece.rotation;
    RefreshSelectionOutline();
   }
+  void FitSelectedImportedModel(){
+   if(selectedIndex<0||selectedIndex>=project.pieces.Count)return;
+   Piece item=project.pieces[selectedIndex];
+   if(item.kind!="imported"||string.IsNullOrEmpty(item.assetId))return;
+   GameObject sample=null;
+   try{
+    sample=ImportedObj.Load(Path.Combine(AssetLibrary(),item.assetId,"model.obj"));
+    Bounds bounds=ModelBounds(sample);
+    float largest=Mathf.Max(bounds.size.x,Mathf.Max(bounds.size.y,bounds.size.z));
+    if(largest<.001f)throw new InvalidDataException("No usable model bounds");
+    float previousScale=item.scale.y;
+    float floorY=item.fitToSurface?item.position.y:item.position.y+bounds.min.y*previousScale;
+    RememberChange();
+    item.fitToSurface=true;
+    item.position.y=Mathf.Clamp(floorY,-10f,100f);
+    float fit=Mathf.Clamp(2f/largest,.0001f,20f);
+    item.scale=Vector3.one*fit;
+    if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
+    objects[selectedIndex]=Create(item);
+    editingPiece=-1;
+    RefreshSelectionOutline();
+    Notice("Model fitted to 2 m and aligned to the floor");
+   }catch(Exception ex){
+    Diagnostics.Add("ERROR","Model auto-fit failed: "+ex.Message);
+    Notice("Could not fit model · see F2");
+   }finally{if(sample!=null)Destroy(sample);}
+  }
   void ResizeSelected(float factor){
    if(selectedIndex<0||selectedIndex>=project.pieces.Count||objects[selectedIndex]==null)return;
    string type=project.pieces[selectedIndex].kind;
@@ -1845,7 +1872,7 @@ namespace WorldBuilder {
     Piece selectedPiece=project.pieces[selectedIndex];
     contentH=270f;
     if(multiSelection.Count>1)contentH+=82f;
-    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=130f;
+    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?178f:130f;
     if(selectedPiece.kind=="wall")contentH+=176f;
     if(selectedPiece.kind=="light-point"||selectedPiece.kind=="light-spot")contentH+=215f;
     if(IsRoomFloor(selectedIndex))contentH+=91f;
@@ -1885,6 +1912,10 @@ namespace WorldBuilder {
      if(Button(new Rect(ox+148,y,138,37),furnitureSnap?"SNAP  ON":"SNAP  OFF"))
       furnitureSnap=!furnitureSnap;
      y+=51;
+     if(piece.kind=="imported"){
+      if(Button(new Rect(ox,y,286,40),"FIT MODEL TO REAL SIZE"))FitSelectedImportedModel();
+      y+=48;
+     }
     }
     if(piece.kind=="wall"){
      GUI.Label(new Rect(ox,y,280,28),"WALL WORKSHOP",miniStyle);y+=35;
