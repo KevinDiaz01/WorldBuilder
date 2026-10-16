@@ -582,7 +582,7 @@ namespace WorldBuilder {
   void UpdatePreview(){
    bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
    bool onGround=MouseOnGround(out Vector3 p);
-   if(OverUI()||currentTool==Tool.Erase||currentTool==Tool.Paint||(!onGround&&!aimedAtWall)){
+   if(OverUI()||currentTool==Tool.Erase||currentTool==Tool.Paint||currentTool==Tool.Select||(!onGround&&!aimedAtWall)){
     if(importedGhost!=null)importedGhost.SetActive(false);
     if(preview!=null)preview.SetActive(false);
     return;
@@ -612,8 +612,11 @@ namespace WorldBuilder {
     if(!FindOpeningWall(out int wallIndex,out Vector3 hitPoint)){preview.SetActive(false);return;}
     Piece wall=project.pieces[wallIndex];
     bool window=currentTool==Tool.Window;
-    float previewWidth=Mathf.Min(openingWidth,wall.scale.x-.2f);
-    float previewHeight=Mathf.Min(openingHeight,wall.scale.y-.12f);
+    float previewWidth=openingWidth;
+    float previewHeight=openingHeight;
+    if(wall.scale.x<previewWidth+.18f||wall.scale.y<previewHeight+.12f){
+     preview.SetActive(false);return;
+    }
     float previewBottom=Mathf.Clamp(openingBottom,0f,wall.scale.y-previewHeight);
     Vector3 local=Quaternion.Inverse(wall.rotation)*(hitPoint-wall.position);
     local.x=Mathf.Clamp(local.x,-wall.scale.x*.5f+previewWidth*.5f+.08f,wall.scale.x*.5f-previewWidth*.5f-.08f);
@@ -653,7 +656,22 @@ namespace WorldBuilder {
   private Vector2 libraryScroll;
   private GUIStyle titleStyle,buttonStyle;
   void Notice(string message){status=message;statusUntil=Time.time+5f;}
-  void SelectTool(Tool tool){currentTool=tool;anchor=null;polygonCorners.Clear();Notice(tool+" tool selected");}
+  void SelectTool(Tool tool){
+   bool changed=currentTool!=tool;
+   currentTool=tool;
+   anchor=null;
+   draggingSelection=false;
+   polygonCorners.Clear();
+   if(changed){
+    if(tool==Tool.Garage){openingWidth=3f;openingHeight=2.35f;openingBottom=0f;}
+    else if(tool==Tool.Door){openingWidth=.95f;openingHeight=2.10f;openingBottom=0f;}
+    else if(tool==Tool.Window){openingWidth=1.25f;openingHeight=1.15f;openingBottom=.95f;}
+   }
+   if(tool!=Tool.Imported&&importedGhost!=null)importedGhost.SetActive(false);
+   if(preview!=null)preview.SetActive(false);
+   Notice(tool==Tool.Garage?"GARAGE opening selected":tool==Tool.Door?"DOOR opening selected":
+    tool==Tool.Window?"WINDOW opening selected":tool+" selected");
+  }
   string AssetLibrary(){string d=Path.Combine(Application.persistentDataPath,"ImportedAssets");Directory.CreateDirectory(d);return d;}
   void BrowseObj(){
    try{
@@ -1154,12 +1172,14 @@ namespace WorldBuilder {
    if(!FindOpeningWall(out int idx,out Vector3 wallPoint)){Notice("Aim at a wall to place an opening");return;}
    Piece original=project.pieces[idx];
    float length=original.scale.x,height=original.scale.y;
-   float width=Mathf.Min(openingWidth,length-.20f);
-   if(length<width+.3f||height<1.6f){Notice("Wall is too small for this opening");return;}
+   float width=openingWidth;
+   float openingHeight=Mathf.Min(this.openingHeight,height-.15f);
+   if(length<width+.18f||height<openingHeight+.10f||openingHeight<.5f){
+    Notice("Need a longer / taller wall for the "+currentTool+" opening");return;
+   }
    Vector3 local=Quaternion.Inverse(original.rotation)*(wallPoint-original.position);
    float center=Mathf.Clamp(local.x,-length*.5f+width*.5f+.08f,length*.5f-width*.5f-.08f);
    float left=center-width*.5f,right=center+width*.5f;
-   float openingHeight=Mathf.Min(this.openingHeight,height-.10f);
    float bottom=Mathf.Clamp(openingBottom,0,height-openingHeight);
    RememberChange();
    if(objects[idx]!=null)Destroy(objects[idx]);
@@ -1192,10 +1212,12 @@ namespace WorldBuilder {
     frame.textureTile=original.textureTile;
     AddWithoutHistory(frame);
    };
-   trim(left-rim,left,bottom,bottom+openingHeight);
-   trim(right,right+rim,bottom,bottom+openingHeight);
-   trim(left-rim,right+rim,bottom+openingHeight,bottom+openingHeight+rim);
-   if(window)trim(left-rim,right+rim,bottom-rim,bottom);
+   if(currentTool!=Tool.Garage){
+    trim(left-rim,left,bottom,bottom+openingHeight);
+    trim(right,right+rim,bottom,bottom+openingHeight);
+    trim(left-rim,right+rim,bottom+openingHeight,bottom+openingHeight+rim);
+    if(window)trim(left-rim,right+rim,bottom-rim,bottom);
+   }
    // The gap remains an actual opening with colliders on surrounding pieces.
    Notice(currentTool==Tool.Garage?"Garage opening created":window?"Window opening created":"Door opening created");
   }
@@ -1306,7 +1328,7 @@ namespace WorldBuilder {
      if(shader!=null){var finishMaterial=new Material(shader);finishMaterial.color=FinishColors[colorIndex];renderer.sharedMaterial=finishMaterial;}
     }
    }else if(piece.kind=="opening-frame"){
-    obj.GetComponent<Renderer>().material.color=new Color(.15f,.75f,.94f);
+    obj.GetComponent<Renderer>().material.color=new Color(.66f,.62f,.58f);
    }else if(material!=null)obj.GetComponent<Renderer>().sharedMaterial=material;
    else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.89f,.91f,.94f):piece.kind=="floor"?new Color(.47f,.52f,.58f):piece.kind=="water"?new Color(.18f,.47f,.75f):piece.kind=="path"?new Color(.47f,.43f,.38f):piece.kind=="vrc-mirror"?new Color(.55f,.72f,.82f):piece.kind=="vrc-spawn"?new Color(.22f,.86f,.40f):new Color(.25f,.6f,.7f);
    return obj;
@@ -1531,7 +1553,7 @@ namespace WorldBuilder {
      Notice(polygonMode?"Click corners, press Enter to finish":"Rectangular room tool selected");
     }
     if(Button(new Rect(x+215,line,185,40),"Garage Opening")){
-     SelectTool(Tool.Garage);openingWidth=3f;openingHeight=2.35f;openingBottom=0f;
+     SelectTool(Tool.Garage);
     }
     if(Button(new Rect(x+413,line,195,40),"Custom Opening")){SelectTool(Tool.Door);}
     Label(new Rect(x+22,line+48,580,25),"Opening width: "+openingWidth.ToString("F2")+" m");
@@ -1656,7 +1678,7 @@ namespace WorldBuilder {
       showCatalog=true;catalogCategory=8;SelectTool(Tool.Paint);
      }else{
       SelectTool(choice);
-      if(choice==Tool.Garage){openingWidth=3f;openingHeight=2.35f;openingBottom=0f;}
+      
       if(choice==Tool.Light){showStudio=true;studioTab=1;}
      }
     }
