@@ -43,6 +43,7 @@ namespace WorldBuilder {
   // Automatic recursive discovery. Events are recorded for the F2 console.
   static readonly Dictionary<string,string> observed=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
   static readonly HashSet<string> reportedUnsupported=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> reportedTextureFolders=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
   public static int Scan(out string message){
    Initialize();
    int count=0;
@@ -53,6 +54,19 @@ namespace WorldBuilder {
     try{files=Directory.GetFiles(root,"*",SearchOption.AllDirectories);}
     catch(Exception ex){Diagnostics.Add("ERROR","Cannot scan "+provider+": "+ex.Message);continue;}
     Array.Sort(files,StringComparer.OrdinalIgnoreCase);
+    // Texture-only downloads are materials, not placeable 3D assets.
+    // Explain this once rather than silently leaving My Assets unchanged.
+    var textureFolders=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var modelFolders=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach(string path in files){
+     string suffix=Path.GetExtension(path).ToLowerInvariant();
+     string dir=Path.GetDirectoryName(path);
+     if(suffix==".obj"||suffix==".glb"||suffix==".gltf"||suffix==".zip")modelFolders.Add(dir);
+     if(suffix==".png"||suffix==".jpg"||suffix==".jpeg"||suffix==".tga"||suffix==".exr")textureFolders.Add(dir);
+    }
+    foreach(string folder in textureFolders)
+     if(!modelFolders.Contains(folder)&&reportedTextureFolders.Add(folder))
+      Diagnostics.Add("INFO","Texture files detected in "+provider+": "+Path.GetFileName(folder)+". These are materials, not placeable 3D models.");
     foreach(string source in files){
      string ext=Path.GetExtension(source).ToLowerInvariant();
      if(source.EndsWith(".worldbuilder-imported",StringComparison.OrdinalIgnoreCase)||ext==".tmp"||ext==".crdownload"||ext==".part")continue;
