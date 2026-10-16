@@ -406,91 +406,273 @@ namespace WorldBuilder {
     foreach(var piece in project.pieces)objects.Add(Create(piece));Notice("Loaded: "+Path.GetFileName(filePath));
    }catch(Exception e){Debug.LogError("Load failed: "+e.Message);Notice("Load failed: "+e.Message);}
   }
+  // A game-like, responsive editor shell. Current tools remain functional;
+  // unimplemented features are explicitly marked as coming soon.
+  private GUIStyle panelStyle, headingStyle, captionStyle, menuStyle, activeStyle, regularStyle;
+  private Texture2D darkTexture, sideTexture, blueTexture, fieldTexture;
+  Texture2D Swatch(Color color){
+   var texture=new Texture2D(1,1);texture.SetPixel(0,0,color);texture.Apply();return texture;
+  }
+  void InitStyles(){
+   if(panelStyle!=null)return;
+   darkTexture=Swatch(new Color(.065f,.095f,.125f,.96f));
+   sideTexture=Swatch(new Color(.08f,.115f,.15f,.93f));
+   blueTexture=Swatch(new Color(.105f,.35f,.66f,.96f));
+   fieldTexture=Swatch(new Color(.14f,.19f,.25f,.96f));
+   panelStyle=new GUIStyle(GUI.skin.box);
+   panelStyle.normal.background=darkTexture;
+   panelStyle.border=new RectOffset(0,0,0,0);
+   panelStyle.normal.textColor=Color.white;
+   panelStyle.alignment=TextAnchor.UpperCenter;
+   panelStyle.fontSize=13;
+   headingStyle=new GUIStyle(GUI.skin.label);
+   headingStyle.normal.textColor=new Color(.94f,.97f,1f);
+   headingStyle.fontSize=17;headingStyle.fontStyle=FontStyle.Bold;
+   captionStyle=new GUIStyle(GUI.skin.label);
+   captionStyle.normal.textColor=new Color(.68f,.76f,.83f);
+   captionStyle.fontSize=12;
+   menuStyle=new GUIStyle(GUI.skin.button);
+   menuStyle.normal.background=sideTexture;
+   menuStyle.hover.background=fieldTexture;
+   menuStyle.active.background=blueTexture;
+   menuStyle.normal.textColor=Color.white;
+   menuStyle.hover.textColor=Color.white;
+   menuStyle.fontSize=13;
+   menuStyle.alignment=TextAnchor.MiddleCenter;
+   activeStyle=new GUIStyle(menuStyle);
+   activeStyle.normal.background=blueTexture;
+   regularStyle=new GUIStyle(GUI.skin.textField);
+   regularStyle.normal.background=fieldTexture;
+   regularStyle.normal.textColor=Color.white;
+   regularStyle.fontSize=13;
+  }
+  bool Button(Rect rect,string label,bool selected=false){return GUI.Button(rect,label,selected?activeStyle:menuStyle);}
+  void Label(Rect rect,string content,bool heading=false){GUI.Label(rect,content,heading?headingStyle:captionStyle);}
+  void ComingSoon(string what){Notice(what+" - coming soon");}
+  void EnterWalk(){
+   if(walkthrough!=null){
+    if(preview!=null)preview.SetActive(false);
+    showPause=false;
+    walkthrough.SetHeight(avatarHeight);walkthrough.Enter();
+   }else Notice("Walkthrough camera unavailable");
+  }
+  void DrawToolbar(float w){
+   GUI.Box(new Rect(0,0,w,66),"",panelStyle);
+   if(Button(new Rect(12,9,45,46),"⌂")){showPause=true;}
+   Label(new Rect(69,9,245,29),Path.GetFileNameWithoutExtension(filePath),true);
+   Label(new Rect(69,34,255,22),"WORLDBUILDER  |  VRChat worlds");
+   float start=Mathf.Max(320,w*.37f);
+   float width=Mathf.Min(118,Mathf.Max(82,(w-750)/4f));
+   string[] modes={"Build","Decorate","Landscape","Live"};
+   for(int k=0;k<4;k++){
+    int n=k;
+    if(Button(new Rect(start+k*(width+7),12,width,40),modes[k],creativeMode==k)){
+     if(k==3)EnterWalk();
+     else {creativeMode=n;if(n>0)ComingSoon(modes[n]+" tools");}
+    }
+   }
+   float x=w-296;
+   if(Button(new Rect(x,12,61,40),"Undo"))UndoLast();
+   if(Button(new Rect(x+67,12,64,40),"Save"))Save();
+   if(Button(new Rect(x+137,12,64,40),"Assets"))ToggleAssetBrowser();
+   if(Button(new Rect(x+207,12,73,40),"Menu"))showPause=!showPause;
+  }
+  void DrawLeft(float h){
+   GUI.Box(new Rect(0,66,92,h-214),"",panelStyle);
+   string[] names={"Select","Walls","Floors","Rooms","Doors","Windows","Stairs","Roofs","Furniture","Materials","Lighting","Terrain"};
+   Tool[] tools={Tool.Select,Tool.Wall,Tool.Floor,Tool.Select,Tool.Select,Tool.Select,Tool.Select,Tool.Select,Tool.Imported,Tool.Select,Tool.Select,Tool.Select};
+   float areaHeight=h-248;
+   float step=Mathf.Clamp(areaHeight/12f,36f,56f);
+   for(int k=0;k<names.Length;k++){
+    bool active=(k==0&&currentTool==Tool.Select)||(k==1&&currentTool==Tool.Wall)||
+      (k==2&&currentTool==Tool.Floor)||(k==8&&currentTool==Tool.Imported);
+    if(Button(new Rect(7,77+k*step,78,step-4),names[k],active)){
+     if(k==0||k==1||k==2)SelectTool(tools[k]);
+     else if(k==8){creativeMode=1;catalogCategory=0;Notice("Choose an asset from My Assets below");}
+     else ComingSoon(names[k]);
+    }
+   }
+  }
+  void DrawProperties(float w,float h){
+   float x=w-282;
+   GUI.Box(new Rect(x,77,270,h-259),"",panelStyle);
+   Label(new Rect(x+17,92,238,27),selectedIndex>=0?"Selected Object":"Tool Properties",true);
+   string name=selectedIndex>=0&&selectedIndex<project.pieces.Count?project.pieces[selectedIndex].kind:currentTool.ToString();
+   Label(new Rect(x+17,129,240,24),name.ToUpperInvariant());
+   float y=167;
+   if(selectedIndex>=0&&selectedIndex<project.pieces.Count){
+    var p=project.pieces[selectedIndex];
+    Label(new Rect(x+17,y,235,22),"POSITION (meters)");y+=27;
+    float nextX=FloatField(new Rect(x+17,y,72,29),p.position.x);
+    float nextY=FloatField(new Rect(x+100,y,72,29),p.position.y);
+    float nextZ=FloatField(new Rect(x+183,y,72,29),p.position.z);
+    y+=41;
+    Label(new Rect(x+17,y,235,22),"SIZE (meters)");y+=25;
+    float sx=FloatField(new Rect(x+17,y,72,29),p.scale.x);
+    float sy=FloatField(new Rect(x+100,y,72,29),p.scale.y);
+    float sz=FloatField(new Rect(x+183,y,72,29),p.scale.z);
+    y+=42;
+    if(Button(new Rect(x+17,y,235,32),"Apply Dimensions")){
+     p.position=new Vector3(nextX,nextY,nextZ);
+     p.scale=new Vector3(Mathf.Max(.02f,sx),Mathf.Max(.02f,sy),Mathf.Max(.02f,sz));
+     if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
+     objects[selectedIndex]=Create(p);
+     Notice("Object dimensions updated");
+    }
+    y+=49;
+    if(Button(new Rect(x+17,y,235,32),"Delete Selected")){
+     Destroy(objects[selectedIndex]);objects.RemoveAt(selectedIndex);
+     project.pieces.RemoveAt(selectedIndex);selectedIndex=-1;
+    }
+   }else{
+    Label(new Rect(x+17,y,235,36),"Select a placed object to edit it.");
+    y+=45;
+    Label(new Rect(x+17,y,230,26),"Grid snapping: "+gridSize.ToString("F2")+" m");
+    y+=28;
+    gridSize=GUI.HorizontalSlider(new Rect(x+17,y,232,20),gridSize,.25f,2f);y+=34;
+    if(currentTool==Tool.Wall){
+     Label(new Rect(x+17,y,220,25),"Wall height: "+wallHeight.ToString("F2")+" m");y+=25;
+     wallHeight=GUI.HorizontalSlider(new Rect(x+17,y,232,20),wallHeight,1.5f,5f);y+=39;
+     Label(new Rect(x+17,y,220,25),"Thickness: "+wallThickness.ToString("F2")+" m");y+=25;
+     wallThickness=GUI.HorizontalSlider(new Rect(x+17,y,232,20),wallThickness,.08f,.5f);
+    }
+    if(currentTool==Tool.Imported){
+     y+=28;
+     Label(new Rect(x+17,y,220,25),"Object scale: "+importedScale.ToString("F2")+"x");y+=29;
+     importedScale=GUI.HorizontalSlider(new Rect(x+17,y,232,18),importedScale,.1f,4f);y+=33;
+     Label(new Rect(x+17,y,220,25),"Rotation: "+importedRotation.ToString("F0")+"°");y+=27;
+     importedRotation=GUI.HorizontalSlider(new Rect(x+17,y,232,18),importedRotation,0f,360f);
+    }
+   }
+   float bottom=h-290;
+   Label(new Rect(x+17,bottom,235,25),"AVATAR SCALE PREVIEW");
+   Label(new Rect(x+17,bottom+27,235,24),avatarHeight.ToString("F2")+" m tall");
+   avatarHeight=GUI.HorizontalSlider(new Rect(x+17,bottom+55,230,17),avatarHeight,1.2f,2.2f);
+  }
+  float FloatField(Rect r,float value){
+   // Uses a field without rebuilding the project while the user types.
+   string text=GUI.TextField(r,value.ToString("F2"),regularStyle);
+   if(float.TryParse(text,out float number))return number;
+   return value;
+  }
+  void DrawCatalog(float w,float h){
+   float top=h-174;
+   GUI.Box(new Rect(95,top,w-95,174),"",panelStyle);
+   string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials"};
+   float buttonWidth=Mathf.Min(110,(w-455)/categories.Length);
+   for(int k=0;k<categories.Length;k++){
+    if(Button(new Rect(108+k*(buttonWidth+4),top+10,buttonWidth,31),categories[k],catalogCategory==k))catalogCategory=k;
+   }
+   catalogSearch=GUI.TextField(new Rect(Mathf.Max(110,w-365),top+10,235,31),catalogSearch,regularStyle);
+   if(Button(new Rect(w-120,top+10,109,31),"Get Assets"))ToggleAssetBrowser();
+   if(catalogCategory==0){
+    var entries=AssetHub.Catalog();
+    var visible=new List<string>();
+    foreach(string id in entries)if(catalogSearch.Length==0||AssetHub.Name(id).IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)>=0)visible.Add(id);
+    float width=w-115;
+    catalogScroll=GUI.BeginScrollView(new Rect(108,top+52,width,112),catalogScroll,
+      new Rect(0,0,Mathf.Max(width,visible.Count*135),90));
+    for(int k=0;k<visible.Count;k++){
+     string id=visible[k];
+     if(Button(new Rect(k*135,6,128,76),AssetHub.Name(id))){
+      importedId=id;SelectTool(Tool.Imported);
+      Notice("Click the world to place "+AssetHub.Name(id));
+     }
+    }
+    GUI.EndScrollView();
+    if(visible.Count==0)Label(new Rect(125,top+90,500,30),"No imported models yet. Click Get Assets to browse.");
+   }else if(catalogCategory==1){
+    if(Button(new Rect(110,top+58,138,73),"Sofa - Basic"))SelectTool(Tool.Couch);
+    if(Button(new Rect(255,top+58,138,73),"Table - Basic"))SelectTool(Tool.Table);
+    Label(new Rect(420,top+82,460,24),"More furniture will appear here as you import assets.");
+   }else Label(new Rect(118,top+80,550,28),"Coming soon - this section is reserved for future assets.");
+  }
+  void DrawPause(float w,float h){
+   GUI.Box(new Rect(0,0,w,h),"",panelStyle);
+   float x=w*.5f-182,y=h*.5f-285;
+   GUI.Box(new Rect(x,y,364,570),"",panelStyle);
+   Label(new Rect(x+37,y+23,295,36),"WorldBuilder",true);
+   if(Button(new Rect(x+30,y+73,304,43),"Resume Building"))showPause=false;
+   if(Button(new Rect(x+30,y+122,304,43),"Save Project"))Save();
+   if(Button(new Rect(x+30,y+171,304,43),"Walk Preview"))EnterWalk();
+   if(Button(new Rect(x+30,y+220,304,43),"Export to VRChat")){showPause=false;showExport=true;}
+   if(Button(new Rect(x+30,y+269,304,43),"Projects")){showPause=false;showProjects=true;}
+   if(Button(new Rect(x+30,y+318,304,43),"Settings & Help")){showPause=false;showSettings=true;}
+   if(Button(new Rect(x+30,y+367,304,43),"New Project")){showPause=false;NewProject();}
+   if(Button(new Rect(x+30,y+433,304,49),"Exit WorldBuilder"))showConfirmExit=true;
+   Label(new Rect(x+30,y+507,304,29),"Esc to return to your world");
+   if(showConfirmExit){
+    GUI.Box(new Rect(x-30,y+155,424,274),"",panelStyle);
+    Label(new Rect(x+3,y+178,355,35),"Exit WorldBuilder?",true);
+    Label(new Rect(x+3,y+213,362,43),"Save your work before leaving.");
+    if(Button(new Rect(x+5,y+259,350,38),"Save and Exit")){if(Save())Application.Quit();}
+    if(Button(new Rect(x+5,y+304,350,38),"Exit Without Saving"))Application.Quit();
+    if(Button(new Rect(x+5,y+349,350,38),"Cancel"))showConfirmExit=false;
+   }
+  }
+  void DrawSettings(float w,float h){
+   float x=w*.5f-250,y=h*.5f-238;
+   GUI.Box(new Rect(x,y,500,476),"",panelStyle);
+   Label(new Rect(x+25,y+18,455,35),"Settings & Help",true);
+   Label(new Rect(x+25,y+64,455,28),"BUILD CONTROLS");
+   Label(new Rect(x+25,y+100,455,27),"1 Walls   2 Floors   3 Sofa   4 Table   5 Erase");
+   Label(new Rect(x+25,y+133,455,27),"0 Select   G Grid   Ctrl+Z Undo");
+   Label(new Rect(x+25,y+167,455,27),"Ctrl+S Save   Ctrl+O Reload   Esc Menu");
+   Label(new Rect(x+25,y+206,455,26),"CAMERA");
+   Label(new Rect(x+25,y+239,455,28),"Right mouse: orbit    Scroll: zoom");
+   Label(new Rect(x+25,y+271,455,28),"Walk Preview: WASD, mouse look, Esc to return");
+   Label(new Rect(x+25,y+322,455,27),"WorldBuilder is currently in development.");
+   if(Button(new Rect(x+24,y+397,452,42),"Back to Building"))showSettings=false;
+  }
   void OnGUI(){
+   InitStyles();
    float w=Screen.width,h=Screen.height;
-   GUI.skin.box.fontSize=14;
-   GUI.Box(new Rect(0,0,w,66),"");
-   GUI.Label(new Rect(18,9,230,30),"WORLDBUILDER 3D");
-   GUI.Label(new Rect(18,35,270,20),"BUILD STUDIO  |  PREVIEW");
    if(walkthrough!=null&&walkthrough.IsWalking){
-    GUI.Box(new Rect(0,0,w,66),"WALK PREVIEW  |  WASD move  |  Mouse look  |  Esc return to Build");
-    GUI.Box(new Rect(0,h-54,w,54),"Avatar height: "+avatarHeight.ToString("F2")+" m  |  Spatial scale preview, not a full VRChat simulator");
+    GUI.Box(new Rect(0,0,w,48),"",panelStyle);
+    Label(new Rect(19,10,Mathf.Min(w-35,840),30),"LIVE PREVIEW     WASD Move   |   Mouse Look   |   Esc Return");
     return;
    }
-   if(GUI.Button(new Rect(w-966,15,123,36),showAssets?"Close Assets":"Assets")){ToggleAssetBrowser();showImport=false;showExport=false;}
-   if(GUI.Button(new Rect(w-835,15,137,36),"Import OBJ")){showImport=!showImport;showExport=false;}
-   if(GUI.Button(new Rect(w-690,15,127,36),"Export Unity")){showExport=!showExport;showImport=false;}
-   if(GUI.Button(new Rect(w-555,15,120,36),"Walk Preview")){
-    if(walkthrough!=null){if(preview!=null)preview.SetActive(false);walkthrough.SetHeight(avatarHeight);walkthrough.Enter();}
-    else Notice("Walkthrough camera unavailable");
-   }
-   if(GUI.Button(new Rect(w-425,15,75,36),"New"))NewProject();
-   if(GUI.Button(new Rect(w-342,15,75,36),"Save"))Save();
-   if(GUI.Button(new Rect(w-259,15,75,36),"Save As"))SaveAsNamed("World-"+DateTime.Now.ToString("yyyyMMdd-HHmmss"));
-   if(GUI.Button(new Rect(w-176,15,75,36),"Projects"))showProjects=!showProjects;
-   if(GUI.Button(new Rect(w-93,15,75,36),"Help"))showHelp=!showHelp;
-   if(showLibrary){
-    GUI.Box(new Rect(0,66,205,h-120),"BUILD LIBRARY");
-    GUI.Label(new Rect(15,105,170,24),"STRUCTURE");
-    if(GUI.Button(new Rect(14,134,176,42),"1   Walls"))SelectTool(Tool.Wall);
-    if(GUI.Button(new Rect(14,182,176,42),"2   Floors"))SelectTool(Tool.Floor);
-    GUI.Label(new Rect(15,247,170,24),"FURNITURE");
-    if(GUI.Button(new Rect(14,276,176,42),"3   Sofa"))SelectTool(Tool.Couch);
-    if(GUI.Button(new Rect(14,324,176,42),"4   Table"))SelectTool(Tool.Table);
-    GUI.Label(new Rect(15,387,170,24),"EDIT");
-    if(GUI.Button(new Rect(14,415,176,42),"5   Eraser"))SelectTool(Tool.Erase);
-    if(GUI.Button(new Rect(14,474,176,38),showGrid?"Hide grid (G)":"Show grid (G)"))ToggleGrid();
-    if(GUI.Button(new Rect(14,520,176,38),"Undo (Ctrl+Z)"))UndoLast();
-    GUI.Label(new Rect(14,h-240,180,28),"Selected: "+currentTool);
-    if(currentTool==Tool.Imported){
-     GUI.Label(new Rect(14,578,180,20),"MODEL SCALE "+importedScale.ToString("F2")+"x");
-     importedScale=GUI.HorizontalSlider(new Rect(14,601,176,18),importedScale,.1f,4f);
-     GUI.Label(new Rect(14,627,180,20),"ROTATE "+importedRotation.ToString("F0")+" deg");
-     importedRotation=GUI.HorizontalSlider(new Rect(14,650,176,18),importedRotation,0f,360f);
-    }
-    GUI.Label(new Rect(14,h-158,180,24),"AVATAR HEIGHT");
-    GUI.Label(new Rect(14,h-132,180,22),avatarHeight.ToString("F2")+" m");
-    avatarHeight=GUI.HorizontalSlider(new Rect(14,h-108,176,20),avatarHeight,1.2f,2.2f);
-   }
+   DrawToolbar(w);
+   DrawLeft(h);
+   DrawProperties(w,h);
+   DrawCatalog(w,h);
    if(showImport){
     float x=w*.5f-265;
-    GUI.Box(new Rect(x,75,530,255),"IMPORT OBJ MODEL");
-    GUI.Label(new Rect(x+20,108,490,25),"Select an OBJ file. Keep its textures and MTL beside it.");
-    importPath=GUI.TextField(new Rect(x+20,139,350,32),importPath);
-    if(GUI.Button(new Rect(x+380,139,130,32),"Browse Files"))BrowseObj();
-    if(GUI.Button(new Rect(x+20,187,235,36),"Import and Select"))ImportObj();
-    if(GUI.Button(new Rect(x+275,187,235,36),"Cancel"))showImport=false;
-    if(importError.Length>0)GUI.Label(new Rect(x+20,236,490,72),importError);
+    GUI.Box(new Rect(x,75,530,255),"",panelStyle);
+    Label(new Rect(x+20,90,480,32),"Import OBJ Model",true);
+    Label(new Rect(x+20,126,490,23),"Choose an OBJ file. Keep textures and MTL beside it.");
+    importPath=GUI.TextField(new Rect(x+20,158,350,30),importPath,regularStyle);
+    if(Button(new Rect(x+380,158,130,30),"Browse Files"))BrowseObj();
+    if(Button(new Rect(x+20,206,235,36),"Import & Select"))ImportObj();
+    if(Button(new Rect(x+275,206,235,36),"Cancel"))showImport=false;
    }
    if(showExport){
     float x=w*.5f-265;
-    GUI.Box(new Rect(x,75,530,232),"EXPORT TO UNITY / VRCHAT");
-    GUI.Label(new Rect(x+20,111,490,40),"Optional: enter existing VRChat Unity project path.\\nLeave blank to create a folder.");
-    targetVrcProject=GUI.TextField(new Rect(x+20,162,490,32),targetVrcProject);
-    if(GUI.Button(new Rect(x+20,212,235,36),"Prepare Export"))ExportUnity();
-    if(GUI.Button(new Rect(x+275,212,235,36),"Cancel"))showExport=false;
+    GUI.Box(new Rect(x,75,530,245),"",panelStyle);
+    Label(new Rect(x+20,93,480,30),"Prepare VRChat Export",true);
+    Label(new Rect(x+20,129,490,36),"Existing VRChat Unity project path (optional):");
+    targetVrcProject=GUI.TextField(new Rect(x+20,169,490,30),targetVrcProject,regularStyle);
+    if(Button(new Rect(x+20,218,235,37),"Prepare Export"))ExportUnity();
+    if(Button(new Rect(x+275,218,235,37),"Cancel"))showExport=false;
    }
    if(showProjects){
-    float px=Mathf.Max(215,w-365);
-    GUI.Box(new Rect(px,72,350,Mathf.Min(h-145,450)),"PROJECTS");
-    if(GUI.Button(new Rect(px+12,110,326,34),"Open latest saved project"))Load();
+    float x=Mathf.Max(110,w*.5f-185);
+    GUI.Box(new Rect(x,77,370,400),"",panelStyle);
+    Label(new Rect(x+20,93,330,35),"Projects",true);
+    if(Button(new Rect(x+15,131,340,34),"Reload last saved project"))Load();
     string[] paths=Directory.GetFiles(ProjectsFolder(),"*.json");
     Array.Sort(paths);Array.Reverse(paths);
-    for(int i=0;i<Mathf.Min(paths.Length,6);i++){
-     string p=paths[i];
-     if(GUI.Button(new Rect(px+12,152+i*42,326,36),Path.GetFileNameWithoutExtension(p)))OpenProject(p);
+    for(int k=0;k<Mathf.Min(paths.Length,5);k++){
+     string path=paths[k];
+     if(Button(new Rect(x+15,176+k*39,340,34),Path.GetFileNameWithoutExtension(path)))OpenProject(path);
     }
+    if(Button(new Rect(x+15,367,340,29),"Close"))showProjects=false;
    }
-   GUI.Box(new Rect(0,h-54,w,54),"");
-   GUI.Label(new Rect(18,h-40,Mathf.Max(200,w-45),25),
-    (Time.time<statusUntil?status:"Ready")+
-    "     |     Click two points for walls/floors     |     Right drag: orbit     |     Wheel: zoom");
-   if(showHelp){
-    GUI.Box(new Rect(Mathf.Max(215,w-380),h-215,365,148),"QUICK START");
-    GUI.Label(new Rect(Mathf.Max(230,w-365),h-185,340,25),"1-5 select tools  |  Esc cancels");
-    GUI.Label(new Rect(Mathf.Max(230,w-365),h-158,340,25),"Left click to place  |  Right drag to orbit");
-    GUI.Label(new Rect(Mathf.Max(230,w-365),h-131,340,25),"Ctrl+S save  |  Ctrl+O reload");
-    GUI.Label(new Rect(Mathf.Max(230,w-365),h-104,340,25),"Ctrl+Z undo placement | G toggle grid");
+   if(showSettings||showHelp)DrawSettings(w,h);
+   if(showPause)DrawPause(w,h);
+   if(Time.time<statusUntil&&!showPause){
+    GUI.Box(new Rect(97,h-215,Mathf.Min(w-400,690),32),"",panelStyle);
+    Label(new Rect(110,h-211,Mathf.Min(w-425,660),25),status);
    }
   }
  }
