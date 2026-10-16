@@ -1631,17 +1631,20 @@ namespace WorldBuilder {
     tools=new[]{Tool.Select,Tool.Wall,Tool.Floor,Tool.Room,Tool.Door,Tool.Window,Tool.Garage,Tool.Stairs,Tool.Roof,Tool.Erase};
     labels=new[]{"SELECT","WALLS","FLOORS","ROOMS","DOORS","WINDOWS","GARAGE","STAIRS","ROOFS","ERASE"};
    }
-   float railHeight=Mathf.Min(h-196f,Mathf.Max(170f,tools.Length*49f+91f));
+   float shelfTop=showCatalog?h-Mathf.Min(270f,h*.34f)-9f:h-9f;
+   float availableHeight=Mathf.Max(225f,shelfTop-y-13f);
+   float space=Mathf.Clamp((availableHeight-84f)/tools.Length,31f,45f);
+   float railHeight=Mathf.Min(availableHeight,tools.Length*space+82f);
    SoftPanel(new Rect(x,y,109,railHeight),trayStyle);
-   GUI.Label(new Rect(x+10,y+14,89,21),creativeMode==0?"BUILD":creativeMode==1?"DECOR":"GARDEN",miniStyle);
-   if(Button(new Rect(x+10,y+41,89,29),"HIDE  <")){showLibrary=false;return;}
-   float row=y+78f,space=46f;
-   int maxCount=Mathf.Min(tools.Length,Mathf.Max(0,Mathf.FloorToInt((railHeight-88f)/space)));
+   GUI.Label(new Rect(x+10,y+13,89,21),creativeMode==0?"BUILD":creativeMode==1?"DECOR":"GARDEN",miniStyle);
+   if(Button(new Rect(x+10,y+40,89,28),"HIDE  <")){showLibrary=false;return;}
+   float row=y+76f;
+   int maxCount=Mathf.Min(tools.Length,Mathf.Max(0,Mathf.FloorToInt((railHeight-76f)/space)));
    for(int k=0;k<maxCount;k++){
     Tool choice=tools[k];
     bool isActive=currentTool==choice||(choice==Tool.Imported&&currentTool==Tool.Imported);
     GUIStyle choiceStyle=isActive?activeStyle:choice==Tool.Erase?destructiveStyle:softStyle;
-    if(GUI.Button(new Rect(x+9,row+k*space,91,39),labels[k],choiceStyle)){
+    if(GUI.Button(new Rect(x+9,row+k*space,91,space-4f),labels[k],choiceStyle)){
      if(choice==Tool.Imported){
       showCatalog=true;catalogCategory=0;creativeMode=1;
       Notice("Choose an object from your furniture library");
