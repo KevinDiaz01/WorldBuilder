@@ -176,7 +176,7 @@ namespace WorldBuilder {
    }
    return count;
   }
-  public static string Import(string source,string provider){
+  public static string Import(string source,string provider,string requestedCategory=null){
    if(!File.Exists(source))throw new FileNotFoundException("Asset file not found",source);
    string ext=Path.GetExtension(source).ToLowerInvariant();
    if(ext!=".obj"&&ext!=".zip"&&ext!=".gltf"&&ext!=".glb")throw new InvalidDataException("Supported files: OBJ, GLB, glTF and ZIP archives");
@@ -230,7 +230,10 @@ namespace WorldBuilder {
     string displayName=Path.GetFileNameWithoutExtension(source);
     File.WriteAllText(Path.Combine(destination,"asset-name.txt"),displayName);
     File.WriteAllText(Path.Combine(destination,"asset-source.txt"),provider);
-    File.WriteAllText(Path.Combine(destination,"asset-category.txt"),ModelCategory(source,displayName));
+    string category=string.IsNullOrEmpty(requestedCategory)?
+     ModelCategory(source,displayName):requestedCategory;
+    if(Array.IndexOf(Categories,category)<0||category=="All")category=GuessCategory(displayName);
+    File.WriteAllText(Path.Combine(destination,"asset-category.txt"),category);
     GameObject check=null;
     try{
      check=ImportedObj.Load(Path.Combine(destination,"model.obj"));
