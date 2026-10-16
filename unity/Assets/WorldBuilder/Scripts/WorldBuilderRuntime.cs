@@ -2061,7 +2061,7 @@ namespace WorldBuilder {
     bool isActive=creativeMode==1?(choice==Tool.Select&&k==0&&currentTool==Tool.Select)||
      (k==1&&showCatalog&&catalogCategory==0)||
      (k==2&&showCatalog&&catalogCategory==1)||
-     ((k==3||k==4)&&showCatalog&&catalogCategory==8)||
+     ((k==3&&!textureOnly||k==4&&textureOnly)&&showCatalog&&catalogCategory==8)||
      (k==5&&showCatalog&&catalogCategory==2):
      creativeMode==2?(k==5&&showCatalog&&landscapeCategory==5):
      currentTool==choice;
