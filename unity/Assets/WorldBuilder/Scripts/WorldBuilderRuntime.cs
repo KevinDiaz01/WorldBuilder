@@ -144,6 +144,7 @@ namespace WorldBuilder {
   private float lightBrightness=.9f;
   private float lightRadius=7f;
   private float terrainAmplitude=2.5f;
+  private float newWaterDepth=1.5f;
   private Light editorSun;
   private WorldBuilderBackdrop scenicBackdrop;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
@@ -1188,7 +1189,15 @@ namespace WorldBuilder {
    if(currentTool==Tool.Room){MakeRoom(start,p);return;}
    if(currentTool==Tool.Terrain){Add(new Piece("terrain",(start+p)*.5f,new Vector3(Mathf.Max(2f,Mathf.Abs(start.x-p.x)),terrainAmplitude,Mathf.Max(2f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
    if(currentTool==Tool.Path){Add(new Piece("path",(start+p)*.5f+Vector3.up*.04f,new Vector3(Mathf.Max(.5f,Mathf.Abs(start.x-p.x)),.08f,Mathf.Max(.5f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
-   if(currentTool==Tool.Water){Add(new Piece("water",(start+p)*.5f,new Vector3(Mathf.Max(1f,Mathf.Abs(start.x-p.x)),.08f,Mathf.Max(1f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
+   if(currentTool==Tool.Water){
+    // Water is a volume with its top at the design ground height. A depth
+    // control is necessary for pools/beaches even before terrain excavation.
+    float depth=Mathf.Clamp(newWaterDepth,.15f,12f);
+    Add(new Piece("water",(start+p)*.5f+Vector3.down*(depth*.5f),
+     new Vector3(Mathf.Max(1f,Mathf.Abs(start.x-p.x)),depth,
+      Mathf.Max(1f,Mathf.Abs(start.z-p.z))),Quaternion.identity));
+    return;
+   }
    if(currentTool==Tool.Roof){MakeRoof(start,p);return;}
    if(currentTool==Tool.Stairs){MakeStairs(start,p);return;}
    if(currentTool==Tool.Wall){
@@ -1887,7 +1896,7 @@ namespace WorldBuilder {
     Label(new Rect(x+270,line+153,325,25),"Undo available · keeps positions");
    }else if(studioTab==2){
     if(Button(new Rect(x+18,line,186,42),"Terrain Hill")){SelectTool(Tool.Terrain);showStudio=false;}
-    if(Button(new Rect(x+212,line,186,42),"Water")){SelectTool(Tool.Water);showStudio=false;}
+    if(Button(new Rect(x+212,line,186,42),"Water")){SelectTool(Tool.Water);showStudio=false;showInspector=true;}
     if(Button(new Rect(x+406,line,188,42),"Fog: "+(project.fog?"On":"Off"))){project.fog=!project.fog;ApplyEnvironment();}
     string[] names={"Day","Sunset","Night","Overcast"};
     for(int i=0;i<4;i++){int k=i;if(Button(new Rect(x+18+i*146,line+53,138,36),names[i],project.skyPreset==i)){project.skyPreset=k;ApplyEnvironment();}}
@@ -2059,6 +2068,7 @@ namespace WorldBuilder {
     if(multiSelection.Count>1)contentH+=82f;
     if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?320f:130f;
     if(selectedPiece.kind=="wall")contentH+=176f;
+    if(selectedPiece.kind=="water")contentH+=102f;
     if(selectedPiece.kind=="light-point"||selectedPiece.kind=="light-spot")contentH+=215f;
     if(IsRoomFloor(selectedIndex))contentH+=91f;
     if(inspectorAdvanced)contentH+=245f;
@@ -2068,6 +2078,7 @@ namespace WorldBuilder {
     if(currentTool==Tool.Room)contentH+=140f;
     if(currentTool==Tool.Imported)contentH+=115f;
     if(currentTool==Tool.Light)contentH+=90f;
+    if(currentTool==Tool.Water)contentH+=100f;
     if(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage)contentH+=225f;
    }
    Rect view=new Rect(x+12,top+92,panelW-25,Mathf.Max(120f,panelH-111f));
@@ -2113,6 +2124,19 @@ namespace WorldBuilder {
        }
        y+=156;
       }
+     }
+    }
+    if(piece.kind=="water"){
+     GUI.Label(new Rect(ox,y,282,25),"WATER DEPTH",miniStyle);y+=29;
+     GUI.Label(new Rect(ox,y,282,24),piece.scale.y.ToString("F2")+" m",smallStyle);y+=25;
+     float depth=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),piece.scale.y,.15f,12f);y+=34;
+     if(Mathf.Abs(depth-piece.scale.y)>.01f){
+      RememberChange();
+      float surface=piece.position.y+piece.scale.y*.5f;
+      piece.scale.y=depth;
+      piece.position.y=surface-depth*.5f;
+      objects[selectedIndex].transform.position=piece.position+Vector3.up*.015f;
+      objects[selectedIndex].transform.localScale=piece.scale;
      }
     }
     if(piece.kind=="wall"){
@@ -2225,7 +2249,12 @@ namespace WorldBuilder {
      GUI.Label(new Rect(ox,y,282,24),"Rotation "+importedRotation.ToString("F0")+"°",smallStyle);y+=27;
      importedRotation=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),importedRotation,0f,360f);y+=40;
     }
-    if(currentTool==Tool.Light){
+    if(currentTool==Tool.Water){
+     GUI.Label(new Rect(ox,y,282,25),"NEW WATER DEPTH",miniStyle);y+=32;
+     GUI.Label(new Rect(ox,y,282,24),newWaterDepth.ToString("F2")+" m below the surface",smallStyle);y+=28;
+     newWaterDepth=GUI.HorizontalSlider(new Rect(ox+8,y,268,20),newWaterDepth,.15f,12f);y+=32;
+   }
+   if(currentTool==Tool.Light){
      GUI.Label(new Rect(ox,y,282,25),"NEW LIGHT",miniStyle);y+=32;
      GUI.Label(new Rect(ox,y,282,22),"Intensity "+lightBrightness.ToString("F1"),smallStyle);y+=26;
      lightBrightness=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),lightBrightness,0f,8f);y+=37;
