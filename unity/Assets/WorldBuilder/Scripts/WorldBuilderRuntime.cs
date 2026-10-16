@@ -534,9 +534,11 @@ namespace WorldBuilder {
     RecoveryStore.WriteSnapshot(filePath,JsonUtility.ToJson(project,true),project.pieces.Count);
    }catch(Exception ex){Diagnostics.Add("WARN","Recovery snapshot failed: "+ex.Message);}
   }
-  void RestoreRecovery(){
+  void RestoreRecovery(bool previousCrash=false){
    try{
-    RecoverySnapshot candidate=interruptedRecovery??RecoveryStore.ReadLatest(filePath);
+    RecoverySnapshot candidate=previousCrash?
+      (interruptedRecovery??RecoveryStore.ReadPreviousCrash()):
+      RecoveryStore.ReadLatest(filePath);
     if(candidate==null){Notice("No recovery snapshot available");showRecoveryPrompt=false;return;}
     var restored=JsonUtility.FromJson<Project>(candidate.projectJson);
     if(restored==null||restored.schema!=2||restored.pieces==null)throw new InvalidDataException("Recovery file is invalid");
@@ -1863,7 +1865,7 @@ namespace WorldBuilder {
    GUI.Box(new Rect(x+28,y+146,width-56,87),"",panelStyle);
    Label(new Rect(x+46,y+158,width-92,30),projectName,true);
    Label(new Rect(x+46,y+191,width-92,27),when);
-   if(Button(new Rect(x+28,y+255,width-56,48),"Restore My Build"))RestoreRecovery();
+   if(Button(new Rect(x+28,y+255,width-56,48),"Restore My Build"))RestoreRecovery(true);
    if(Button(new Rect(x+28,y+308,width-56,42),"Open My Last Saved Project")){
     showRecoveryPrompt=false;
     Notice("Saved project opened. Recovery is still available in Projects.");
@@ -1921,10 +1923,11 @@ namespace WorldBuilder {
    }
    if(showProjects){
     float x=Mathf.Max(110,w*.5f-185);
-    GUI.Box(new Rect(x,77,370,400),"",panelStyle);
+    GUI.Box(new Rect(x,77,370,495),"",panelStyle);
     Label(new Rect(x+20,93,330,35),"Projects",true);
     if(Button(new Rect(x+15,131,340,34),"Reload last saved project"))Load();
-    if(Button(new Rect(x+15,407,340,34),interruptedRecovery!=null?"Recover Previous Session":"Restore Autosave")){RestoreRecovery();showProjects=false;}
+    if(Button(new Rect(x+15,407,340,34),"Restore Current Project Autosave")){RestoreRecovery(false);showProjects=false;}
+    if(Button(new Rect(x+15,448,340,34),"Recover Previous Crash")){RestoreRecovery(true);showProjects=false;}
     string[] paths=Directory.GetFiles(ProjectsFolder(),"*.json");
     Array.Sort(paths);Array.Reverse(paths);
     for(int k=0;k<Mathf.Min(paths.Length,5);k++){
