@@ -1609,129 +1609,162 @@ namespace WorldBuilder {
    }
   }
   void DrawProperties(float w,float h){
-   float x=w-351;
-   GUI.Box(new Rect(x,96,335,Mathf.Min(h-185f,615f)),"",panelStyle);
-   if(Button(new Rect(x+269,105,48,42),"X")){showInspector=false;return;}
-   Label(new Rect(x+23,116,282,33),selectedIndex>=0?"Selected Object":"Tool Properties",true);
-   string name=selectedIndex>=0&&selectedIndex<project.pieces.Count?project.pieces[selectedIndex].kind:currentTool.ToString();
-   Label(new Rect(x+23,155,285,28),name.ToUpperInvariant());
-   float y=215;
+   float x=w-364f,top=96f,panelW=350f;
+   float catalogHeight=showCatalog?Mathf.Min(270f,h*.34f)+12f:72f;
+   float panelH=Mathf.Max(280f,h-top-catalogHeight-13f);
+   SoftPanel(new Rect(x,top,panelW,panelH),trayStyle);
+   if(Button(new Rect(x+295,top+15,39,36),"X")){showInspector=false;return;}
+   bool selected=selectedIndex>=0&&selectedIndex<project.pieces.Count;
+   GUI.Label(new Rect(x+22,top+16,265,30),selected?"OBJECT DETAILS":"TOOL SETTINGS",sectionStyle);
+   string itemLabel=selected?project.pieces[selectedIndex].kind:currentTool.ToString();
+   GUI.Label(new Rect(x+23,top+53,280,26),itemLabel.Replace('-',' ').ToUpperInvariant(),smallStyle);
    if(selectedIndex!=editingPiece){
     editingPiece=selectedIndex;
-    if(selectedIndex>=0&&selectedIndex<project.pieces.Count){
-     var edit=project.pieces[selectedIndex];
-     float[] v={edit.position.x,edit.position.y,edit.position.z,edit.scale.x,edit.scale.y,edit.scale.z};
-     for(int k=0;k<6;k++)dimensionDraft[k]=v[k].ToString("F2");
+    if(selected){
+     var original=project.pieces[selectedIndex];
+     float[] value={original.position.x,original.position.y,original.position.z,
+      original.scale.x,original.scale.y,original.scale.z};
+     for(int i=0;i<6;i++)dimensionDraft[i]=value[i].ToString("F2");
     }
    }
-   if(selectedIndex>=0&&selectedIndex<project.pieces.Count){
-    var p=project.pieces[selectedIndex];
+   float contentH=selected?1080f:810f;
+   Rect view=new Rect(x+12,top+92,panelW-25,Mathf.Max(120f,panelH-111f));
+   inspectorScroll=GUI.BeginScrollView(view,inspectorScroll,new Rect(0,0,310,contentH));
+   const float ox=7f;
+   float y=12f;
+   if(selected){
+    var piece=project.pieces[selectedIndex];
+    GUI.Label(new Rect(ox,y,284,24),"POSITION & ARRANGEMENT",miniStyle);y+=30;
+    GUI.Label(new Rect(ox,y,286,50),"Drag the object in the scene, or use the move controls hovering above it.",captionStyle);y+=54;
     if(multiSelection.Count>1){
-     Label(new Rect(x+23,183,283,23),multiSelection.Count+" objects selected");
-     if(Button(new Rect(x+23,188,137,30),"Group"))GroupSelected();
-     if(Button(new Rect(x+169,188,137,30),"Ungroup"))UngroupSelected();
+     GUI.Label(new Rect(ox,y,290,23),multiSelection.Count+" objects selected",sectionStyle);y+=29;
+     if(Button(new Rect(ox,y,139,38),"GROUP"))GroupSelected();
+     if(Button(new Rect(ox+148,y,139,38),"UNGROUP"))UngroupSelected();
+     y+=49;
     }
-    Label(new Rect(x+23,y,283,25),"POSITION (meters)");y+=27;
-    float nextX=FloatField(new Rect(x+23,y,88,40),0,p.position.x);
-    float nextY=FloatField(new Rect(x+120,y,88,40),1,p.position.y);
-    float nextZ=FloatField(new Rect(x+217,y,88,40),2,p.position.z);
-    y+=41;
-    Label(new Rect(x+23,y+8,283,25),"SIZE (meters)");y+=40;
-    float sx=FloatField(new Rect(x+23,y,88,40),3,p.scale.x);
-    float sy=FloatField(new Rect(x+120,y,88,40),4,p.scale.y);
-    float sz=FloatField(new Rect(x+217,y,88,40),5,p.scale.z);
+    if(Button(new Rect(ox,y,139,40),"DUPLICATE"))DuplicateSelection();
+    if(Button(new Rect(ox+148,y,139,40),"ROTATE 45°"))RotateSelection();
     y+=51;
-    if(IsRoomFloor(selectedIndex)){
-     Label(new Rect(x+23,y,283,27),"ROOM  -  width / depth");
-     y+=29;
-     if(Button(new Rect(x+23,y,283,42),"Resize Entire Room")){
-      ResizeRoom(selectedIndex,new Vector3(nextX,nextY,nextZ),sx,sz);
+    if(piece.kind=="imported"||piece.kind=="couch"||piece.kind=="table"){
+     GUI.Label(new Rect(ox,y,280,27),"FURNITURE TRANSFORM",miniStyle);y+=31;
+     if(Button(new Rect(ox,y,90,37),"↶ 15°"))RotateSelected(-15f);
+     if(Button(new Rect(ox+98,y,90,37),"15° ↷"))RotateSelected(15f);
+     if(Button(new Rect(ox+196,y,90,37),"+10%"))ResizeSelected(1.1f);
+     y+=45;
+     if(Button(new Rect(ox,y,138,37),"SCALE −10%"))ResizeSelected(.9f);
+     if(Button(new Rect(ox+148,y,138,37),furnitureSnap?"SNAP  ON":"SNAP  OFF"))
+      furnitureSnap=!furnitureSnap;
+     y+=51;
+    }
+    if(piece.kind=="wall"){
+     GUI.Label(new Rect(ox,y,280,28),"WALL WORKSHOP",miniStyle);y+=35;
+     if(Button(new Rect(ox,y,286,40),"STANDARD WALL HEIGHT"))SetStandardWallHeight();
+     y+=47;
+     if(Button(new Rect(ox,y,138,36),"COPY SIZE"))CopyWallSize();
+     if(Button(new Rect(ox+148,y,138,36),"PASTE SIZE"))PasteWallSize();
+     y+=43;
+     if(Button(new Rect(ox,y,286,40),"BUILD WITH THIS WALL"))UseSelectedWallForBuilding();
+     y+=51;
+    }
+    if(piece.kind=="floor"&&IsRoomFloor(selectedIndex)){
+     if(Button(new Rect(ox,y,286,41),"RESIZE ENTIRE ROOM"))inspectorAdvanced=true;
+     y+=49;
+     GUI.Label(new Rect(ox,y,285,42),"Room dimensions are edited together with connected walls.",smallStyle);
+     y+=42;
+    }
+    if(piece.kind=="light-point"||piece.kind=="light-spot"){
+     GUI.Label(new Rect(ox,y,280,26),"LIGHTING",miniStyle);y+=33;
+     GUI.Label(new Rect(ox,y,280,24),"Brightness  ·  "+piece.lightIntensity.ToString("F1"),smallStyle);y+=26;
+     float brightness=GUI.HorizontalSlider(new Rect(ox+8,y,268,20),piece.lightIntensity,0f,8f);y+=31;
+     GUI.Label(new Rect(ox,y,280,24),"Range  ·  "+piece.lightRange.ToString("F1")+" m",smallStyle);y+=26;
+     float distance=GUI.HorizontalSlider(new Rect(ox+8,y,268,20),piece.lightRange,1f,30f);y+=38;
+     if(Mathf.Abs(brightness-piece.lightIntensity)>.001f||Mathf.Abs(distance-piece.lightRange)>.001f){
+      piece.lightIntensity=brightness;piece.lightRange=distance;
+      Light light=objects[selectedIndex].GetComponent<Light>();
+      if(light!=null){light.intensity=brightness;light.range=distance;}
      }
+     if(Button(new Rect(ox,y,286,39),"TOGGLE WARM / WHITE")){
+      RememberChange();
+      piece.lightColor=piece.lightColor.r>piece.lightColor.b+.15f?
+       Color.white:new Color(1f,.78f,.51f);
+      Light component=objects[selectedIndex].GetComponent<Light>();
+      if(component!=null)component.color=piece.lightColor;
+     }
+     y+=51;
+    }
+    if(Button(new Rect(ox,y,286,40),inspectorAdvanced?"HIDE EXACT VALUES":"EXACT POSITION & SIZE")){
+     inspectorAdvanced=!inspectorAdvanced;
+    }
+    y+=46;
+    if(inspectorAdvanced){
+     GUI.Label(new Rect(ox,y,280,24),"POSITION  /  METERS",miniStyle);y+=29;
+     float px=FloatField(new Rect(ox,y,90,40),0,piece.position.x);
+     float py=FloatField(new Rect(ox+98,y,90,40),1,piece.position.y);
+     float pz=FloatField(new Rect(ox+196,y,90,40),2,piece.position.z);
      y+=50;
+     GUI.Label(new Rect(ox,y,280,24),"SIZE  /  METERS",miniStyle);y+=29;
+     float sx=FloatField(new Rect(ox,y,90,40),3,piece.scale.x);
+     float sy=FloatField(new Rect(ox+98,y,90,40),4,piece.scale.y);
+     float sz=FloatField(new Rect(ox+196,y,90,40),5,piece.scale.z);
+     y+=48;
+     if(Button(new Rect(ox,y,286,43),"APPLY DIMENSIONS")){
+      if(IsRoomFloor(selectedIndex)){ResizeRoom(selectedIndex,new Vector3(px,py,pz),sx,sz);}
+      else{
+       RememberChange();
+       piece.position=new Vector3(px,py,pz);
+       piece.scale=new Vector3(Mathf.Max(.02f,sx),Mathf.Max(.02f,sy),Mathf.Max(.02f,sz));
+       if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
+       objects[selectedIndex]=Create(piece);
+       editingPiece=-1;RefreshSelectionOutline();
+       Notice("Dimensions updated");
+      }
+     }
+     y+=56;
     }
-    if(Button(new Rect(x+23,y,283,45),"Apply Dimensions")){
-     if(IsRoomFloor(selectedIndex)){ResizeRoom(selectedIndex,new Vector3(nextX,nextY,nextZ),sx,sz);return;}
-     RememberChange();
-     p.position=new Vector3(nextX,nextY,nextZ);
-     p.scale=new Vector3(Mathf.Max(.02f,sx),Mathf.Max(.02f,sy),Mathf.Max(.02f,sz));
-     if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
-     objects[selectedIndex]=Create(p);
-     editingPiece=-1;
-     RefreshSelectionOutline();
-     Notice("Object dimensions updated");
-    }
-    y+=56;
-    if(Button(new Rect(x+23,y,137,43),"Duplicate"))DuplicateSelection();
-    if(Button(new Rect(x+169,y,137,43),"Rotate 45°"))RotateSelection();
-    y+=51;
-    if(p.kind=="imported"||p.kind=="couch"||p.kind=="table"){
-     if(Button(new Rect(x+23,y,88,36),"↺ 15°"))RotateSelected(-15f);
-     if(Button(new Rect(x+120,y,88,36),"15° ↻"))RotateSelected(15f);
-     if(Button(new Rect(x+217,y,88,36),"1.1×"))ResizeSelected(1.1f);
-     y+=45;
-     if(Button(new Rect(x+23,y,137,36),"Scale −10%"))ResizeSelected(.9f);
-     if(Button(new Rect(x+169,y,137,36),furnitureSnap?"Snap: ON":"Snap: OFF"))furnitureSnap=!furnitureSnap;
-     y+=45;
-    }
-    if(p.kind=="light-point"||p.kind=="light-spot"){
-    Label(new Rect(x+23,y,282,25),"BRIGHTNESS "+p.lightIntensity.ToString("F2"));y+=26;
-    float intensity=GUI.HorizontalSlider(new Rect(x+23,y,282,24),p.lightIntensity,0f,8f);y+=35;
-    Label(new Rect(x+23,y,282,25),"RANGE "+p.lightRange.ToString("F1")+" m");y+=26;
-    float range=GUI.HorizontalSlider(new Rect(x+23,y,282,24),p.lightRange,1f,30f);y+=35;
-    if(Mathf.Abs(intensity-p.lightIntensity)>.001f||Mathf.Abs(range-p.lightRange)>.001f){
-     p.lightIntensity=intensity;p.lightRange=range;
-     Light component=objects[selectedIndex].GetComponent<Light>();
-     if(component!=null){component.intensity=intensity;component.range=range;}
-    }
-    if(Button(new Rect(x+23,y,283,34),"Light Color: Warm / White")){
-     RememberChange();
-     p.lightColor=p.lightColor.r>p.lightColor.b+.15f?Color.white:new Color(1f,.78f,.51f);
-     Light component=objects[selectedIndex].GetComponent<Light>();
-     if(component!=null)component.color=p.lightColor;
-    }
-    y+=40;
-   }
-   if(p.kind=="wall"){
-     if(Button(new Rect(x+23,y,283,42),"Standard VR Height  ·  2.70 m"))SetStandardWallHeight();
-     y+=49;
-     if(Button(new Rect(x+23,y,137,42),"Copy Size"))CopyWallSize();
-     if(Button(new Rect(x+169,y,137,42),"Paste Size"))PasteWallSize();
-     y+=49;
-     if(Button(new Rect(x+23,y,283,42),"Build With This Wall"))UseSelectedWallForBuilding();
-     y+=49;
-    }
-    if(Button(new Rect(x+23,y,283,43),"Delete Selected"))DeleteSelection();
+    if(GUI.Button(new Rect(ox,y,286,40),"DELETE SELECTED",destructiveStyle))DeleteSelection();
    }else{
-    Label(new Rect(x+23,y,283,45),"Select a placed object to edit it.");
-    y+=45;
-    Label(new Rect(x+23,y,282,30),"Building level: "+(buildingLevel+1));y+=29;
-    if(Button(new Rect(x+23,y,137,39),"Level -"))buildingLevel=Mathf.Max(0,buildingLevel-1);
-    if(Button(new Rect(x+169,y,137,39),"Level +"))buildingLevel=Mathf.Min(8,buildingLevel+1);
-    y+=52;
-    Label(new Rect(x+23,y,282,30),"Grid snapping: "+gridSize.ToString("F2")+" m");
-    y+=28;
-    gridSize=GUI.HorizontalSlider(new Rect(x+23,y,282,24),gridSize,.25f,2f);y+=34;
+    GUI.Label(new Rect(ox,y,286,47),"Choose a tool, then click or drag in the world to start creating.",captionStyle);y+=59;
+    GUI.Label(new Rect(ox,y,286,26),"BUILDING LEVEL",miniStyle);y+=34;
+    if(Button(new Rect(ox,y,139,40),"LEVEL  −"))buildingLevel=Mathf.Max(0,buildingLevel-1);
+    if(Button(new Rect(ox+148,y,139,40),"LEVEL  +"))buildingLevel=Mathf.Min(8,buildingLevel+1);
+    y+=47;
+    GUI.Label(new Rect(ox,y,280,30),"Currently: Floor "+(buildingLevel+1),smallStyle);y+=43;
+    GUI.Label(new Rect(ox,y,280,24),"GRID SNAP  ·  "+gridSize.ToString("F2")+" m",miniStyle);y+=28;
+    gridSize=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),gridSize,.25f,2f);y+=44;
     if(currentTool==Tool.Wall){
-     Label(new Rect(x+23,y,282,29),"Wall height: "+wallHeight.ToString("F2")+" m");y+=25;
-     wallHeight=GUI.HorizontalSlider(new Rect(x+17,y,232,20),wallHeight,1.5f,5f);y+=39;
-     Label(new Rect(x+17,y,220,25),"Thickness: "+wallThickness.ToString("F2")+" m");y+=25;
-     wallThickness=GUI.HorizontalSlider(new Rect(x+17,y,232,20),wallThickness,.08f,.5f);
-     y+=34;
-     if(Button(new Rect(x+23,y,283,40),"Reset Wall Defaults"))ResetWallDefaults();
+     GUI.Label(new Rect(ox,y,282,26),"WALL SETTINGS",miniStyle);y+=32;
+     GUI.Label(new Rect(ox,y,282,24),"Height "+wallHeight.ToString("F2")+" m",smallStyle);y+=26;
+     wallHeight=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),wallHeight,1.5f,5f);y+=39;
+     GUI.Label(new Rect(ox,y,282,24),"Thickness "+wallThickness.ToString("F2")+" m",smallStyle);y+=26;
+     wallThickness=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),wallThickness,.08f,.5f);y+=44;
+     if(Button(new Rect(ox,y,286,41),"RESET WALL DEFAULTS"))ResetWallDefaults();
+     y+=46;
+    }
+    if(currentTool==Tool.Room){
+     GUI.Label(new Rect(ox,y,282,25),"ROOM SHAPE",miniStyle);y+=33;
+     if(Button(new Rect(ox,y,286,41),polygonMode?"CUSTOM CORNERS":"RECTANGLE")){
+      polygonMode=!polygonMode;polygonCorners.Clear();
+     }
+     y+=47;
+     GUI.Label(new Rect(ox,y,282,51),"Custom: click corners and press Enter to complete.",smallStyle);y+=55;
     }
     if(currentTool==Tool.Imported){
-     y+=28;
-     Label(new Rect(x+17,y,220,25),"Object scale: "+importedScale.ToString("F2")+"x");y+=29;
-     importedScale=GUI.HorizontalSlider(new Rect(x+23,y,282,24),importedScale,.1f,4f);y+=33;
-     Label(new Rect(x+17,y,220,25),"Rotation: "+importedRotation.ToString("F0")+"°");y+=27;
-     importedRotation=GUI.HorizontalSlider(new Rect(x+17,y,232,18),importedRotation,0f,360f);
+     GUI.Label(new Rect(ox,y,282,25),"FURNITURE PLACEMENT",miniStyle);y+=33;
+     GUI.Label(new Rect(ox,y,282,22),"Scale "+importedScale.ToString("F2")+"x",smallStyle);y+=27;
+     importedScale=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),importedScale,.1f,4f);y+=37;
+     GUI.Label(new Rect(ox,y,282,24),"Rotation "+importedRotation.ToString("F0")+"°",smallStyle);y+=27;
+     importedRotation=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),importedRotation,0f,360f);y+=40;
     }
+    if(currentTool==Tool.Light){
+     GUI.Label(new Rect(ox,y,282,25),"NEW LIGHT",miniStyle);y+=32;
+     GUI.Label(new Rect(ox,y,282,22),"Intensity "+lightBrightness.ToString("F1"),smallStyle);y+=26;
+     lightBrightness=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),lightBrightness,0f,8f);y+=37;
+    }
+    GUI.Label(new Rect(ox,y,282,24),"AVATAR PREVIEW HEIGHT",miniStyle);y+=28;
+    GUI.Label(new Rect(ox,y,280,23),avatarHeight.ToString("F2")+" m",smallStyle);y+=24;
+    avatarHeight=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),avatarHeight,1.2f,2.2f);
    }
-   if(selectedIndex>=0)return;
-   float bottom=h-345;
-   Label(new Rect(x+23,bottom,282,30),"AVATAR SCALE PREVIEW");
-   Label(new Rect(x+23,bottom+33,282,30),avatarHeight.ToString("F2")+" m tall");
-   avatarHeight=GUI.HorizontalSlider(new Rect(x+23,bottom+73,282,24),avatarHeight,1.2f,2.2f);
+   GUI.EndScrollView();
   }
   float FloatField(Rect r,int index,float value){
    dimensionDraft[index]=GUI.TextField(r,dimensionDraft[index]??value.ToString("F2"),regularStyle);
