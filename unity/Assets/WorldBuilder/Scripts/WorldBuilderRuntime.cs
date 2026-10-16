@@ -705,7 +705,7 @@ namespace WorldBuilder {
    float length=original.scale.x,height=original.scale.y;
    float width=window?1.2f:.9f;
    if(length<width+.3f||height<1.6f){Notice("Wall is too small for this opening");return;}
-   Vector3 local=Quaternion.Inverse(original.rotation)*(hit.point-original.position);
+   Vector3 local=Quaternion.Inverse(original.rotation)*(wallPoint-original.position);
    float center=Mathf.Clamp(local.x,-length*.5f+width*.5f+.08f,length*.5f-width*.5f-.08f);
    float left=center-width*.5f,right=center+width*.5f;
    float bottom=window?.85f:0f,openingHeight=window?Mathf.Min(1.15f,height-1.1f):Mathf.Min(2.1f,height-.15f);
@@ -725,6 +725,21 @@ namespace WorldBuilder {
    part(right,length*.5f,0,height,"wall");
    part(left,right,bottom+openingHeight,height,"wall");
    if(window)part(left,right,0,bottom,"wall");
+   // Thin contrasting trim remains visible once the preview disappears.
+   // It sits at the perimeter, leaving the doorway/window opening unobstructed.
+   float rim=.055f,frameDepth=Mathf.Max(.10f,t+.05f);
+   Action<float,float,float,float> trim=(fromX,toX,fromY,toY)=>{
+    if(toX<=fromX||toY<=fromY)return;
+    Vector3 localPos=new Vector3((fromX+toX)*.5f,(fromY+toY)*.5f-height*.5f,0f);
+    Piece frame=new Piece("opening-frame",original.position+original.rotation*localPos,
+      new Vector3(toX-fromX,toY-fromY,frameDepth),original.rotation);
+    frame.roomId=original.roomId;
+    AddWithoutHistory(frame);
+   };
+   trim(left-rim,left,bottom,bottom+openingHeight);
+   trim(right,right+rim,bottom,bottom+openingHeight);
+   trim(left-rim,right+rim,bottom+openingHeight,bottom+openingHeight+rim);
+   if(window)trim(left-rim,right+rim,bottom-rim,bottom);
    // The gap remains an actual opening with colliders on surrounding pieces.
    Notice(window?"Window opening created":"Door opening created");
   }
@@ -753,7 +768,9 @@ namespace WorldBuilder {
    obj.transform.SetPositionAndRotation(displayPosition,piece.rotation);
    obj.transform.localScale=piece.scale;
    Material material=piece.kind=="wall"?wallMaterial:piece.kind=="floor"?floorMaterial:furnitureMaterial;
-   if(material!=null)obj.GetComponent<Renderer>().sharedMaterial=material;
+   if(piece.kind=="opening-frame"){
+    obj.GetComponent<Renderer>().material.color=new Color(.15f,.75f,.94f);
+   }else if(material!=null)obj.GetComponent<Renderer>().sharedMaterial=material;
    else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.89f,.91f,.94f):piece.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
    return obj;
   }
