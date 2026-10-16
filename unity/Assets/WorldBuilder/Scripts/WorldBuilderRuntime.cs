@@ -87,7 +87,7 @@ namespace WorldBuilder {
      browserProcess.Kill();browserProcess.Dispose();browserProcess=null;
      showAssets=false;Notice("Assets browser closed");return;
     }
-    string exe=Path.Combine(Path.GetDirectoryName(Application.dataPath),"WorldBuilderAssetBrowser.exe");
+    string exe=Path.Combine(Application.dataPath,"AssetBrowser","WorldBuilderAssetBrowser.exe");
     if(!File.Exists(exe)){Notice("Asset browser component is missing. Reinstall the complete update.");return;}
     IntPtr hwnd=System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
     if(hwnd==IntPtr.Zero){Notice("Unable to locate WorldBuilder window");return;}
