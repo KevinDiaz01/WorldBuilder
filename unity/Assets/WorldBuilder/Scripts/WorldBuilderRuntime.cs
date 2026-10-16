@@ -166,6 +166,7 @@ namespace WorldBuilder {
   }
   void DeleteSelection(){
    if(selectedIndex<0||selectedIndex>=objects.Count)return;
+   RememberChange();
    if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
    objects.RemoveAt(selectedIndex);
    project.pieces.RemoveAt(selectedIndex);
@@ -250,6 +251,9 @@ namespace WorldBuilder {
     preview.transform.position=p+Vector3.up*.5f;
     preview.transform.localScale=Vector3.one*importedScale;
     preview.transform.rotation=Quaternion.Euler(0,importedRotation,0);
+   }else if(currentTool==Tool.Door||currentTool==Tool.Window){
+    preview.transform.position=p+Vector3.up*(currentTool==Tool.Window?1.4f:1f);
+    preview.transform.localScale=new Vector3(currentTool==Tool.Window?1.2f:.9f,currentTool==Tool.Window?1.15f:2f,.08f);
    }else if(currentTool==Tool.Couch||currentTool==Tool.Table){
     bool sofa=currentTool==Tool.Couch;
     preview.transform.position=p+Vector3.up*.4f;
@@ -365,7 +369,7 @@ namespace WorldBuilder {
     showExport=false;
    }catch(Exception e){Debug.LogException(e);Notice("Export failed: "+e.Message);}
   }
-  void NewProject(){SelectObject(-1);project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
+  void NewProject(){RememberChange();SelectObject(-1);project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
   string ProjectsFolder(){string p=Path.Combine(Application.persistentDataPath,"Projects");Directory.CreateDirectory(p);return p;}
   void SaveAsNamed(string name){
    try{string safe=string.Join("_",name.Split(Path.GetInvalidFileNameChars()));if(string.IsNullOrWhiteSpace(safe))safe="My World";
@@ -410,6 +414,7 @@ namespace WorldBuilder {
    if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
    if(Input.GetKeyDown(KeyCode.Alpha4))SelectTool(Tool.Table);
    if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
+   if(Input.GetKeyDown(KeyCode.Alpha6))SelectTool(Tool.Room);
    if(Input.GetKeyDown(KeyCode.Escape)){
     if(showConfirmExit)showConfirmExit=false;
     else if(showImport||showExport||showProjects||showSettings||showHelp){
@@ -422,6 +427,7 @@ namespace WorldBuilder {
     if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.D))DuplicateSelection();
     if(Input.GetKeyDown(KeyCode.R)&&currentTool==Tool.Select)RotateSelection();
     if(Input.GetKeyDown(KeyCode.Delete)&&currentTool==Tool.Select)DeleteSelection();
+    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Y))RedoLast();
    }
    if(draggingSelection){
     if(Input.GetMouseButtonUp(0)){draggingSelection=false;Notice("Object moved");}
@@ -456,6 +462,7 @@ namespace WorldBuilder {
     return;
    }
    if(currentTool==Tool.Erase) { Erase(p);return; }
+   if(currentTool==Tool.Door||currentTool==Tool.Window){AddOpening(currentTool==Tool.Window);return;}
    if(currentTool==Tool.Imported){
     if(string.IsNullOrEmpty(importedId)){Notice("Import an OBJ first");return;}
     var item=new Piece("imported",p,Vector3.one*importedScale,Quaternion.Euler(0,importedRotation,0));
@@ -467,9 +474,10 @@ namespace WorldBuilder {
    if(!anchor.HasValue){anchor=p;return;}
    Vector3 start=anchor.Value;anchor=null;
    if(Vector3.Distance(start,p)<.01f)return;
+   if(currentTool==Tool.Room){MakeRoom(start,p);return;}
    if(currentTool==Tool.Wall){
-    Vector3 diff=p-start;
-    Add(new Piece("wall",(start+p)*.5f+Vector3.up*wallHeight*.5f,new Vector3(diff.magnitude,wallHeight,wallThickness),Quaternion.Euler(0,-Mathf.Atan2(diff.z,diff.x)*Mathf.Rad2Deg,0)));
+    start=SnapToExistingEnd(start);p=SnapToExistingEnd(p);
+    if(Vector3.Distance(start,p)>.01f)Add(WallBetween(start,p));
    }else{
     Vector3 delta=p-start;
     Add(new Piece("floor",(start+p)*.5f+Vector3.up*FloorCenter,new Vector3(Mathf.Max(Mathf.Abs(delta.x),gridSize),FloorThickness,Mathf.Max(Mathf.Abs(delta.z),gridSize)),Quaternion.identity));
@@ -583,7 +591,7 @@ namespace WorldBuilder {
     var collider=objects[i].GetComponent<Collider>();
     Vector3 closest=collider.ClosestPoint(point+Vector3.up*.5f);
     if(Vector3.Distance(closest,point+Vector3.up*.5f)<1f){
-     Destroy(objects[i]);objects.RemoveAt(i);project.pieces.RemoveAt(i);return;
+     RememberChange();Destroy(objects[i]);objects.RemoveAt(i);project.pieces.RemoveAt(i);return;
     }
    }
   }
@@ -727,12 +735,17 @@ namespace WorldBuilder {
    float step=45f;
    for(int k=0;k<names.Length;k++){
     bool active=(k==0&&currentTool==Tool.Select)||(k==1&&currentTool==Tool.Wall)||
-      (k==2&&currentTool==Tool.Floor)||(k==8&&currentTool==Tool.Imported);
+      (k==2&&currentTool==Tool.Floor)||(k==3&&currentTool==Tool.Room)||
+      (k==4&&currentTool==Tool.Door)||(k==5&&currentTool==Tool.Window)||
+      (k==8&&currentTool==Tool.Imported);
     float yy=y+47+k*step;
     if(Button(new Rect(19,yy,90,step-5),names[k],active)){
      if(k==0)SelectTool(Tool.Select);
      else if(k==1)SelectTool(Tool.Wall);
      else if(k==2)SelectTool(Tool.Floor);
+     else if(k==3)SelectTool(Tool.Room);
+     else if(k==4)SelectTool(Tool.Door);
+     else if(k==5)SelectTool(Tool.Window);
      else if(k==8){creativeMode=1;catalogCategory=0;showCatalog=true;Notice("Choose a model from My Assets");}
      else ComingSoon(names[k]);
     }
@@ -767,6 +780,7 @@ namespace WorldBuilder {
     float sz=FloatField(new Rect(x+217,y,88,40),5,p.scale.z);
     y+=51;
     if(Button(new Rect(x+23,y,283,45),"Apply Dimensions")){
+     RememberChange();
      p.position=new Vector3(nextX,nextY,nextZ);
      p.scale=new Vector3(Mathf.Max(.02f,sx),Mathf.Max(.02f,sy),Mathf.Max(.02f,sz));
      if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
