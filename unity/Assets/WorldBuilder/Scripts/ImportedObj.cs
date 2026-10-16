@@ -55,12 +55,7 @@ namespace WorldBuilder {
    }
   }
   static Shader MeshShader(){
-   Shader shader=Shader.Find("Standard");
-   if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
-   if(shader==null)shader=Shader.Find("Legacy Shaders/Diffuse");
-   if(shader==null)shader=Shader.Find("Sprites/Default");
-   if(shader==null)throw new InvalidDataException("No compatible mesh shader available");
-   return shader;
+   return WorldBuilderShaders.Lit;
   }
   public static GameObject Load(string path){
    if(!File.Exists(path))throw new FileNotFoundException("Imported OBJ file is missing",path);
