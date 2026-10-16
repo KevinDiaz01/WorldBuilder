@@ -80,6 +80,7 @@ namespace WorldBuilder {
   private string selectedTextureId="";
   private float selectedTextureTile=1f;
   private readonly Dictionary<string,Texture2D> materialImages=new Dictionary<string,Texture2D>();
+  private readonly Dictionary<string,Texture2D> associatedImages=new Dictionary<string,Texture2D>();
   private static readonly string[] FinishNames={"Default","Warm White","Stone","Charcoal","Sand","Terracotta","Sage","Ocean"};
   private static readonly Color[] FinishColors={Color.white,new Color(.91f,.88f,.80f),new Color(.58f,.62f,.63f),new Color(.19f,.23f,.28f),new Color(.77f,.67f,.51f),new Color(.67f,.34f,.26f),new Color(.38f,.52f,.43f),new Color(.22f,.47f,.62f)};
   private Vector2 catalogScroll;
@@ -211,6 +212,8 @@ namespace WorldBuilder {
    modelThumbnails.Clear();
    foreach(var tex in materialImages.Values)if(tex!=null)Destroy(tex);
    materialImages.Clear();
+   foreach(var tex in associatedImages.Values)if(tex!=null)Destroy(tex);
+   associatedImages.Clear();
   }
   void SelectObject(int index){
    selectedIndex=index;
@@ -1452,6 +1455,29 @@ namespace WorldBuilder {
     return tex;
    }catch(Exception ex){Diagnostics.Add("ERROR","Material image unreadable: "+ex.Message);return null;}
   }
+  Texture2D GetAssociatedTexture(string assetId,string filename){
+   string path=AssetHub.ModelTexturePath(assetId,filename);
+   if(path==null)return null;
+   if(associatedImages.TryGetValue(path,out Texture2D cached))return cached;
+   try{
+    var image=new Texture2D(2,2,TextureFormat.RGBA32,false);
+    if(!image.LoadImage(File.ReadAllBytes(path))){Destroy(image);return null;}
+    image.wrapMode=TextureWrapMode.Repeat;
+    associatedImages[path]=image;
+    return image;
+   }catch(Exception ex){Diagnostics.Add("WARN","Model texture failed to open: "+ex.Message);return null;}
+  }
+  void SetImportedFinish(Piece piece,string finish){
+   if(piece==null||piece.kind!="imported"||piece.finish==finish)return;
+   int index=selectedIndex;
+   if(index<0||index>=objects.Count)return;
+   RememberChange();
+   piece.finish=finish;
+   if(objects[index]!=null)Destroy(objects[index]);
+   objects[index]=Create(piece);
+   RefreshSelectionOutline();
+   Notice(finish==""?"Restored original model materials":"Applied model-specific texture");
+  }
   // Imported OBJ/GLB materials live on child mesh renderers, not on the
   // parent GameObject. Preserve each material by default and replace it only
   // when the user explicitly paints the asset.
@@ -1461,6 +1487,9 @@ namespace WorldBuilder {
    if(piece.finish.StartsWith("texture:",StringComparison.Ordinal)){
     image=GetMaterialImage(piece.finish.Substring(8));
     if(image==null){Diagnostics.Add("WARN","Missing paint texture on imported model: "+piece.finish);return;}
+   }else if(piece.finish.StartsWith("assettexture:",StringComparison.Ordinal)){
+    image=GetAssociatedTexture(piece.assetId,piece.finish.Substring("assettexture:".Length));
+    if(image==null){Diagnostics.Add("WARN","Model's own texture is missing: "+piece.finish);return;}
    }else{
     int index=Array.IndexOf(FinishNames,piece.finish);
     if(index<0)return;
@@ -2079,7 +2108,7 @@ namespace WorldBuilder {
     Piece selectedPiece=project.pieces[selectedIndex];
     contentH=270f;
     if(multiSelection.Count>1)contentH+=82f;
-    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?320f:130f;
+    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?560f:130f;
     if(selectedPiece.kind=="wall")contentH+=176f;
     if(selectedPiece.kind=="water")contentH+=102f;
     if(selectedPiece.kind=="light-point"||selectedPiece.kind=="light-spot")contentH+=215f;
@@ -2136,6 +2165,27 @@ namespace WorldBuilder {
         catch(Exception ex){Notice("Could not sort model: "+ex.Message);}
        }
        y+=156;
+       var ownTextures=AssetHub.ModelTextures(id);
+       GUI.Label(new Rect(ox,y,282,24),"TEXTURES WITH THIS MODEL",miniStyle);y+=29;
+       if(Button(new Rect(ox,y,286,34),"RESTORE ORIGINAL MATERIALS"))
+        SetImportedFinish(piece,"");
+       y+=42;
+       if(ownTextures.Count==0){
+        GUI.Label(new Rect(ox,y,280,42),
+         "No separate image textures were included with this model.",captionStyle);y+=48;
+       }else{
+        int max=Mathf.Min(ownTextures.Count,4);
+        for(int k=0;k<max;k++){
+         string texture=ownTextures[k];
+         if(Button(new Rect(ox,y,286,34),"APPLY  "+(texture.Length>24?texture.Substring(0,21)+"...":texture)))
+          SetImportedFinish(piece,"assettexture:"+texture);
+         y+=38;
+        }
+        if(ownTextures.Count>4){
+         GUI.Label(new Rect(ox,y,280,25),
+          (ownTextures.Count-4)+" more textures in My Assets folder",captionStyle);y+=30;
+        }
+       }
       }
      }
     }
