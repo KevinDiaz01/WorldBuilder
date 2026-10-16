@@ -80,6 +80,8 @@ namespace WorldBuilder {
   private GameObject importedGhost;
   private string ghostAssetId="";
   private bool furnitureSnap=true;
+  private Rect objectHandleArea;
+  private bool objectHandleVisible=false;
   private float nextRecoveryTime=0f;
   private const float RecoveryInterval=120f;
   private string importedId;
@@ -108,7 +110,7 @@ namespace WorldBuilder {
    float scale=UIScale;
    float w=Screen.width/scale,h=Screen.height/scale;
    Vector2 p=new Vector2(Input.mousePosition.x/scale,(Screen.height-Input.mousePosition.y)/scale);
-   return p.y<88f||(showCatalog&&p.y>h-272f)||
+   return (objectHandleVisible&&objectHandleArea.Contains(p))||p.y<88f||(showCatalog&&p.y>h-272f)||
      (!showCatalog&&p.y>h-70f&&p.x<480f)||
      (showLibrary&&p.x<122f&&p.y>=94f&&p.y<735f)||
      (showInspector&&p.x>w-359f&&p.y>=94f&&p.y<h-175f)||
@@ -154,6 +156,7 @@ namespace WorldBuilder {
   }
   void SelectObject(int index){
    selectedIndex=index;
+   if(index<0)objectHandleVisible=false;
    if(index>=0)showInspector=true;
    editingPiece=-1;
    RefreshSelectionOutline();
@@ -233,6 +236,7 @@ namespace WorldBuilder {
    RefreshSelectionOutline();
   }
   void DrawObjectHandles(){
+   objectHandleVisible=false;
    if(currentTool!=Tool.Select||selectedIndex<0||selectedIndex>=objects.Count||objects[selectedIndex]==null||sceneCamera==null)return;
    if(showPause||showHelp||showSettings||showDiagnostics||showImport||showExport||showProjects)return;
    var renderers=objects[selectedIndex].GetComponentsInChildren<Renderer>();
@@ -244,7 +248,9 @@ namespace WorldBuilder {
    if(screen.z<=0f)return;
    float px=screen.x/UIScale,py=(Screen.height-screen.y)/UIScale;
    if(px<130f||py<92f||px>Screen.width/UIScale-370f||py>Screen.height/UIScale-290f)return;
-   GUI.Box(new Rect(px-92,py-65,184,120),"",panelStyle);
+   objectHandleArea=new Rect(px-92,py-65,184,120);
+   objectHandleVisible=true;
+   GUI.Box(objectHandleArea,"",panelStyle);
    Label(new Rect(px-78,py-56,165,25),"MOVE · 0.25 m");
    if(Button(new Rect(px-88,py-25,53,34),"X−"))NudgeSelection(new Vector3(-.25f,0,0));
    if(Button(new Rect(px-30,py-25,53,34),"X+"))NudgeSelection(new Vector3(.25f,0,0));
