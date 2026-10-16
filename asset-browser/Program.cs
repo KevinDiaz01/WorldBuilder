@@ -42,7 +42,9 @@ internal sealed class BrowserWindow : Form {
   FormBorderStyle=FormBorderStyle.None;
   ShowInTaskbar=false;
   BackColor=Color.FromArgb(26,32,40);
-  var back=new ToolStripButton("←"),forward=new ToolStripButton("→"),reload=new ToolStripButton("↻");
+  var back=new ToolStripButton("←");
+  var forward=new ToolStripButton("→");
+  var reload=new ToolStripButton("↻");
   back.Click+=(_,_)=>{if(view.CanGoBack)view.GoBack();};
   forward.Click+=(_,_)=>{if(view.CanGoForward)view.GoForward();};
   reload.Click+=(_,_)=>view.Reload();
