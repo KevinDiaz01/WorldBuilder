@@ -53,6 +53,8 @@ namespace WorldBuilder {
   private Vector2 catalogScroll;
   private string catalogSearch="";
   private int editingPiece=-1;
+  private Vector3? copiedWallSize;
+  private const float StandardWallHeight=2.7f;
   private readonly string[] dimensionDraft=new string[6];
   private string status="Ready to build";
   private float statusUntil;
@@ -169,6 +171,39 @@ namespace WorldBuilder {
    objects[selectedIndex].transform.rotation=item.rotation;
    RefreshSelectionOutline();
    Notice("Rotated 45 degrees");
+  }
+  void UpdateWallSize(int index,Vector3 requestedSize){
+   if(index<0||index>=project.pieces.Count||project.pieces[index].kind!="wall")return;
+   Piece wall=project.pieces[index];
+   Vector3 size=new Vector3(Mathf.Max(.1f,requestedSize.x),Mathf.Max(.1f,requestedSize.y),
+     Mathf.Max(.04f,requestedSize.z));
+   RememberChange();
+   // Keep the bottom of the wall at the same height as the dimensions change.
+   float baseY=wall.position.y-wall.scale.y*.5f;
+   wall.scale=size;
+   wall.position.y=baseY+size.y*.5f;
+   if(objects[index]!=null)Destroy(objects[index]);
+   objects[index]=Create(wall);
+   editingPiece=-1;
+   RefreshSelectionOutline();
+  }
+  void SetStandardWallHeight(){
+   if(selectedIndex<0||project.pieces[selectedIndex].kind!="wall")return;
+   Vector3 size=project.pieces[selectedIndex].scale;
+   size.y=StandardWallHeight;
+   UpdateWallSize(selectedIndex,size);
+   Notice("Wall set to standard 2.70 m height");
+  }
+  void CopyWallSize(){
+   if(selectedIndex<0||project.pieces[selectedIndex].kind!="wall")return;
+   copiedWallSize=project.pieces[selectedIndex].scale;
+   Notice("Wall dimensions copied. Select another wall and paste.");
+  }
+  void PasteWallSize(){
+   if(!copiedWallSize.HasValue){Notice("Copy a wall size first");return;}
+   if(selectedIndex<0||project.pieces[selectedIndex].kind!="wall")return;
+   UpdateWallSize(selectedIndex,copiedWallSize.Value);
+   Notice("Wall size applied (length, height and thickness)");
   }
   void DeleteSelection(){
    if(selectedIndex<0||selectedIndex>=objects.Count)return;
@@ -887,6 +922,13 @@ namespace WorldBuilder {
     if(Button(new Rect(x+23,y,137,43),"Duplicate"))DuplicateSelection();
     if(Button(new Rect(x+169,y,137,43),"Rotate 45°"))RotateSelection();
     y+=51;
+    if(p.kind=="wall"){
+     if(Button(new Rect(x+23,y,283,42),"Standard VR Height  ·  2.70 m"))SetStandardWallHeight();
+     y+=49;
+     if(Button(new Rect(x+23,y,137,42),"Copy Size"))CopyWallSize();
+     if(Button(new Rect(x+169,y,137,42),"Paste Size"))PasteWallSize();
+     y+=49;
+    }
     if(Button(new Rect(x+23,y,283,43),"Delete Selected"))DeleteSelection();
    }else{
     Label(new Rect(x+23,y,283,45),"Select a placed object to edit it.");
@@ -912,6 +954,7 @@ namespace WorldBuilder {
      importedRotation=GUI.HorizontalSlider(new Rect(x+17,y,232,18),importedRotation,0f,360f);
     }
    }
+   if(selectedIndex>=0)return;
    float bottom=h-345;
    Label(new Rect(x+23,bottom,282,30),"AVATAR SCALE PREVIEW");
    Label(new Rect(x+23,bottom+33,282,30),avatarHeight.ToString("F2")+" m tall");
