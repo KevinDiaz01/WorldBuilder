@@ -10,10 +10,12 @@ namespace WorldBuilder {
    for(int z=0;z<=n;z++)for(int x=0;x<=n;x++){
     float tx=(float)x/n,tz=(float)z/n;
     float edge=Mathf.Min(Mathf.Min(tx,1f-tx),Mathf.Min(tz,1f-tz));
-    float taper=Mathf.SmoothStep(0f,1f,Mathf.Clamp01(edge*5f));
-    float noise=Mathf.PerlinNoise(tx*4f+seed*.027f,tz*4f+seed*.043f);
+    float taper=Mathf.SmoothStep(0f,1f,Mathf.Clamp01(edge*3.4f));
+    float broad=Mathf.PerlinNoise(tx*2.1f+seed*.027f,tz*2.1f+seed*.043f);
+    float detail=Mathf.PerlinNoise(tx*5.2f+seed*.061f,tz*5.2f+seed*.078f);
+    float noise=Mathf.Clamp01((broad*.78f+detail*.22f-.19f)*1.15f);
     int k=z*side+x;
-    vertices[k]=new Vector3((tx-.5f)*width,(noise-.45f)*height*taper,(tz-.5f)*depth);
+    vertices[k]=new Vector3((tx-.5f)*width,noise*height*taper,(tz-.5f)*depth);
     uv[k]=new Vector2(tx*width*.2f,tz*depth*.2f);
    }
    int t=0;
