@@ -39,6 +39,9 @@ namespace WorldBuilder {
   private bool showConfirmExit=false;
   private bool showSettings=false;
   private int selectedIndex=-1;
+  private bool draggingSelection=false;
+  private Vector3 selectionDragOffset;
+  private LineRenderer selectionOutline;
   private int creativeMode=0;
   private int catalogCategory=0;
   private Vector2 catalogScroll;
@@ -101,8 +104,67 @@ namespace WorldBuilder {
   void OnApplicationQuit(){
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
   }
+  void SelectObject(int index){
+   selectedIndex=index;
+   editingPiece=-1;
+   RefreshSelectionOutline();
+  }
+  void RefreshSelectionOutline(){
+   if(selectionOutline==null){
+    var helper=new GameObject("WorldBuilder Selection Outline");
+    selectionOutline=helper.AddComponent<LineRenderer>();
+    selectionOutline.material=new Material(Shader.Find("Sprites/Default"));
+    selectionOutline.startWidth=.025f;selectionOutline.endWidth=.025f;
+    selectionOutline.startColor=selectionOutline.endColor=new Color(.18f,.77f,1f,1f);
+    selectionOutline.useWorldSpace=true;
+   }
+   bool valid=selectedIndex>=0&&selectedIndex<objects.Count&&objects[selectedIndex]!=null;
+   selectionOutline.enabled=valid;
+   if(!valid)return;
+   var renderers=objects[selectedIndex].GetComponentsInChildren<Renderer>();
+   if(renderers.Length==0)return;
+   Bounds b=renderers[0].bounds;
+   for(int k=1;k<renderers.Length;k++)b.Encapsulate(renderers[k].bounds);
+   Vector3 min=b.min,max=b.max;
+   Vector3[] corners={
+    new Vector3(min.x,min.y,min.z),new Vector3(max.x,min.y,min.z),
+    new Vector3(max.x,min.y,max.z),new Vector3(min.x,min.y,max.z),
+    new Vector3(min.x,min.y,min.z),new Vector3(min.x,max.y,min.z),
+    new Vector3(max.x,max.y,min.z),new Vector3(max.x,min.y,min.z),
+    new Vector3(max.x,max.y,min.z),new Vector3(max.x,max.y,max.z),
+    new Vector3(max.x,min.y,max.z),new Vector3(max.x,max.y,max.z),
+    new Vector3(min.x,max.y,max.z),new Vector3(min.x,min.y,max.z),
+    new Vector3(min.x,max.y,max.z),new Vector3(min.x,max.y,min.z)};
+   selectionOutline.positionCount=corners.Length;
+   selectionOutline.SetPositions(corners);
+  }
+  void DuplicateSelection(){
+   if(selectedIndex<0||selectedIndex>=project.pieces.Count)return;
+   Piece original=project.pieces[selectedIndex];
+   var copy=new Piece(original.kind,original.position+new Vector3(gridSize,0,gridSize),original.scale,original.rotation);
+   copy.assetId=original.assetId;
+   Add(copy);
+   SelectObject(project.pieces.Count-1);
+   Notice("Object duplicated. Drag to reposition.");
+  }
+  void RotateSelection(){
+   if(selectedIndex<0||selectedIndex>=project.pieces.Count)return;
+   var item=project.pieces[selectedIndex];
+   item.rotation=Quaternion.Euler(0,45,0)*item.rotation;
+   objects[selectedIndex].transform.rotation=item.rotation;
+   RefreshSelectionOutline();
+   Notice("Rotated 45 degrees");
+  }
+  void DeleteSelection(){
+   if(selectedIndex<0||selectedIndex>=objects.Count)return;
+   if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
+   objects.RemoveAt(selectedIndex);
+   project.pieces.RemoveAt(selectedIndex);
+   SelectObject(-1);
+   Notice("Object deleted");
+  }
   void UndoLast(){
-   selectedIndex=-1;
+   SelectObject(-1);
    int i=objects.Count-1;
    if(i<0){Notice("Nothing to undo");return;}
    if(objects[i]!=null)Destroy(objects[i]);
@@ -268,7 +330,7 @@ namespace WorldBuilder {
     showExport=false;
    }catch(Exception e){Debug.LogException(e);Notice("Export failed: "+e.Message);}
   }
-  void NewProject(){selectedIndex=-1;project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
+  void NewProject(){SelectObject(-1);project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
   string ProjectsFolder(){string p=Path.Combine(Application.persistentDataPath,"Projects");Directory.CreateDirectory(p);return p;}
   void SaveAsNamed(string name){
    try{string safe=string.Join("_",name.Split(Path.GetInvalidFileNameChars()));if(string.IsNullOrWhiteSpace(safe))safe="My World";
@@ -318,6 +380,22 @@ namespace WorldBuilder {
    }
    if(Input.GetKeyDown(KeyCode.F1)){showHelp=!showHelp;showPause=false;}
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
+   if(!showPause&&!showConfirmExit&&!showSettings&&!showExport&&!showImport&&!showProjects){
+    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.D))DuplicateSelection();
+    if(Input.GetKeyDown(KeyCode.R)&&currentTool==Tool.Select)RotateSelection();
+    if(Input.GetKeyDown(KeyCode.Delete)&&currentTool==Tool.Select)DeleteSelection();
+   }
+   if(draggingSelection){
+    if(Input.GetMouseButtonUp(0)){draggingSelection=false;Notice("Object moved");}
+    else if(selectedIndex>=0&&selectedIndex<project.pieces.Count&&!OverUI()&&MouseOnGround(out Vector3 dragPoint)){
+     var piece=project.pieces[selectedIndex];
+     Vector3 target=dragPoint+selectionDragOffset;
+     target.y=piece.position.y;
+     piece.position=target;
+     objects[selectedIndex].transform.position=target;
+     RefreshSelectionOutline();
+    }
+   }
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Z))UndoLast();
    UpdatePreview();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.S))Save();
@@ -327,11 +405,16 @@ namespace WorldBuilder {
    if(currentTool==Tool.Select){
     Ray pick=sceneCamera.ScreenPointToRay(Input.mousePosition);
     if(Physics.Raycast(pick,out RaycastHit hit,500f)){
-     selectedIndex=-1;
+     int hitIndex=-1;
      for(int j=0;j<objects.Count;j++){
-      if(objects[j]==hit.collider.gameObject||hit.collider.transform.IsChildOf(objects[j].transform)){selectedIndex=j;break;}
+      if(objects[j]!=null&&(objects[j]==hit.collider.gameObject||hit.collider.transform.IsChildOf(objects[j].transform))){hitIndex=j;break;}
      }
-    }else selectedIndex=-1;
+     SelectObject(hitIndex);
+     if(hitIndex>=0){
+      draggingSelection=true;
+      selectionDragOffset=project.pieces[hitIndex].position-p;
+     }
+    }else SelectObject(-1);
     return;
    }
    if(currentTool==Tool.Erase) { Erase(p);return; }
@@ -354,7 +437,7 @@ namespace WorldBuilder {
     Add(new Piece("floor",(start+p)*.5f+Vector3.up*FloorCenter,new Vector3(Mathf.Max(Mathf.Abs(delta.x),gridSize),FloorThickness,Mathf.Max(Mathf.Abs(delta.z),gridSize)),Quaternion.identity));
    }
   }
-  void Add(Piece piece){selectedIndex=-1;project.pieces.Add(piece);objects.Add(Create(piece));}
+  void Add(Piece piece){SelectObject(-1);project.pieces.Add(piece);objects.Add(Create(piece));}
   GameObject Create(Piece piece){
    if(piece.kind=="imported"){
     try{
@@ -385,7 +468,7 @@ namespace WorldBuilder {
    return obj;
   }
   void Erase(Vector3 point){
-   selectedIndex=-1;
+   SelectObject(-1);
    for(int i=objects.Count-1;i>=0;i--){
     if(objects[i]==null)continue;
     var collider=objects[i].GetComponent<Collider>();
@@ -404,7 +487,7 @@ namespace WorldBuilder {
     var loaded=JsonUtility.FromJson<Project>(File.ReadAllText(filePath));
     if(loaded==null||loaded.schema!=2||loaded.pieces==null)throw new InvalidDataException("Unsupported project schema");
     foreach(var obj in objects)if(obj!=null)Destroy(obj);
-    objects.Clear();selectedIndex=-1;project=loaded;
+    objects.Clear();SelectObject(-1);project=loaded;
     foreach(var piece in project.pieces)objects.Add(Create(piece));Notice("Loaded: "+Path.GetFileName(filePath));
    }catch(Exception e){Debug.LogError("Load failed: "+e.Message);Notice("Load failed: "+e.Message);}
   }
@@ -528,13 +611,14 @@ namespace WorldBuilder {
      if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
      objects[selectedIndex]=Create(p);
      editingPiece=-1;
+     RefreshSelectionOutline();
      Notice("Object dimensions updated");
     }
     y+=49;
-    if(Button(new Rect(x+17,y,235,32),"Delete Selected")){
-     Destroy(objects[selectedIndex]);objects.RemoveAt(selectedIndex);
-     project.pieces.RemoveAt(selectedIndex);selectedIndex=-1;
-    }
+    if(Button(new Rect(x+17,y,114,32),"Duplicate"))DuplicateSelection();
+    if(Button(new Rect(x+138,y,114,32),"Rotate 45°"))RotateSelection();
+    y+=39;
+    if(Button(new Rect(x+17,y,235,32),"Delete Selected"))DeleteSelection();
    }else{
     Label(new Rect(x+17,y,235,36),"Select a placed object to edit it.");
     y+=45;
@@ -628,6 +712,7 @@ namespace WorldBuilder {
    Label(new Rect(x+25,y+64,455,28),"BUILD CONTROLS");
    Label(new Rect(x+25,y+100,455,27),"1 Walls   2 Floors   3 Sofa   4 Table   5 Erase");
    Label(new Rect(x+25,y+133,455,27),"0 Select   G Grid   Ctrl+Z Undo");
+   Label(new Rect(x+25,y+185,455,27),"Drag object to move   R Rotate   Ctrl+D Duplicate");
    Label(new Rect(x+25,y+167,455,27),"Ctrl+S Save   Ctrl+O Reload   Esc Menu");
    Label(new Rect(x+25,y+206,455,26),"CAMERA");
    Label(new Rect(x+25,y+239,455,28),"Right mouse: orbit    Scroll: zoom");
