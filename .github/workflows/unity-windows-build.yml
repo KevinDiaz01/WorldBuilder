@@ -12,6 +12,7 @@ on:
       - 'unity/**'
       - 'launcher/**'
       - 'asset-browser/**'
+      - '.github/workflows/unity-windows-build.yml'
 
 permissions:
   contents: write
