@@ -77,6 +77,11 @@ namespace WorldBuilder {
   private bool showInspector=false;
   private bool showProjects=false;
   private GameObject preview;
+  private GameObject importedGhost;
+  private string ghostAssetId="";
+  private bool furnitureSnap=true;
+  private float nextRecoveryTime=0f;
+  private const float RecoveryInterval=120f;
   private string importedId;
   private float importedScale=1f;
   private float importedRotation=0f;
@@ -140,6 +145,7 @@ namespace WorldBuilder {
    Diagnostics.Add("ERROR",brief);
   }
   void OnApplicationQuit(){
+   if(importedGhost!=null)Destroy(importedGhost);
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
    foreach(var tex in modelThumbnails.Values)if(tex!=null)Destroy(tex);
    modelThumbnails.Clear();
@@ -348,10 +354,82 @@ namespace WorldBuilder {
    Vector3 surface=PlacementSurface(ground);
    return new Vector3(surface.x,surface.y-lower,surface.z);
   }
+  void UpdateImportedGhost(){
+   if(string.IsNullOrEmpty(importedId))return;
+   if(importedGhost!=null&&ghostAssetId==importedId)return;
+   if(importedGhost!=null)Destroy(importedGhost);
+   importedGhost=null;ghostAssetId="";
+   try{
+    importedGhost=ImportedObj.Load(Path.Combine(AssetLibrary(),importedId,"model.obj"));
+    importedGhost.name="Furniture placement preview";
+    foreach(var collider in importedGhost.GetComponentsInChildren<Collider>())Destroy(collider);
+    foreach(var renderer in importedGhost.GetComponentsInChildren<Renderer>()){
+     var original=renderer.sharedMaterials;
+     var ghosts=new Material[original.Length];
+     for(int i=0;i<original.Length;i++){
+      Shader shader=Shader.Find("Standard");
+      if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+      if(shader==null)shader=Shader.Find("Sprites/Default");
+      ghosts[i]=new Material(shader);
+      if(original[i]!=null&&original[i].mainTexture!=null)ghosts[i].mainTexture=original[i].mainTexture;
+      ghosts[i].color=new Color(.35f,.83f,1f,.72f);
+     }
+     renderer.materials=ghosts;
+    }
+    ghostAssetId=importedId;
+   }catch(Exception ex){Diagnostics.Add("ERROR","Furniture preview: "+ex.Message);}
+  }
+  Vector3 SnapFurniture(Vector3 where){
+   if(!furnitureSnap||!importedBoundsReady)return where;
+   float best=.28f;
+   Vector3 adjusted=where;
+   // Keep simple wall alignment independent of the grid and avoid changing vertical placement.
+   for(int i=0;i<project.pieces.Count;i++){
+    var wall=project.pieces[i];
+    if(wall.kind!="wall")continue;
+    Vector3 center=wall.position;
+    Vector3 normal=wall.rotation*Vector3.forward;
+    Vector3 tangent=wall.rotation*Vector3.right;
+    float along=Vector3.Dot(where-center,tangent);
+    if(Mathf.Abs(along)>wall.scale.x*.5f)continue;
+    float signed=Vector3.Dot(where-center,normal);
+    float halfDepth=importedBounds.extents.z*importedScale;
+    float goal=Mathf.Sign(signed)*(wall.scale.z*.5f+halfDepth+.03f);
+    float difference=Mathf.Abs(signed-goal);
+    if(difference<best){best=difference;adjusted=where+normal*(goal-signed);}
+   }
+   return adjusted;
+  }
+  void WriteRecovery(){
+   try{
+    if(project.pieces==null||project.pieces.Count==0)return;
+    string directory=Path.Combine(Application.persistentDataPath,"Recovery");
+    Directory.CreateDirectory(directory);
+    string latest=Path.Combine(directory,"autosave.json");
+    string temporary=latest+".tmp";
+    File.WriteAllText(temporary,JsonUtility.ToJson(project,true));
+    if(File.Exists(latest))File.Delete(latest);
+    File.Move(temporary,latest);
+   }catch(Exception ex){Diagnostics.Add("WARN","Recovery save failed: "+ex.Message);}
+  }
+  void RestoreRecovery(){
+   try{
+    string path=Path.Combine(Application.persistentDataPath,"Recovery","autosave.json");
+    if(!File.Exists(path)){Notice("No recovery snapshot available");return;}
+    var restored=JsonUtility.FromJson<Project>(File.ReadAllText(path));
+    if(restored==null||restored.schema!=2||restored.pieces==null)throw new InvalidDataException("Invalid recovery snapshot");
+    RememberChange();
+    foreach(var obj in objects)if(obj!=null)Destroy(obj);
+    objects.Clear();SelectObject(-1);project=restored;
+    foreach(var piece in project.pieces)objects.Add(Create(piece));
+    Notice("Recovery restored. Save your project to keep it.");
+   }catch(Exception ex){Diagnostics.Add("ERROR","Recovery restore: "+ex.Message);Notice("Could not restore recovery");}
+  }
   void UpdatePreview(){
    bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
    bool onGround=MouseOnGround(out Vector3 p);
    if(OverUI()||currentTool==Tool.Erase||currentTool==Tool.Paint||(!onGround&&!aimedAtWall)){
+    if(importedGhost!=null)importedGhost.SetActive(false);
     if(preview!=null)preview.SetActive(false);
     return;
    }
@@ -363,13 +441,20 @@ namespace WorldBuilder {
     m.color=new Color(.15f,.8f,1f,.5f);
     preview.GetComponent<Renderer>().material=m;
    }
+   if(currentTool==Tool.Imported){
+    preview.SetActive(false);
+    UpdateImportedGhost();
+    if(importedGhost!=null){
+     importedGhost.SetActive(true);
+     importedGhost.transform.SetPositionAndRotation(SnapFurniture(ImportedPlacement(p)),Quaternion.Euler(0,importedRotation,0));
+     importedGhost.transform.localScale=Vector3.one*importedScale;
+    }
+    return;
+   }
+   if(importedGhost!=null)importedGhost.SetActive(false);
    preview.SetActive(true);
    preview.transform.rotation=Quaternion.identity;
-   if(currentTool==Tool.Imported){
-    preview.transform.position=ImportedPlacement(p);
-    preview.transform.localScale=importedBoundsReady?Vector3.Scale(importedBounds.size,Vector3.one*importedScale):Vector3.one*importedScale;
-    preview.transform.rotation=Quaternion.Euler(0,importedRotation,0);
-   }else if(currentTool==Tool.Door||currentTool==Tool.Window){
+   if(currentTool==Tool.Door||currentTool==Tool.Window){
     if(!FindOpeningWall(out int wallIndex,out Vector3 hitPoint)){preview.SetActive(false);return;}
     Piece wall=project.pieces[wallIndex];
     bool window=currentTool==Tool.Window;
@@ -539,6 +624,10 @@ namespace WorldBuilder {
    point=Snap(ray.GetPoint(distance));return true;
   }
   void Update() {
+   if(Time.unscaledTime>=nextRecoveryTime){
+    nextRecoveryTime=Time.unscaledTime+RecoveryInterval;
+    WriteRecovery();
+   }
    if(walkthrough!=null&&walkthrough.IsWalking)return;
    if(Input.GetKeyDown(KeyCode.F2)){showDiagnostics=!showDiagnostics;showPause=false;showHelp=false;showSettings=false;}
    if(showAssets&&(browserProcess==null||browserProcess.HasExited)){showAssets=false;if(browserProcess!=null){browserProcess.Dispose();browserProcess=null;}}
@@ -579,10 +668,12 @@ namespace WorldBuilder {
    }
    if(Input.GetKeyDown(KeyCode.F1)){showHelp=!showHelp;showPause=false;showConfirmExit=false;}
    if(showDiagnostics||showPause||showConfirmExit||showSettings||showHelp||showImport||showExport||showProjects){
+    if(importedGhost!=null)importedGhost.SetActive(false);
     if(preview!=null)preview.SetActive(false);
     return;
    }
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
+   if(Input.GetKeyDown(KeyCode.N)){furnitureSnap=!furnitureSnap;Notice("Furniture snap "+(furnitureSnap?"on":"off"));}
    if(!showPause&&!showConfirmExit&&!showSettings&&!showExport&&!showImport&&!showProjects){
     if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.D))DuplicateSelection();
     if(Input.GetKeyDown(KeyCode.R)&&currentTool==Tool.Select)RotateSelection();
@@ -643,7 +734,7 @@ namespace WorldBuilder {
    if(currentTool==Tool.Door||currentTool==Tool.Window){AddOpening(currentTool==Tool.Window);return;}
    if(currentTool==Tool.Imported){
     if(string.IsNullOrEmpty(importedId)){Notice("Choose an imported model first");return;}
-    var item=new Piece("imported",ImportedPlacement(p),Vector3.one*importedScale,Quaternion.Euler(0,importedRotation,0));
+    var item=new Piece("imported",SnapFurniture(ImportedPlacement(p)),Vector3.one*importedScale,Quaternion.Euler(0,importedRotation,0));
     item.assetId=importedId;Add(item);return;
    }
    if(currentTool==Tool.Couch||currentTool==Tool.Table) {
