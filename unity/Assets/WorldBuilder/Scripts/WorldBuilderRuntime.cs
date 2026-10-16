@@ -131,8 +131,8 @@ namespace WorldBuilder {
   private bool showStudio=false;
   private int studioTab=0;
   private int lightMode=0;
-  private float lightBrightness=1.6f;
-  private float lightRadius=11f;
+  private float lightBrightness=.9f;
+  private float lightRadius=7f;
   private float terrainAmplitude=2.5f;
   private Light editorSun;
   private WorldBuilderBackdrop scenicBackdrop;
@@ -840,7 +840,8 @@ namespace WorldBuilder {
     int sky=Mathf.Clamp(project.skyPreset,0,palettes.Length-1);
     sceneCamera.backgroundColor=palettes[sky];
     RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;
-    RenderSettings.ambientLight=sky==2?new Color(.19f,.24f,.38f):new Color(.58f,.62f,.69f);
+    RenderSettings.ambientLight=sky==2?new Color(.07f,.10f,.18f):
+     sky==1?new Color(.32f,.28f,.27f):new Color(.34f,.38f,.44f);
     RenderSettings.fog=project.fog;
     RenderSettings.fogColor=palettes[sky];
     RenderSettings.fogDensity=.009f;
@@ -850,7 +851,7 @@ namespace WorldBuilder {
     editorSun=sun.AddComponent<Light>();
     editorSun.type=LightType.Directional;
    }
-   editorSun.intensity=project.skyPreset==2?.14f:project.skyPreset==1?.68f:1.05f;
+   editorSun.intensity=project.skyPreset==2?.025f:project.skyPreset==1?.42f:project.skyPreset==3?.43f:.70f;
    editorSun.transform.rotation=Quaternion.Euler(project.sunPitch,project.sunYaw,0);
    if(scenicBackdrop!=null)scenicBackdrop.ApplySceneMood(project.skyPreset,sceneCamera);
   }
@@ -1296,10 +1297,10 @@ namespace WorldBuilder {
     Light light=holder.AddComponent<Light>();
     light.type=piece.kind=="light-spot"?LightType.Spot:LightType.Point;
     light.range=Mathf.Max(1f,piece.lightRange);
-    light.intensity=Mathf.Max(0,piece.lightIntensity);
+    light.intensity=Mathf.Clamp(piece.lightIntensity,0f,5f);
     light.spotAngle=Mathf.Clamp(piece.lightAngle,1f,170f);
     light.color=piece.lightColor;
-    light.shadows=LightShadows.Soft;
+    light.shadows=LightShadows.None; // Editor preview keeps shadow cost low.
     return holder;
    }
    if(piece.kind=="imported"){
