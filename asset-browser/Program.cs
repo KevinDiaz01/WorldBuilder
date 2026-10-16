@@ -30,8 +30,11 @@ internal sealed class BrowserWindow : Form {
  readonly IntPtr unity;
  readonly string assetsRoot;
  readonly WebView2 view=new(){Dock=DockStyle.Fill};
- readonly ToolStrip strip=new(){GripStyle=ToolStripGripStyle.Hidden,RenderMode=ToolStripRenderMode.System};
- readonly ToolStripLabel status=new("Ready");
+ readonly ToolStrip strip=new(){
+  GripStyle=ToolStripGripStyle.Hidden,RenderMode=ToolStripRenderMode.Professional,
+  BackColor=Color.FromArgb(245,241,251),ForeColor=Color.FromArgb(37,48,73)};
+ readonly ToolStripLabel status=new("Ready"){ForeColor=Color.FromArgb(83,95,119)};
+ readonly System.Collections.Generic.List<ToolStripButton> sourceButtons=new();
  readonly System.Windows.Forms.Timer layoutTimer=new(){Interval=250};
  string provider="Poly Haven";
  readonly string[] names={"Poly Haven","Sketchfab","ambientCG"};
@@ -44,37 +47,45 @@ internal sealed class BrowserWindow : Form {
   StartPosition=FormStartPosition.CenterScreen;
   MinimumSize=new Size(800,520);
   Size=new Size(1220,750);
-  BackColor=Color.FromArgb(26,32,40);
-  var back=new ToolStripButton("←");
-  var forward=new ToolStripButton("→");
-  var reload=new ToolStripButton("↻");
+  BackColor=Color.FromArgb(246,244,251);
+  var back=new ToolStripButton("‹"){ToolTipText="Back"};
+  var forward=new ToolStripButton("›"){ToolTipText="Forward"};
+  var reload=new ToolStripButton("↻"){ToolTipText="Reload page"};
   back.Click+=(_,_)=>{if(view.CanGoBack)view.GoBack();};
   forward.Click+=(_,_)=>{if(view.CanGoForward)view.GoForward();};
   reload.Click+=(_,_)=>view.Reload();
   strip.Items.Add(back);strip.Items.Add(forward);strip.Items.Add(reload);strip.Items.Add(new ToolStripSeparator());
   for(int i=0;i<names.Length;i++){
    int index=i;
-   var btn=new ToolStripButton(names[i]);
+   var btn=new ToolStripButton(names[i]){
+    DisplayStyle=ToolStripItemDisplayStyle.Text,
+    Font=new Font("Segoe UI Semibold",10f,FontStyle.Regular),
+    ForeColor=Color.FromArgb(45,60,91),
+    BackColor=Color.FromArgb(248,249,255),
+    Margin=new Padding(4,5,4,5),
+    Padding=new Padding(12,5,12,5)};
    btn.Click+=(_,_)=>SelectSite(index);
+   sourceButtons.Add(btn);
    strip.Items.Add(btn);
   }
   strip.Items.Add(new ToolStripSeparator());
-  strip.Items.Add(new ToolStripLabel("Download GLB/glTF/OBJ models where available · licenses vary"));
+  strip.Items.Add(new ToolStripLabel("  ·  Models import automatically when compatible"){
+   ForeColor=Color.FromArgb(102,112,137)});
   strip.Items.Add(new ToolStripSeparator());
-  var folder=new ToolStripButton("Asset folder");
+  var folder=new ToolStripButton("My Downloads");
   folder.Click+=(_,_)=>Process.Start(new ProcessStartInfo("explorer.exe",$"\"{assetsRoot}\""){UseShellExecute=true});
   strip.Items.Add(folder);
   strip.Items.Add(new ToolStripSeparator());
-  var close=new ToolStripButton("✕  Close Assets");
-  close.ForeColor=Color.DarkRed;
+  var close=new ToolStripButton("✕  Close");
+  close.ForeColor=Color.FromArgb(162,70,85);
   close.Click+=(_,_)=>Close();
   strip.Items.Add(close);
   strip.Items.Add(status);
   Controls.Add(view);Controls.Add(strip);
   strip.Dock=DockStyle.Top;
-  strip.AutoSize=false;strip.Height=52;
-  strip.Font=new Font("Segoe UI",11f,FontStyle.Regular);
-  strip.BackColor=Color.FromArgb(235,241,248);
+  strip.AutoSize=false;strip.Height=55;
+  strip.Font=new Font("Segoe UI",10.5f,FontStyle.Regular);
+  strip.BackColor=Color.FromArgb(245,241,251);
   strip.BringToFront();
   Load+=async (_,_)=>{
    try{
@@ -99,6 +110,12 @@ internal sealed class BrowserWindow : Form {
   FormClosed+=(_,_)=>layoutTimer.Stop();
  }
  void SelectSite(int i){
+  for(int j=0;j<sourceButtons.Count;j++){
+   bool current=j==i;
+   sourceButtons[j].Checked=current;
+   sourceButtons[j].BackColor=current?Color.FromArgb(209,218,255):Color.FromArgb(248,249,255);
+   sourceButtons[j].ForeColor=current?Color.FromArgb(34,64,146):Color.FromArgb(45,60,91);
+  }
   provider=names[i];
   Text="WorldBuilder Assets - "+provider;
   if(view.CoreWebView2!=null)view.CoreWebView2.Navigate(sites[i]);
