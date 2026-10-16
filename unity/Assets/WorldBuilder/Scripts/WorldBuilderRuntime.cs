@@ -1120,7 +1120,7 @@ namespace WorldBuilder {
    CompleteSpan(start,p);
   }
   // Allows click-once + click-again and press-drag-release with identical geometry.
-  internal static bool IsSpanTool(Tool tool){
+  public static bool IsSpanTool(Tool tool){
    return tool==Tool.Wall||tool==Tool.Floor||tool==Tool.Room||
     tool==Tool.Roof||tool==Tool.Stairs||tool==Tool.Terrain||
     tool==Tool.Water||tool==Tool.Path;
