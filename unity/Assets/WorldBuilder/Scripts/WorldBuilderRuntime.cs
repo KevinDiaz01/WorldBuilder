@@ -1283,16 +1283,27 @@ namespace WorldBuilder {
    if(piece.kind=="tree"){
     GameObject root=new GameObject("WB_Tree");
     root.transform.SetPositionAndRotation(piece.position,piece.rotation);
+    Color wood=new Color(.35f,.26f,.17f),leaf=new Color(.28f,.47f,.24f);
     GameObject trunk=GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-    trunk.name="Tree Trunk";trunk.transform.SetParent(root.transform,false);
-    trunk.transform.localPosition=new Vector3(0,1.05f,0);
-    trunk.transform.localScale=new Vector3(.38f,1.05f,.38f);
-    trunk.GetComponent<Renderer>().material.color=new Color(.34f,.21f,.13f);
-    GameObject crown=GameObject.CreatePrimitive(PrimitiveType.Sphere);
-    crown.name="Tree Canopy";crown.transform.SetParent(root.transform,false);
-    crown.transform.localPosition=new Vector3(0,2.9f,0);
-    crown.transform.localScale=new Vector3(2.6f,2.5f,2.6f);
-    crown.GetComponent<Renderer>().material.color=new Color(.20f,.43f,.22f);
+    trunk.name="Natural Trunk";trunk.transform.SetParent(root.transform,false);
+    trunk.transform.localPosition=new Vector3(0,1.06f,0);
+    trunk.transform.localScale=new Vector3(.30f,1.06f,.30f);
+    trunk.GetComponent<Renderer>().material.color=wood;
+    Vector3[] centers={
+     new Vector3(0f,3.02f,0f),new Vector3(-.82f,2.56f,.17f),
+     new Vector3(.79f,2.62f,-.1f),new Vector3(.19f,3.59f,.15f),
+     new Vector3(-.24f,2.83f,-.66f)};
+    Vector3[] sizes={
+     new Vector3(1.85f,1.75f,1.6f),new Vector3(1.45f,1.25f,1.42f),
+     new Vector3(1.42f,1.35f,1.28f),new Vector3(1.3f,1.18f,1.2f),
+     new Vector3(1.24f,1.34f,1.38f)};
+    for(int n=0;n<centers.Length;n++){
+     GameObject crown=GameObject.CreatePrimitive(PrimitiveType.Sphere);
+     crown.name="Leaf Cluster "+(n+1);crown.transform.SetParent(root.transform,false);
+     crown.transform.localPosition=centers[n];crown.transform.localScale=sizes[n];
+     crown.GetComponent<Renderer>().material.color=leaf*
+      (n%2==0?1.06f:.88f);
+    }
     root.transform.localScale=new Vector3(piece.scale.x,piece.scale.y/4f,piece.scale.z);
     return root;
    }
@@ -1310,6 +1321,28 @@ namespace WorldBuilder {
     var collider=meshObj.AddComponent<MeshCollider>();collider.sharedMesh=mesh;
     meshObj.transform.SetPositionAndRotation(piece.position,piece.rotation);
     return meshObj;
+   }
+   if(piece.kind=="water"){
+    GameObject water=GameObject.CreatePrimitive(PrimitiveType.Cube);
+    water.name="WB_Water";
+    water.transform.SetPositionAndRotation(piece.position+Vector3.up*.015f,piece.rotation);
+    water.transform.localScale=piece.scale;
+    Shader shader=Shader.Find("Standard");
+    if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+    if(shader!=null){
+     Material mat=new Material(shader);
+     mat.color=new Color(.24f,.58f,.74f,.67f);
+     if(mat.HasProperty("_Mode"))mat.SetFloat("_Mode",3f);
+     if(mat.HasProperty("_Surface"))mat.SetFloat("_Surface",1f);
+     mat.SetInt("_SrcBlend",(int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+     mat.SetInt("_DstBlend",(int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+     mat.SetInt("_ZWrite",0);
+     mat.DisableKeyword("_ALPHATEST_ON");
+     mat.EnableKeyword("_ALPHABLEND_ON");
+     mat.renderQueue=(int)UnityEngine.Rendering.RenderQueue.Transparent;
+     water.GetComponent<Renderer>().sharedMaterial=mat;
+    }
+    return water;
    }
    if(piece.kind=="light-point"||piece.kind=="light-spot"){
     var holder=GameObject.CreatePrimitive(PrimitiveType.Sphere);
