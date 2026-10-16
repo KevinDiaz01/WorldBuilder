@@ -32,7 +32,7 @@ namespace WorldBuilder {
    string file=Path.Combine(Library,id,"asset-name.txt");
    return File.Exists(file)?File.ReadAllText(file):id;
   }
-  public static readonly string[] Categories={"All","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Architecture","Other","Trees"};
+  public static readonly string[] Categories={"All","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Architecture","Other","Trees","Bedroom","Living Room","Dining Room","Office"};
   public static string Category(string id){
    string path=Path.Combine(Library,id,"asset-category.txt");
    if(File.Exists(path)){
@@ -69,7 +69,11 @@ namespace WorldBuilder {
   }
   public static string GuessCategory(string filename){
    string t=(filename??"").Replace('_',' ').Replace('-',' ').ToLowerInvariant();
-   if(HasAny(t,"sofa","couch","chair","armchair","table","desk","bed ","mattress","cabinet","shelf","dresser","stool","bench","furniture"))return "Furniture";
+   if(HasAny(t,"bed ","bedroom","mattress","nightstand","wardrobe","dresser"))return "Bedroom";
+   if(HasAny(t,"sofa","couch","armchair","living room","tv stand","television"))return "Living Room";
+   if(HasAny(t,"dining","dinner table"))return "Dining Room";
+   if(HasAny(t,"desk","office","computer chair"))return "Office";
+   if(HasAny(t,"chair","table","cabinet","shelf","stool","bench","furniture"))return "Furniture";
    if(HasAny(t,"lamp","chandelier","light fixture","lantern","sconce"))return "Lighting";
    if(HasAny(t,"fridge","refrigerator","oven","stove","sink","kitchen","microwave","toaster"))return "Kitchen";
    if(HasAny(t,"bathtub","toilet","shower","bathroom","washbasin"))return "Bathroom";
