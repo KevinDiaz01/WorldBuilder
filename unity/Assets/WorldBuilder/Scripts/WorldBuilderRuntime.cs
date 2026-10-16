@@ -603,35 +603,38 @@ namespace WorldBuilder {
    Notice(overhead?"Top-down camera":"Perspective camera");
   }
   void DrawViewportControls(float h){
-   float x=107f,y=83f;
-   GUI.Box(new Rect(x-5,y-5,310,50),"",panelStyle);
-   if(Button(new Rect(x,y,95,40),"Perspective"))SetCameraView(false);
-   if(Button(new Rect(x+101,y,89,40),"Top View"))SetCameraView(true);
-   if(Button(new Rect(x+196,y,104,40),showGrid?"Grid: On":"Grid: Off"))ToggleGrid();
+   float x=132f,y=99f;
+   GUI.Box(new Rect(x-7,y-6,368,58),"",panelStyle);
+   if(Button(new Rect(x,y,119,46),"Perspective"))SetCameraView(false);
+   if(Button(new Rect(x+127,y,106,46),"Top View"))SetCameraView(true);
+   if(Button(new Rect(x+241,y,115,46),showGrid?"Grid On":"Grid Off"))ToggleGrid();
   }
   void DrawLeft(float h){
-   GUI.Box(new Rect(0,66,92,h-214),"",panelStyle);
+   float y=96f;
+   GUI.Box(new Rect(12,y,104,h-325),"",panelStyle);
    string[] names={"Select","Walls","Floors","Rooms","Doors","Windows","Stairs","Roofs","Furniture","Materials","Lighting","Terrain"};
-   Tool[] tools={Tool.Select,Tool.Wall,Tool.Floor,Tool.Select,Tool.Select,Tool.Select,Tool.Select,Tool.Select,Tool.Imported,Tool.Select,Tool.Select,Tool.Select};
-   float areaHeight=h-248;
-   float step=Mathf.Clamp(areaHeight/12f,36f,56f);
+   string[] symbols={"◈","▥","▦","⬡","▯","⊞","≋","⌂","▣","▤","☼","△"};
+   float step=Mathf.Clamp((h-347f)/12f,43f,67f);
    for(int k=0;k<names.Length;k++){
     bool active=(k==0&&currentTool==Tool.Select)||(k==1&&currentTool==Tool.Wall)||
       (k==2&&currentTool==Tool.Floor)||(k==8&&currentTool==Tool.Imported);
-    if(Button(new Rect(7,77+k*step,78,step-4),names[k],active)){
-     if(k==0||k==1||k==2)SelectTool(tools[k]);
-     else if(k==8){creativeMode=1;catalogCategory=0;Notice("Choose an asset from My Assets below");}
+    float yy=y+8+k*step;
+    if(Button(new Rect(19,yy,90,step-5),symbols[k]+"  "+names[k],active)){
+     if(k==0)SelectTool(Tool.Select);
+     else if(k==1)SelectTool(Tool.Wall);
+     else if(k==2)SelectTool(Tool.Floor);
+     else if(k==8){creativeMode=1;catalogCategory=0;Notice("Choose a model from My Assets");}
      else ComingSoon(names[k]);
     }
    }
   }
   void DrawProperties(float w,float h){
-   float x=w-282;
-   GUI.Box(new Rect(x,77,270,h-259),"",panelStyle);
-   Label(new Rect(x+17,92,238,27),selectedIndex>=0?"Selected Object":"Tool Properties",true);
+   float x=w-351;
+   GUI.Box(new Rect(x,96,335,h-325),"",panelStyle);
+   Label(new Rect(x+23,116,282,33),selectedIndex>=0?"Selected Object":"Tool Properties",true);
    string name=selectedIndex>=0&&selectedIndex<project.pieces.Count?project.pieces[selectedIndex].kind:currentTool.ToString();
-   Label(new Rect(x+17,129,240,24),name.ToUpperInvariant());
-   float y=167;
+   Label(new Rect(x+23,155,285,28),name.ToUpperInvariant());
+   float y=215;
    if(selectedIndex!=editingPiece){
     editingPiece=selectedIndex;
     if(selectedIndex>=0&&selectedIndex<project.pieces.Count){
@@ -642,17 +645,17 @@ namespace WorldBuilder {
    }
    if(selectedIndex>=0&&selectedIndex<project.pieces.Count){
     var p=project.pieces[selectedIndex];
-    Label(new Rect(x+17,y,235,22),"POSITION (meters)");y+=27;
-    float nextX=FloatField(new Rect(x+17,y,72,29),0,p.position.x);
-    float nextY=FloatField(new Rect(x+100,y,72,29),1,p.position.y);
-    float nextZ=FloatField(new Rect(x+183,y,72,29),2,p.position.z);
+    Label(new Rect(x+23,y,283,25),"POSITION (meters)");y+=27;
+    float nextX=FloatField(new Rect(x+23,y,88,40),0,p.position.x);
+    float nextY=FloatField(new Rect(x+120,y,88,40),1,p.position.y);
+    float nextZ=FloatField(new Rect(x+217,y,88,40),2,p.position.z);
     y+=41;
     Label(new Rect(x+17,y,235,22),"SIZE (meters)");y+=25;
     float sx=FloatField(new Rect(x+17,y,72,29),3,p.scale.x);
     float sy=FloatField(new Rect(x+100,y,72,29),4,p.scale.y);
     float sz=FloatField(new Rect(x+183,y,72,29),5,p.scale.z);
     y+=42;
-    if(Button(new Rect(x+17,y,235,32),"Apply Dimensions")){
+    if(Button(new Rect(x+23,y,283,45),"Apply Dimensions")){
      p.position=new Vector3(nextX,nextY,nextZ);
      p.scale=new Vector3(Mathf.Max(.02f,sx),Mathf.Max(.02f,sy),Mathf.Max(.02f,sz));
      if(objects[selectedIndex]!=null)Destroy(objects[selectedIndex]);
@@ -662,18 +665,18 @@ namespace WorldBuilder {
      Notice("Object dimensions updated");
     }
     y+=49;
-    if(Button(new Rect(x+17,y,114,32),"Duplicate"))DuplicateSelection();
-    if(Button(new Rect(x+138,y,114,32),"Rotate 45°"))RotateSelection();
+    if(Button(new Rect(x+23,y,137,43),"Duplicate"))DuplicateSelection();
+    if(Button(new Rect(x+169,y,137,43),"Rotate 45°"))RotateSelection();
     y+=39;
     if(Button(new Rect(x+17,y,235,32),"Delete Selected"))DeleteSelection();
    }else{
-    Label(new Rect(x+17,y,235,36),"Select a placed object to edit it.");
+    Label(new Rect(x+23,y,283,45),"Select a placed object to edit it.");
     y+=45;
-    Label(new Rect(x+17,y,230,26),"Grid snapping: "+gridSize.ToString("F2")+" m");
+    Label(new Rect(x+23,y,282,30),"Grid snapping: "+gridSize.ToString("F2")+" m");
     y+=28;
-    gridSize=GUI.HorizontalSlider(new Rect(x+17,y,232,20),gridSize,.25f,2f);y+=34;
+    gridSize=GUI.HorizontalSlider(new Rect(x+23,y,282,24),gridSize,.25f,2f);y+=34;
     if(currentTool==Tool.Wall){
-     Label(new Rect(x+17,y,220,25),"Wall height: "+wallHeight.ToString("F2")+" m");y+=25;
+     Label(new Rect(x+23,y,282,29),"Wall height: "+wallHeight.ToString("F2")+" m");y+=25;
      wallHeight=GUI.HorizontalSlider(new Rect(x+17,y,232,20),wallHeight,1.5f,5f);y+=39;
      Label(new Rect(x+17,y,220,25),"Thickness: "+wallThickness.ToString("F2")+" m");y+=25;
      wallThickness=GUI.HorizontalSlider(new Rect(x+17,y,232,20),wallThickness,.08f,.5f);
@@ -681,15 +684,15 @@ namespace WorldBuilder {
     if(currentTool==Tool.Imported){
      y+=28;
      Label(new Rect(x+17,y,220,25),"Object scale: "+importedScale.ToString("F2")+"x");y+=29;
-     importedScale=GUI.HorizontalSlider(new Rect(x+17,y,232,18),importedScale,.1f,4f);y+=33;
+     importedScale=GUI.HorizontalSlider(new Rect(x+23,y,282,24),importedScale,.1f,4f);y+=33;
      Label(new Rect(x+17,y,220,25),"Rotation: "+importedRotation.ToString("F0")+"°");y+=27;
      importedRotation=GUI.HorizontalSlider(new Rect(x+17,y,232,18),importedRotation,0f,360f);
     }
    }
-   float bottom=h-290;
-   Label(new Rect(x+17,bottom,235,25),"AVATAR SCALE PREVIEW");
-   Label(new Rect(x+17,bottom+27,235,24),avatarHeight.ToString("F2")+" m tall");
-   avatarHeight=GUI.HorizontalSlider(new Rect(x+17,bottom+55,230,17),avatarHeight,1.2f,2.2f);
+   float bottom=h-345;
+   Label(new Rect(x+23,bottom,282,30),"AVATAR SCALE PREVIEW");
+   Label(new Rect(x+23,bottom+33,282,30),avatarHeight.ToString("F2")+" m tall");
+   avatarHeight=GUI.HorizontalSlider(new Rect(x+23,bottom+73,282,24),avatarHeight,1.2f,2.2f);
   }
   float FloatField(Rect r,int index,float value){
    dimensionDraft[index]=GUI.TextField(r,dimensionDraft[index]??value.ToString("F2"),regularStyle);
