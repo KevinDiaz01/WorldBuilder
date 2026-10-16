@@ -48,6 +48,9 @@ namespace WorldBuilder {
   private string targetVrcProject="";
   private bool showImport=false;
   private bool showAssets=false;
+  private PolyHavenCatalog polyHaven;
+  private string assetSearch="";
+  private int sourceTab=0;
   private float nextAssetScan=0f;
   private string assetStatus="Drop ZIP/OBJ files into a provider Downloads folder";
   private Vector2 assetScroll;
@@ -244,6 +247,7 @@ namespace WorldBuilder {
    if(sceneCamera!=null)walkthrough=sceneCamera.GetComponent<WalkthroughCamera>();
    targetVrcProject=PlayerPrefs.GetString("WorldBuilder.VRChatProject","");
    AssetHub.Initialize();
+   polyHaven=gameObject.AddComponent<PolyHavenCatalog>();
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
    if(File.Exists(filePath))Load();
    BuildGrid();
@@ -399,45 +403,66 @@ namespace WorldBuilder {
     avatarHeight=GUI.HorizontalSlider(new Rect(14,h-108,176,20),avatarHeight,1.2f,2.2f);
    }
    if(showAssets){
-    float x=Mathf.Max(210,w*.5f-360),y=75;
-    float panelWidth=720;
-    GUI.Box(new Rect(x,y,panelWidth,h-145),"ASSET HUB   |   Source downloads + My Assets");
-    GUI.Label(new Rect(x+20,y+35,680,25),"Choose source folder, then save the site's ZIP/OBJ download there.");
-    string[] providers=AssetHub.Providers;
-    for(int i=0;i<providers.Length;i++){
-     int col=i%3,row=i/3;
-     float px=x+20+col*228,py=y+68+row*44;
-     string provider=providers[i];
-     if(GUI.Button(new Rect(px,py,141,36),provider+" Folder"))
-      Application.OpenURL(new Uri(AssetHub.Downloads(provider)).AbsoluteUri);
-     if(GUI.Button(new Rect(px+146,py,70,36),"Website")){
-      string[] sites={"https://polyhaven.com/models","https://sketchfab.com/search?features=downloadable&type=models","https://www.fab.com/","https://assetstore.unity.com/",""};
-      if(sites[i].Length>0)Application.OpenURL(sites[i]);
-      else Notice("Choose a source and save its ZIP/OBJ to the Other folder.");
-     }
+    float x=Mathf.Max(205,w*.5f-380), y=75;
+    float pw=Mathf.Min(760,w-x-10), ph=h-145;
+    GUI.Box(new Rect(x,y,pw,ph),"ASSETS  |  Discover & My Assets");
+    string[] tabs={"Poly Haven","Kenney","ambientCG","My Assets"};
+    for(int i=0;i<4;i++){
+     int tab=i;
+     if(GUI.Button(new Rect(x+12+i*(pw-24)/4,y+36,(pw-32)/4,32),tabs[i]))sourceTab=tab;
     }
-    if(GUI.Button(new Rect(x+20,y+168,175,38),"Open Assets Folder"))
-     Application.OpenURL(new Uri(AssetHub.Root).AbsoluteUri);
-    if(GUI.Button(new Rect(x+205,y+168,175,38),"Scan Downloads")){
+    if(sourceTab==0){
+     GUI.Label(new Rect(x+16,y+78,pw-32,23),"Powered by Poly Haven - free CC0 models, no sign-in");
+     assetSearch=GUI.TextField(new Rect(x+16,y+106,pw-170,30),assetSearch);
+     if(GUI.Button(new Rect(x+pw-140,y+106,124,30),"Refresh")&&polyHaven!=null)polyHaven.Refresh();
+     if(polyHaven!=null){
+      GUI.Label(new Rect(x+16,y+142,pw-32,35),polyHaven.State);
+      if(polyHaven.Busy)GUI.HorizontalSlider(new Rect(x+16,y+177,pw-32,17),polyHaven.Progress,0,1);
+      var matches=new List<PolyHavenCatalog.Item>();
+      foreach(var a in polyHaven.Items){
+       if(assetSearch.Length==0||a.name.IndexOf(assetSearch,StringComparison.OrdinalIgnoreCase)>=0||a.category.IndexOf(assetSearch,StringComparison.OrdinalIgnoreCase)>=0)matches.Add(a);
+      }
+      float listTop=y+202, listHeight=Mathf.Max(70,ph-295);
+      assetScroll=GUI.BeginScrollView(new Rect(x+16,listTop,pw-32,listHeight),assetScroll,
+       new Rect(0,0,pw-62,Mathf.Max(listHeight,matches.Count*47)));
+      for(int i=0;i<matches.Count;i++){
+       var a=matches[i];
+       GUI.Label(new Rect(5,i*47+3,pw-210,24),a.name);
+       GUI.Label(new Rect(5,i*47+24,pw-210,19),a.category);
+       if(GUI.Button(new Rect(pw-175,i*47+6,122,34),"Download")&&!polyHaven.Busy)
+        polyHaven.Download(a);
+      }
+      GUI.EndScrollView();
+     }
+    }else if(sourceTab==3){
+     GUI.Label(new Rect(x+16,y+90,pw-32,32),"READY-TO-PLACE ASSETS");
+     var catalog=AssetHub.Catalog();
+     float listHeight=Mathf.Max(90,ph-210);
+     assetScroll=GUI.BeginScrollView(new Rect(x+16,y+133,pw-32,listHeight),assetScroll,
+      new Rect(0,0,pw-60,Mathf.Max(listHeight,catalog.Count*43)));
+     for(int i=0;i<catalog.Count;i++){
+      string id=catalog[i];
+      if(GUI.Button(new Rect(0,i*43,pw-90,37),AssetHub.Name(id))){
+       importedId=id;currentTool=Tool.Imported;showAssets=false;
+       Notice("Click the ground to place "+AssetHub.Name(id));
+      }
+     }
+     GUI.EndScrollView();
+    }else{
+     string provider=tabs[sourceTab];
+     GUI.Label(new Rect(x+16,y+96,pw-32,62),
+      provider+" in-app catalog is not connected yet. Coming in a later update.");
+     GUI.Label(new Rect(x+16,y+169,pw-32,38),
+      "No external website opens and no login is required in this prototype.");
+    }
+    GUI.Label(new Rect(x+16,y+ph-83,pw-32,27),"Model import: OBJ only. glTF downloads remain stored for later support.");
+    if(GUI.Button(new Rect(x+16,y+ph-51,160,34),"Downloads Folder"))
+     Application.OpenURL(new Uri(AssetHub.Downloads("Poly Haven")).AbsoluteUri);
+    if(GUI.Button(new Rect(x+184,y+ph-51,115,34),"Scan Files")){
      string msg;int n=AssetHub.Scan(out msg);
-     assetStatus=n>0?msg:msg.Length>0?msg:"No new supported OBJ/ZIP downloads found";
+     assetStatus=n>0?msg:msg.Length>0?msg:"No new compatible OBJ/ZIP downloads";
     }
-    if(GUI.Button(new Rect(x+390,y+168,175,38),"Close"))showAssets=false;
-    GUI.Label(new Rect(x+20,y+213,660,42),assetStatus);
-    GUI.Label(new Rect(x+20,y+255,680,27),"MY ASSETS - click an imported model to place it");
-    var catalog=AssetHub.Catalog();
-    float listHeight=Mathf.Max(90,h-y-390);
-    assetScroll=GUI.BeginScrollView(new Rect(x+20,y+287,680,listHeight),assetScroll,
-     new Rect(0,0,650,Mathf.Max(listHeight,catalog.Count*40)));
-    for(int i=0;i<catalog.Count;i++){
-     string id=catalog[i];
-     if(GUI.Button(new Rect(0,i*40,625,35),AssetHub.Name(id))){
-      importedId=id;currentTool=Tool.Imported;showAssets=false;
-      Notice("Click the ground to place "+AssetHub.Name(id));
-     }
-    }
-    GUI.EndScrollView();
-    GUI.Label(new Rect(x+20,h-111,680,24),"Supported now: OBJ and ZIP containing OBJ. Provider website tabs are planned.");
+    if(GUI.Button(new Rect(x+pw-112,y+ph-51,95,34),"Close"))showAssets=false;
    }
    if(showImport){
     float x=w*.5f-265;
