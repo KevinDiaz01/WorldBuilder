@@ -15,23 +15,11 @@ namespace WorldBuilder {
    cameraObject.AddComponent<AudioListener>();
    cameraObject.AddComponent<OrbitCamera>();
    cameraObject.AddComponent<WalkthroughCamera>();
-   var sunObject=new GameObject("Sun");
-   var sun=sunObject.AddComponent<Light>();
-   sun.type=LightType.Directional;
-   sun.intensity=1.05f;
-   RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;
-   RenderSettings.ambientLight=new Color(.60f,.66f,.72f);
-   sunObject.transform.rotation=Quaternion.Euler(48,-32,0);
+   // Runtime creates the single artistic sun and procedural meadow.
+   // Do not add a second light or an opaque ground plane here.
    var root=new GameObject("WorldBuilder");
    var runtime=root.AddComponent<WorldBuilderRuntime>();
    runtime.sceneCamera=camera;
-   var ground=GameObject.CreatePrimitive(PrimitiveType.Plane);
-   ground.name="Ground";
-   ground.transform.localScale=new Vector3(10,1,10);
-   ground.transform.position=new Vector3(0,-.03f,0);
-   var groundMat=new Material(Shader.Find("Standard"));
-   groundMat.color=new Color(.27f,.33f,.40f);
-   ground.GetComponent<Renderer>().sharedMaterial=groundMat;
    const string scenePath="Assets/WorldBuilder/WorldBuilderPrototype.unity";
    if(!EditorSceneManager.SaveScene(scene,scenePath))
     throw new Exception("Could not save prototype scene");
