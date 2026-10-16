@@ -438,7 +438,7 @@ namespace WorldBuilder {
     showExport=false;
    }catch(Exception e){Debug.LogException(e);Notice("Export failed: "+e.Message);}
   }
-  void NewProject(){RememberChange();SelectObject(-1);project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
+  void NewProject(){RememberChange();SelectObject(-1);ResetWallDefaults();project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
   string ProjectsFolder(){string p=Path.Combine(Application.persistentDataPath,"Projects");Directory.CreateDirectory(p);return p;}
   void SaveAsNamed(string name){
    try{string safe=string.Join("_",name.Split(Path.GetInvalidFileNameChars()));if(string.IsNullOrWhiteSpace(safe))safe="My World";
@@ -475,15 +475,15 @@ namespace WorldBuilder {
     int count=AssetHub.Scan(out msg);
     if(msg.Length>0){assetStatus=msg;if(count>0)Notice(msg);}
    }
-   if(Input.GetKeyDown(KeyCode.Alpha0))SelectTool(Tool.Select);
-   if(Input.GetKeyDown(KeyCode.T))SetCameraView(true);
-   if(Input.GetKeyDown(KeyCode.P))SetCameraView(false);
-   if(Input.GetKeyDown(KeyCode.Alpha1))SelectTool(Tool.Wall);
-   if(Input.GetKeyDown(KeyCode.Alpha2))SelectTool(Tool.Floor);
-   if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
-   if(Input.GetKeyDown(KeyCode.Alpha4))SelectTool(Tool.Table);
-   if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
-   if(Input.GetKeyDown(KeyCode.Alpha6))SelectTool(Tool.Room);
+   if(Input.GetKeyDown(KeyCode.Alpha0)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Select);
+   if(Input.GetKeyDown(KeyCode.T)&&!showPause&&!showSettings&&!showHelp)SetCameraView(true);
+   if(Input.GetKeyDown(KeyCode.P)&&!showPause&&!showSettings&&!showHelp)SetCameraView(false);
+   if(Input.GetKeyDown(KeyCode.Alpha1)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Wall);
+   if(Input.GetKeyDown(KeyCode.Alpha2)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Floor);
+   if(Input.GetKeyDown(KeyCode.Alpha3)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Couch);
+   if(Input.GetKeyDown(KeyCode.Alpha4)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Table);
+   if(Input.GetKeyDown(KeyCode.Alpha5)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Erase);
+   if(Input.GetKeyDown(KeyCode.Alpha6)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Room);
    if(Input.GetKeyDown(KeyCode.Escape)){
     if(showConfirmExit){showConfirmExit=false;showPause=true;}
     else if(showImport||showExport||showProjects||showSettings||showHelp){
@@ -491,6 +491,10 @@ namespace WorldBuilder {
     }else{showPause=!showPause;anchor=null;}
    }
    if(Input.GetKeyDown(KeyCode.F1)){showHelp=!showHelp;showPause=false;showConfirmExit=false;}
+   if(showPause||showConfirmExit||showSettings||showHelp||showImport||showExport||showProjects){
+    if(preview!=null)preview.SetActive(false);
+    return;
+   }
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
    if(!showPause&&!showConfirmExit&&!showSettings&&!showExport&&!showImport&&!showProjects){
     if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.D))DuplicateSelection();
