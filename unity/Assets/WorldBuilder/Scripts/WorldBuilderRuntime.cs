@@ -1168,13 +1168,31 @@ namespace WorldBuilder {
    Vector3 direction=delta.normalized;
    float angle=-Mathf.Atan2(direction.z,direction.x)*Mathf.Rad2Deg;
    RememberChange();
+   string group=Guid.NewGuid().ToString("N");
    for(int k=0;k<steps;k++){
     float rise=LevelHeight*(k+1)/steps;
     Vector3 center=a+direction*((k+.5f)*stepRun)+Vector3.up*(buildingLevel*LevelHeight+rise*.5f);
-    AddWithoutHistory(new Piece("stairs",center,new Vector3(stepRun+.02f,rise,1.2f),
-     Quaternion.Euler(0,angle,0)));
+    var step=new Piece("stairs",center,new Vector3(stepRun+.02f,rise,1.2f),
+     Quaternion.Euler(0,angle,0));
+    step.groupId=group;
+    AddWithoutHistory(step);
    }
-   Notice("Staircase created: "+steps+" steps");
+   // Simple wood railing and evenly spaced balusters, exported as ordinary geometry.
+   Vector3 side=Vector3.Cross(Vector3.up,direction).normalized;
+   Vector3 slope=delta+Vector3.up*LevelHeight;
+   Quaternion railRotation=Quaternion.FromToRotation(Vector3.right,slope.normalized);
+   for(int sign=-1;sign<=1;sign+=2){
+    Vector3 railCenter=(a+b)*.5f+Vector3.up*(buildingLevel*LevelHeight+LevelHeight*.5f+1.0f)+side*(sign*.66f);
+    var railing=new Piece("stair-rail",railCenter,new Vector3(slope.magnitude,.09f,.09f),railRotation);
+    railing.groupId=group;AddWithoutHistory(railing);
+    for(int j=0;j<5;j++){
+     float t=j/4f;
+     Vector3 position=Vector3.Lerp(a,b,t)+Vector3.up*(buildingLevel*LevelHeight+LevelHeight*t+.52f)+side*(sign*.66f);
+     var post=new Piece("stair-post",position,new Vector3(.075f,1.02f,.075f),Quaternion.identity);
+     post.groupId=group;AddWithoutHistory(post);
+    }
+   }
+   Notice("Staircase created with railings: "+steps+" steps");
   }
   bool FindOpeningWall(out int index,out Vector3 hitPoint){
    index=-1;hitPoint=Vector3.zero;
@@ -1417,6 +1435,10 @@ namespace WorldBuilder {
      if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
      if(shader!=null){var finishMaterial=new Material(shader);finishMaterial.color=FinishColors[colorIndex];renderer.sharedMaterial=finishMaterial;}
     }
+   }else if(piece.kind=="stairs"){
+    obj.GetComponent<Renderer>().material.color=new Color(.61f,.43f,.29f);
+   }else if(piece.kind=="stair-rail"||piece.kind=="stair-post"){
+    obj.GetComponent<Renderer>().material.color=new Color(.28f,.29f,.31f);
    }else if(piece.kind=="opening-frame"){
     obj.GetComponent<Renderer>().material.color=new Color(.66f,.62f,.58f);
    }else if(material!=null)obj.GetComponent<Renderer>().sharedMaterial=material;
