@@ -699,38 +699,68 @@ namespace WorldBuilder {
    if(float.TryParse(dimensionDraft[index],out float number))return number;
    return value;
   }
-  void DrawCatalog(float w,float h){
-   float top=h-174;
-   GUI.Box(new Rect(95,top,w-95,174),"",panelStyle);
-   string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials"};
-   float buttonWidth=Mathf.Min(110,(w-455)/categories.Length);
-   for(int k=0;k<categories.Length;k++){
-    if(Button(new Rect(108+k*(buttonWidth+4),top+10,buttonWidth,31),categories[k],catalogCategory==k))catalogCategory=k;
+  void DrawAssetTile(Rect card,string title,string subtitle,int colorIndex,Action callback){
+   GUI.Box(card,"",panelStyle);
+   Color[] colors={new Color(.17f,.29f,.36f,.92f),new Color(.28f,.25f,.24f,.95f),
+                   new Color(.21f,.30f,.27f,.95f),new Color(.26f,.27f,.34f,.94f)};
+   GUI.DrawTexture(new Rect(card.x+6,card.y+6,card.width-12,card.height-46),
+     ThumbnailTexture(colors[colorIndex%colors.Length]),ScaleMode.StretchToFill);
+   GUI.Label(new Rect(card.x+14,card.y+card.height-41,card.width-24,22),title,sectionStyle);
+   GUI.Label(new Rect(card.x+14,card.y+card.height-21,card.width-24,19),subtitle,smallStyle);
+   if(GUI.Button(card,GUIContent.none,GUIStyle.none))callback();
+  }
+  private readonly Dictionary<int,Texture2D> catalogBackgrounds=new Dictionary<int,Texture2D>();
+  Texture2D ThumbnailTexture(Color color){
+   int key=ColorUtility.ToHtmlStringRGBA(color).GetHashCode();
+   if(!catalogBackgrounds.TryGetValue(key,out Texture2D result)){
+    result=Rounded(color,new Color(.5f,.67f,.78f,.27f),12);
+    catalogBackgrounds[key]=result;
    }
-   catalogSearch=GUI.TextField(new Rect(Mathf.Max(110,w-365),top+10,235,31),catalogSearch,regularStyle);
-   if(Button(new Rect(w-120,top+10,109,31),"Get Assets"))ToggleAssetBrowser();
-   if(Button(new Rect(Mathf.Max(110,w-480),top+10,108,31),"Import OBJ")){showImport=!showImport;showExport=false;}
+   return result;
+  }
+  void DrawCatalog(float w,float h){
+   float top=h-216f;
+   GUI.Box(new Rect(125,top,w-140,206),"",panelStyle);
+   string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials"};
+   float x=139f;
+   for(int k=0;k<categories.Length;k++){
+    float width=k==0?122f:Mathf.Clamp(categories[k].Length*11f+22f,86f,126f);
+    if(Button(new Rect(x,top+13,width,40),categories[k],catalogCategory==k))catalogCategory=k;
+    x+=width+7f;
+   }
+   float right=w-395;
+   catalogSearch=GUI.TextField(new Rect(right,top+13,195,40),catalogSearch,regularStyle);
+   if(Button(new Rect(w-188,top+13,172,40),"Browse Assets"))ToggleAssetBrowser();
    if(catalogCategory==0){
     var entries=AssetHub.Catalog();
     var visible=new List<string>();
-    foreach(string id in entries)if(catalogSearch.Length==0||AssetHub.Name(id).IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)>=0)visible.Add(id);
-    float width=w-115;
-    catalogScroll=GUI.BeginScrollView(new Rect(108,top+52,width,112),catalogScroll,
-      new Rect(0,0,Mathf.Max(width,visible.Count*135),90));
-    for(int k=0;k<visible.Count;k++){
-     string id=visible[k];
-     if(Button(new Rect(k*135,6,128,76),AssetHub.Name(id))){
-      importedId=id;SelectTool(Tool.Imported);
-      Notice("Click the world to place "+AssetHub.Name(id));
-     }
+    foreach(string id in entries){
+     if(catalogSearch.Length==0||AssetHub.Name(id).IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)>=0)visible.Add(id);
     }
-    GUI.EndScrollView();
-    if(visible.Count==0)Label(new Rect(125,top+90,500,30),"No imported models yet. Click Get Assets to browse.");
+    if(visible.Count==0){
+     Label(new Rect(160,top+93,w-480,33),"Your imported assets will appear here.",true);
+     Label(new Rect(160,top+134,w-480,29),"Use Browse Assets to download models, or Import OBJ to add local models.");
+     if(Button(new Rect(w-370,top+101,183,49),"Import OBJ")){showImport=true;showExport=false;}
+    }else{
+     float viewport=w-166;
+     catalogScroll=GUI.BeginScrollView(new Rect(139,top+63,viewport,130),catalogScroll,
+      new Rect(0,0,Mathf.Max(viewport,visible.Count*163),122),false,false);
+     for(int k=0;k<visible.Count;k++){
+      string id=visible[k];
+      DrawAssetTile(new Rect(k*163,0,155,118),AssetHub.Name(id),"Imported model",k,()=>{
+       importedId=id;SelectTool(Tool.Imported);
+       Notice("Click the ground to place "+AssetHub.Name(id));
+      });
+     }
+     GUI.EndScrollView();
+    }
    }else if(catalogCategory==1){
-    if(Button(new Rect(110,top+58,138,73),"Sofa - Basic"))SelectTool(Tool.Couch);
-    if(Button(new Rect(255,top+58,138,73),"Table - Basic"))SelectTool(Tool.Table);
-    Label(new Rect(420,top+82,460,24),"More furniture will appear here as you import assets.");
-   }else Label(new Rect(118,top+80,550,28),"Coming soon - this section is reserved for future assets.");
+    DrawAssetTile(new Rect(144,top+64,170,123),"Sofa","Basic placeholder",0,()=>SelectTool(Tool.Couch));
+    DrawAssetTile(new Rect(324,top+64,170,123),"Table","Basic placeholder",1,()=>SelectTool(Tool.Table));
+    Label(new Rect(530,top+108,520,32),"Browse Assets to expand your furniture catalog.");
+   }else{
+    Label(new Rect(165,top+103,w-400,34),"This collection is coming soon.",true);
+   }
   }
   void DrawPause(float w,float h){
    GUI.Box(new Rect(0,0,w,h),"",panelStyle);
@@ -772,7 +802,8 @@ namespace WorldBuilder {
   }
   void OnGUI(){
    InitStyles();
-   float w=Screen.width,h=Screen.height;
+   GUI.matrix=Matrix4x4.Scale(new Vector3(UIScale,UIScale,1f));
+   float w=Screen.width/UIScale,h=Screen.height/UIScale;
    if(walkthrough!=null&&walkthrough.IsWalking){
     GUI.Box(new Rect(0,0,w,48),"",panelStyle);
     Label(new Rect(19,10,Mathf.Min(w-35,840),30),"LIVE PREVIEW     WASD Move   |   Mouse Look   |   Esc Return");
