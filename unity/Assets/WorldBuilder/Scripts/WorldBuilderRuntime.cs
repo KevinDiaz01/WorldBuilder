@@ -164,7 +164,8 @@ namespace WorldBuilder {
      ((showImport||showExport)&&p.x>w*.5f-275f&&p.x<w*.5f+275f&&p.y<335f)||
      showAssets||(showStudio&&p.x>515f&&p.x<1165f&&p.y>90f&&p.y<455f);
   }
-  void ToggleAssetBrowser(){
+  void ToggleAssetBrowser(){ToggleAssetBrowser("Models");}
+  void ToggleAssetBrowser(string category){
    try{
     if(browserProcess!=null&&!browserProcess.HasExited){
      browserProcess.Kill();browserProcess.Dispose();browserProcess=null;
@@ -176,7 +177,7 @@ namespace WorldBuilder {
     if(hwnd==IntPtr.Zero){Notice("Unable to locate WorldBuilder window");return;}
     if(browserProcess!=null){browserProcess.Dispose();browserProcess=null;}
     browserProcess=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe,
-      hwnd.ToInt64().ToString()+" "+QuoteArg(AssetHub.Root)){UseShellExecute=false});
+      hwnd.ToInt64().ToString()+" "+QuoteArg(AssetHub.Root)+" "+QuoteArg(category)){UseShellExecute=false});
     showAssets=true;
     Notice("Assets browser opening...");
    }catch(Exception ex){Notice("Assets browser failed: "+ex.Message);UnityEngine.Debug.LogException(ex);}
@@ -2179,6 +2180,8 @@ namespace WorldBuilder {
       catalogScroll=Vector2.zero;
      }
     }
+    if(Button(new Rect(w-459,top+16,149,36),landscaping?"FIND "+(currentTool==Tool.Tree?"TREES":currentTool==Tool.Water?"WATER":currentTool==Tool.Terrain?"TERRAIN":"ASSETS"):"FIND BUILD ASSETS"))
+     ToggleAssetBrowser(landscaping?(currentTool==Tool.Tree?"Trees":currentTool==Tool.Water?"Water":currentTool==Tool.Terrain?"Terrain":"Outdoor"):"Architecture");
     if(Button(new Rect(w-178,top+16,106,36),"STUDIO")){
      showStudio=!showStudio;studioTab=building?0:2;
     }
@@ -2194,7 +2197,7 @@ namespace WorldBuilder {
        "Your garden collection is ready for plants",sectionStyle);
       GUI.Label(new Rect(left+24,cardY+47,700,30),
        "Download plants or outdoor models; compatible assets appear here automatically.",captionStyle);
-      if(Button(new Rect(left+24,cardY+89,173,42),"FIND FREE ASSETS"))ToggleAssetBrowser();
+      if(Button(new Rect(left+24,cardY+89,173,42),"FIND PLANTS"))ToggleAssetBrowser("Plants");
      }else{
       const float spacing=170f;
       catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewWidth,cardH+15),catalogScroll,
@@ -2261,7 +2264,7 @@ namespace WorldBuilder {
    if(Button(new Rect(w-384,top+13,138,36),"IMPORT")){
     showImport=true;showExport=false;
    }
-   if(Button(new Rect(w-239,top+13,165,36),"FIND ASSETS"))ToggleAssetBrowser();
+   if(Button(new Rect(w-239,top+13,165,36),"FIND "+(catalogCategory==8?"MATERIALS":catalogCategory==0?"ASSETS":"MORE")))ToggleAssetBrowser(catalogCategory==8?"Materials":catalogCategory==0?"Models":new[]{"Models","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials","Architecture","Other"}[catalogCategory]);
    float categoryLeft=left+16,categoryWidth=width-44;
    float total=0f;
    for(int i=0;i<categories.Length;i++)total+=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f)+7f;
