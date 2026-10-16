@@ -28,13 +28,21 @@ namespace WorldBuilder {
   public float gridSize=1f;
   public float wallHeight=2.7f;
   public float wallThickness=.16f;
-  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported }
+  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
   private Project project=new Project();
   private readonly List<GameObject> objects=new List<GameObject>();
   private string filePath;
-  private bool showHelp=true;
+  private bool showHelp=false;
+  private bool showPause=false;
+  private bool showConfirmExit=false;
+  private bool showSettings=false;
+  private int selectedIndex=-1;
+  private int creativeMode=0;
+  private int catalogCategory=0;
+  private Vector2 catalogScroll;
+  private string catalogSearch="";
   private string status="Ready to build";
   private float statusUntil;
   private bool showLibrary=true;
@@ -62,9 +70,12 @@ namespace WorldBuilder {
    if(walkthrough!=null&&walkthrough.IsWalking)return true;
    Vector2 p=new Vector2(Input.mousePosition.x,Screen.height-Input.mousePosition.y);
    return p.y<66f||p.y>Screen.height-54f||
-     (showLibrary&&p.x<205f)||
+     (showLibrary&&p.x<100f)||
+     (p.x>Screen.width-290f&&p.y<Screen.height-175f)||
+     (p.y>Screen.height-175f)||
+     showPause||showConfirmExit||showSettings||
      (showProjects&&p.x>Screen.width-365f&&p.y<520f)||
-     (showHelp&&p.x>Screen.width-380f&&p.y>Screen.height-215f)||
+
      ((showImport||showExport)&&p.x>Screen.width*.5f-265&&p.x<Screen.width*.5f+265&&p.y<330)||
      (showAssets&&p.x>Screen.width*.5f-360&&p.x<Screen.width*.5f+360&&p.y<Screen.height-65);
   }
@@ -89,6 +100,7 @@ namespace WorldBuilder {
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
   }
   void UndoLast(){
+   selectedIndex=-1;
    int i=objects.Count-1;
    if(i<0){Notice("Nothing to undo");return;}
    if(objects[i]!=null)Destroy(objects[i]);
@@ -254,7 +266,7 @@ namespace WorldBuilder {
     showExport=false;
    }catch(Exception e){Debug.LogException(e);Notice("Export failed: "+e.Message);}
   }
-  void NewProject(){project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
+  void NewProject(){selectedIndex=-1;project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
   string ProjectsFolder(){string p=Path.Combine(Application.persistentDataPath,"Projects");Directory.CreateDirectory(p);return p;}
   void SaveAsNamed(string name){
    try{string safe=string.Join("_",name.Split(Path.GetInvalidFileNameChars()));if(string.IsNullOrWhiteSpace(safe))safe="My World";
@@ -290,13 +302,19 @@ namespace WorldBuilder {
     int count=AssetHub.Scan(out msg);
     if(msg.Length>0){assetStatus=msg;if(count>0)Notice(msg);}
    }
+   if(Input.GetKeyDown(KeyCode.Alpha0))SelectTool(Tool.Select);
    if(Input.GetKeyDown(KeyCode.Alpha1))SelectTool(Tool.Wall);
    if(Input.GetKeyDown(KeyCode.Alpha2))SelectTool(Tool.Floor);
    if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
    if(Input.GetKeyDown(KeyCode.Alpha4))SelectTool(Tool.Table);
    if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
-   if(Input.GetKeyDown(KeyCode.Escape)){anchor=null;showImport=false;showExport=false;}
-   if(Input.GetKeyDown(KeyCode.F1))showHelp=!showHelp;
+   if(Input.GetKeyDown(KeyCode.Escape)){
+    if(showConfirmExit)showConfirmExit=false;
+    else if(showImport||showExport||showProjects||showSettings||showHelp){
+     showImport=false;showExport=false;showProjects=false;showSettings=false;showHelp=false;
+    }else{showPause=!showPause;anchor=null;}
+   }
+   if(Input.GetKeyDown(KeyCode.F1)){showHelp=!showHelp;showPause=false;}
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Z))UndoLast();
    UpdatePreview();
@@ -304,6 +322,16 @@ namespace WorldBuilder {
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.O))Load();
    if(!Input.GetMouseButtonDown(0) || Input.GetKey(KeyCode.LeftAlt) || Input.GetMouseButton(1))return;
    if(OverUI()||!MouseOnGround(out Vector3 p))return;
+   if(currentTool==Tool.Select){
+    Ray pick=sceneCamera.ScreenPointToRay(Input.mousePosition);
+    if(Physics.Raycast(pick,out RaycastHit hit,500f)){
+     selectedIndex=-1;
+     for(int j=0;j<objects.Count;j++){
+      if(objects[j]==hit.collider.gameObject||hit.collider.transform.IsChildOf(objects[j].transform)){selectedIndex=j;break;}
+     }
+    }else selectedIndex=-1;
+    return;
+   }
    if(currentTool==Tool.Erase) { Erase(p);return; }
    if(currentTool==Tool.Imported){
     if(string.IsNullOrEmpty(importedId)){Notice("Import an OBJ first");return;}
@@ -324,7 +352,7 @@ namespace WorldBuilder {
     Add(new Piece("floor",(start+p)*.5f+Vector3.up*FloorCenter,new Vector3(Mathf.Max(Mathf.Abs(delta.x),gridSize),FloorThickness,Mathf.Max(Mathf.Abs(delta.z),gridSize)),Quaternion.identity));
    }
   }
-  void Add(Piece piece){project.pieces.Add(piece);objects.Add(Create(piece));}
+  void Add(Piece piece){selectedIndex=-1;project.pieces.Add(piece);objects.Add(Create(piece));}
   GameObject Create(Piece piece){
    if(piece.kind=="imported"){
     try{
@@ -355,6 +383,7 @@ namespace WorldBuilder {
    return obj;
   }
   void Erase(Vector3 point){
+   selectedIndex=-1;
    for(int i=objects.Count-1;i>=0;i--){
     if(objects[i]==null)continue;
     var collider=objects[i].GetComponent<Collider>();
@@ -364,16 +393,16 @@ namespace WorldBuilder {
     }
    }
   }
-  public void Save(){
-   try{File.WriteAllText(filePath,JsonUtility.ToJson(project,true));Debug.Log("Saved "+filePath);Notice("Saved: "+Path.GetFileName(filePath));}
-   catch(Exception e){Debug.LogError(e);Notice("Save failed: "+e.Message);}
+  public bool Save(){
+   try{File.WriteAllText(filePath,JsonUtility.ToJson(project,true));Debug.Log("Saved "+filePath);Notice("Saved: "+Path.GetFileName(filePath));return true;}
+   catch(Exception e){Debug.LogError(e);Notice("Save failed: "+e.Message);return false;}
   }
   public void Load(){
    try{
     var loaded=JsonUtility.FromJson<Project>(File.ReadAllText(filePath));
     if(loaded==null||loaded.schema!=2||loaded.pieces==null)throw new InvalidDataException("Unsupported project schema");
     foreach(var obj in objects)if(obj!=null)Destroy(obj);
-    objects.Clear();project=loaded;
+    objects.Clear();selectedIndex=-1;project=loaded;
     foreach(var piece in project.pieces)objects.Add(Create(piece));Notice("Loaded: "+Path.GetFileName(filePath));
    }catch(Exception e){Debug.LogError("Load failed: "+e.Message);Notice("Load failed: "+e.Message);}
   }
