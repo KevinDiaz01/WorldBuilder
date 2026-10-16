@@ -75,11 +75,13 @@ namespace WorldBuilder {
   private int creativeMode=0;
   private int catalogCategory=0;
   private int furnitureRoom=0;
+  private bool textureOnly=false;
   private int landscapeCategory=0;
   private int selectedFinish=0;
   private string selectedTextureId="";
   private float selectedTextureTile=1f;
   private readonly Dictionary<string,Texture2D> materialImages=new Dictionary<string,Texture2D>();
+  private readonly Dictionary<string,Texture2D> associatedImages=new Dictionary<string,Texture2D>();
   private static readonly string[] FinishNames={"Default","Warm White","Stone","Charcoal","Sand","Terracotta","Sage","Ocean"};
   private static readonly Color[] FinishColors={Color.white,new Color(.91f,.88f,.80f),new Color(.58f,.62f,.63f),new Color(.19f,.23f,.28f),new Color(.77f,.67f,.51f),new Color(.67f,.34f,.26f),new Color(.38f,.52f,.43f),new Color(.22f,.47f,.62f)};
   private Vector2 catalogScroll;
@@ -211,6 +213,8 @@ namespace WorldBuilder {
    modelThumbnails.Clear();
    foreach(var tex in materialImages.Values)if(tex!=null)Destroy(tex);
    materialImages.Clear();
+   foreach(var tex in associatedImages.Values)if(tex!=null)Destroy(tex);
+   associatedImages.Clear();
   }
   void SelectObject(int index){
    selectedIndex=index;
@@ -1452,6 +1456,29 @@ namespace WorldBuilder {
     return tex;
    }catch(Exception ex){Diagnostics.Add("ERROR","Material image unreadable: "+ex.Message);return null;}
   }
+  Texture2D GetAssociatedTexture(string assetId,string filename){
+   string path=AssetHub.ModelTexturePath(assetId,filename);
+   if(path==null)return null;
+   if(associatedImages.TryGetValue(path,out Texture2D cached))return cached;
+   try{
+    var image=new Texture2D(2,2,TextureFormat.RGBA32,false);
+    if(!image.LoadImage(File.ReadAllBytes(path))){Destroy(image);return null;}
+    image.wrapMode=TextureWrapMode.Repeat;
+    associatedImages[path]=image;
+    return image;
+   }catch(Exception ex){Diagnostics.Add("WARN","Model texture failed to open: "+ex.Message);return null;}
+  }
+  void SetImportedFinish(Piece piece,string finish){
+   if(piece==null||piece.kind!="imported"||piece.finish==finish)return;
+   int index=selectedIndex;
+   if(index<0||index>=objects.Count)return;
+   RememberChange();
+   piece.finish=finish;
+   if(objects[index]!=null)Destroy(objects[index]);
+   objects[index]=Create(piece);
+   RefreshSelectionOutline();
+   Notice(finish==""?"Restored original model materials":"Applied model-specific texture");
+  }
   // Imported OBJ/GLB materials live on child mesh renderers, not on the
   // parent GameObject. Preserve each material by default and replace it only
   // when the user explicitly paints the asset.
@@ -1461,6 +1488,9 @@ namespace WorldBuilder {
    if(piece.finish.StartsWith("texture:",StringComparison.Ordinal)){
     image=GetMaterialImage(piece.finish.Substring(8));
     if(image==null){Diagnostics.Add("WARN","Missing paint texture on imported model: "+piece.finish);return;}
+   }else if(piece.finish.StartsWith("assettexture:",StringComparison.Ordinal)){
+    image=GetAssociatedTexture(piece.assetId,piece.finish.Substring("assettexture:".Length));
+    if(image==null){Diagnostics.Add("WARN","Model's own texture is missing: "+piece.finish);return;}
    }else{
     int index=Array.IndexOf(FinishNames,piece.finish);
     if(index<0)return;
@@ -2031,7 +2061,7 @@ namespace WorldBuilder {
     bool isActive=creativeMode==1?(choice==Tool.Select&&k==0&&currentTool==Tool.Select)||
      (k==1&&showCatalog&&catalogCategory==0)||
      (k==2&&showCatalog&&catalogCategory==1)||
-     ((k==3||k==4)&&showCatalog&&catalogCategory==8)||
+     ((k==3&&!textureOnly||k==4&&textureOnly)&&showCatalog&&catalogCategory==8)||
      (k==5&&showCatalog&&catalogCategory==2):
      creativeMode==2?(k==5&&showCatalog&&landscapeCategory==5):
      currentTool==choice;
@@ -2040,6 +2070,7 @@ namespace WorldBuilder {
      if(creativeMode==1&&k>=1&&k<=5){
       showCatalog=true;catalogOpenForMode[1]=true;
       catalogCategory=k==1?0:k==2?1:k==5?2:8;
+      textureOnly=k==4;
       if(k==3||k==4)SelectTool(Tool.Paint);
       else SelectTool(Tool.Select);
       Notice("Browsing "+labels[k].ToLowerInvariant());
@@ -2079,7 +2110,7 @@ namespace WorldBuilder {
     Piece selectedPiece=project.pieces[selectedIndex];
     contentH=270f;
     if(multiSelection.Count>1)contentH+=82f;
-    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?320f:130f;
+    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?560f:130f;
     if(selectedPiece.kind=="wall")contentH+=176f;
     if(selectedPiece.kind=="water")contentH+=102f;
     if(selectedPiece.kind=="light-point"||selectedPiece.kind=="light-spot")contentH+=215f;
@@ -2136,6 +2167,27 @@ namespace WorldBuilder {
         catch(Exception ex){Notice("Could not sort model: "+ex.Message);}
        }
        y+=156;
+       var ownTextures=AssetHub.ModelTextures(id);
+       GUI.Label(new Rect(ox,y,282,24),"TEXTURES WITH THIS MODEL",miniStyle);y+=29;
+       if(Button(new Rect(ox,y,286,34),"RESTORE ORIGINAL MATERIALS"))
+        SetImportedFinish(piece,"");
+       y+=42;
+       if(ownTextures.Count==0){
+        GUI.Label(new Rect(ox,y,280,42),
+         "No separate image textures were included with this model.",captionStyle);y+=48;
+       }else{
+        int max=Mathf.Min(ownTextures.Count,4);
+        for(int k=0;k<max;k++){
+         string texture=ownTextures[k];
+         if(Button(new Rect(ox,y,286,34),"APPLY  "+(texture.Length>24?texture.Substring(0,21)+"...":texture)))
+          SetImportedFinish(piece,"assettexture:"+texture);
+         y+=38;
+        }
+        if(ownTextures.Count>4){
+         GUI.Label(new Rect(ox,y,280,25),
+          (ownTextures.Count-4)+" more textures in My Assets folder",captionStyle);y+=30;
+        }
+       }
       }
      }
     }
@@ -2414,7 +2466,7 @@ namespace WorldBuilder {
    SoftPanel(new Rect(left,top,width,shelfHeight),trayStyle);
    bool building=creativeMode==0,landscaping=creativeMode==2;
    string heading=building?"BUILD COLLECTION":landscaping?(landscapeCategory==5?"SKYBOXES":landscapeObjects?"OUTDOOR OBJECTS":"LANDSCAPE COLLECTION"):
-     catalogCategory==0?"MY ASSETS":catalogCategory==8?"SURFACE MATERIALS":
+     catalogCategory==0?"MY ASSETS":catalogCategory==8?(textureOnly?"TEXTURES":"SURFACE MATERIALS"):
      catalogCategory==12?"SKYBOXES & HDRI":"OBJECT COLLECTION";
    GUI.Label(new Rect(left+19,top+13,290,30),heading,sectionStyle);
    GUI.Label(new Rect(left+23,top+46,300,20),
@@ -2547,14 +2599,15 @@ namespace WorldBuilder {
    }else if(catalogCategory==8){
     var materials=MaterialLibrary.Catalog();
     float tileW=145f;
-    int n=FinishNames.Length+materials.Count;
+    int prefix=textureOnly?0:FinishNames.Length;
+    int n=prefix+materials.Count;
     float sliderX=w-510f;
     GUI.Label(new Rect(sliderX,top+44,245,20),"Texture repeat: "+selectedTextureTile.ToString("F2")+"x",mutedStyle);
     float next=GUI.HorizontalSlider(new Rect(sliderX+237,top+49,155,17),selectedTextureTile,.25f,8f);
     selectedTextureTile=Mathf.Round(next*4f)/4f;
     catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewportWidth,cardH+15),catalogScroll,
       new Rect(0,0,Mathf.Max(viewportWidth-15,n*tileW+10),cardH),true,false);
-    for(int i=0;i<FinishNames.Length;i++){
+    for(int i=0;i<prefix;i++){
      int index=i;
      Rect tile=new Rect(i*tileW+2,0,tileW-8,cardH-7);
      bool selected=string.IsNullOrEmpty(selectedTextureId)&&selectedFinish==i;
@@ -2568,7 +2621,7 @@ namespace WorldBuilder {
     }
     for(int i=0;i<materials.Count;i++){
      var material=materials[i];
-     Rect tile=new Rect((i+FinishNames.Length)*tileW+2,0,tileW-8,cardH-7);
+     Rect tile=new Rect((i+prefix)*tileW+2,0,tileW-8,cardH-7);
      bool selected=selectedTextureId==material.id;
      GUI.Box(tile,"",selected?selectedCardStyle:cardStyle);
      Texture2D image=GetMaterialImage(material.id);
