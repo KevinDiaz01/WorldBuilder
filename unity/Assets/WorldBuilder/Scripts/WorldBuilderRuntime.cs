@@ -161,6 +161,7 @@ namespace WorldBuilder {
   void RotateSelection(){
    if(selectedIndex<0||selectedIndex>=project.pieces.Count)return;
    var item=project.pieces[selectedIndex];
+   RememberChange();
    item.rotation=Quaternion.Euler(0,45,0)*item.rotation;
    objects[selectedIndex].transform.rotation=item.rotation;
    RefreshSelectionOutline();
@@ -457,6 +458,7 @@ namespace WorldBuilder {
      }
      SelectObject(hitIndex);
      if(hitIndex>=0){
+      RememberChange();
       draggingSelection=true;
       selectionDragOffset=project.pieces[hitIndex].position-p;
      }
