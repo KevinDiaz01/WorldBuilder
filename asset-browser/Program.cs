@@ -34,8 +34,8 @@ internal sealed class BrowserWindow : Form {
  readonly ToolStripLabel status=new("Ready");
  readonly System.Windows.Forms.Timer layoutTimer=new(){Interval=250};
  string provider="Poly Haven";
- readonly string[] names={"Poly Haven","Unity Asset Store","ambientCG"};
- readonly string[] sites={"https://polyhaven.com/models","https://assetstore.unity.com/3d","https://ambientcg.com/list?type=Material"};
+ readonly string[] names={"Poly Haven","Sketchfab","ambientCG"};
+ readonly string[] sites={"https://polyhaven.com/models","https://sketchfab.com/search?features=downloadable&type=models","https://ambientcg.com/list?type=Material"};
  public BrowserWindow(IntPtr unityWindow,string root){
   unity=unityWindow;assetsRoot=root;
   Text="WorldBuilder Assets Browser";
@@ -59,7 +59,7 @@ internal sealed class BrowserWindow : Form {
    strip.Items.Add(btn);
   }
   strip.Items.Add(new ToolStripSeparator());
-  strip.Items.Add(new ToolStripLabel("Downloads save automatically by website · Unity packages require Unity import"));
+  strip.Items.Add(new ToolStripLabel("Download GLB/glTF/OBJ models where available · licenses vary"));
   strip.Items.Add(new ToolStripSeparator());
   var folder=new ToolStripButton("Asset folder");
   folder.Click+=(_,_)=>Process.Start(new ProcessStartInfo("explorer.exe",$"\"{assetsRoot}\""){UseShellExecute=true});
