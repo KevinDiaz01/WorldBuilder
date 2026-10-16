@@ -12,6 +12,11 @@ namespace WorldBuilder {
   public string assetId;
   public string roomId;
   public string finish;
+  public List<Vector3> vertices=new List<Vector3>();
+  public float lightIntensity=1.5f;
+  public float lightRange=10f;
+  public float lightAngle=55f;
+  public Color lightColor=Color.white;
   public float textureTile=1f;
   public Piece(string kind, Vector3 position, Vector3 scale, Quaternion rotation) {
    this.kind=kind;this.position=position;this.scale=scale;this.rotation=rotation;
@@ -20,6 +25,10 @@ namespace WorldBuilder {
  [Serializable] public class Project {
   public int schema=2;
   public List<Piece> pieces=new List<Piece>();
+  public int skyPreset=0;
+  public float sunYaw=35f;
+  public float sunPitch=48f;
+  public bool fog=false;
  }
  public class WorldBuilderRuntime : MonoBehaviour {
   public Camera sceneCamera;
@@ -35,7 +44,7 @@ namespace WorldBuilder {
   const float LevelHeight=2.85f;
   const float DefaultWallHeight=2.7f;
   const float DefaultWallThickness=.16f;
-  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs, Paint }
+  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs, Paint, Garage, Light, Terrain, Water, Mirror, Seat, Spawn }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
   private readonly Stack<string> undoHistory=new Stack<string>();
@@ -103,6 +112,17 @@ namespace WorldBuilder {
   private Vector2 assetScroll;
   private bool showExport=false;
   private bool showGrid=true;
+  private bool polygonMode=false;
+  private readonly List<Vector3> polygonCorners=new List<Vector3>();
+  private float openingWidth=1.2f;
+  private float openingHeight=2.1f;
+  private float openingBottom=0f;
+  private bool showStudio=false;
+  private int lightMode=0;
+  private float lightBrightness=1.6f;
+  private float lightRadius=11f;
+  private float terrainAmplitude=2.5f;
+  private Light editorSun;
   private readonly List<GameObject> gridMarkers=new List<GameObject>();
   bool OverUI(){
    if(walkthrough!=null&&walkthrough.IsWalking)return true;
@@ -485,7 +505,7 @@ namespace WorldBuilder {
    }catch(Exception ex){Diagnostics.Add("ERROR","Recovery restore: "+ex.Message);Notice("Could not restore recovery");}
   }
   void UpdatePreview(){
-   bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
+   bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
    bool onGround=MouseOnGround(out Vector3 p);
    if(OverUI()||currentTool==Tool.Erase||currentTool==Tool.Paint||(!onGround&&!aimedAtWall)){
     if(importedGhost!=null)importedGhost.SetActive(false);
@@ -513,22 +533,22 @@ namespace WorldBuilder {
    if(importedGhost!=null)importedGhost.SetActive(false);
    preview.SetActive(true);
    preview.transform.rotation=Quaternion.identity;
-   if(currentTool==Tool.Door||currentTool==Tool.Window){
+   if(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage){
     if(!FindOpeningWall(out int wallIndex,out Vector3 hitPoint)){preview.SetActive(false);return;}
     Piece wall=project.pieces[wallIndex];
     bool window=currentTool==Tool.Window;
-    float openingWidth=window?1.2f:.9f;
-    float openingHeight=window?Mathf.Min(1.15f,wall.scale.y-1.1f):Mathf.Min(2.1f,wall.scale.y-.15f);
-    float openingBottom=window?.85f:0f;
+    float previewWidth=Mathf.Min(openingWidth,wall.scale.x-.2f);
+    float previewHeight=Mathf.Min(openingHeight,wall.scale.y-.12f);
+    float previewBottom=Mathf.Clamp(openingBottom,0f,wall.scale.y-previewHeight);
     Vector3 local=Quaternion.Inverse(wall.rotation)*(hitPoint-wall.position);
-    local.x=Mathf.Clamp(local.x,-wall.scale.x*.5f+openingWidth*.5f+.08f,wall.scale.x*.5f-openingWidth*.5f-.08f);
-    local.y=openingBottom+openingHeight*.5f-wall.scale.y*.5f;
+    local.x=Mathf.Clamp(local.x,-wall.scale.x*.5f+previewWidth*.5f+.08f,wall.scale.x*.5f-previewWidth*.5f-.08f);
+    local.y=previewBottom+previewHeight*.5f-wall.scale.y*.5f;
     local.z=0;
     Vector3 forward=wall.rotation*Vector3.forward;
     float facing=Vector3.Dot(sceneCamera.transform.position-wall.position,forward)>=0?1f:-1f;
     preview.transform.position=wall.position+wall.rotation*local+forward*(facing*(wall.scale.z*.5f+.04f));
     preview.transform.rotation=wall.rotation;
-    preview.transform.localScale=new Vector3(openingWidth,openingHeight,.07f);
+    preview.transform.localScale=new Vector3(previewWidth,previewHeight,.07f);
    }else if(currentTool==Tool.Couch||currentTool==Tool.Table){
     bool sofa=currentTool==Tool.Couch;
     preview.transform.position=p+Vector3.up*.4f;
@@ -551,7 +571,7 @@ namespace WorldBuilder {
   private Vector2 libraryScroll;
   private GUIStyle titleStyle,buttonStyle;
   void Notice(string message){status=message;statusUntil=Time.time+5f;}
-  void SelectTool(Tool tool){currentTool=tool;anchor=null;Notice(tool+" tool selected");}
+  void SelectTool(Tool tool){currentTool=tool;anchor=null;polygonCorners.Clear();Notice(tool+" tool selected");}
   string AssetLibrary(){string d=Path.Combine(Application.persistentDataPath,"ImportedAssets");Directory.CreateDirectory(d);return d;}
   void BrowseObj(){
    try{
@@ -671,6 +691,7 @@ namespace WorldBuilder {
    // Asset websites now render through the embedded WebView2 browser.
    filePath=Path.Combine(Application.persistentDataPath,"WorldBuilder-project.json");
    if(File.Exists(filePath))Load();
+   ApplyEnvironment();
    BuildGrid();
   }
   Vector3 Snap(Vector3 p) => new Vector3(Mathf.Round(p.x/gridSize)*gridSize,0,Mathf.Round(p.z/gridSize)*gridSize);
@@ -681,6 +702,48 @@ namespace WorldBuilder {
    Plane ground=new Plane(Vector3.up,Vector3.zero);
    if(!ground.Raycast(ray,out float distance))return false;
    point=Snap(ray.GetPoint(distance));return true;
+  }
+  void ApplyEnvironment(){
+   if(sceneCamera!=null){
+    sceneCamera.clearFlags=CameraClearFlags.SolidColor;
+    Color[] palettes={new Color(.48f,.70f,.92f),new Color(.92f,.54f,.31f),new Color(.045f,.064f,.14f),new Color(.7f,.77f,.81f)};
+    int sky=Mathf.Clamp(project.skyPreset,0,palettes.Length-1);
+    sceneCamera.backgroundColor=palettes[sky];
+    RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;
+    RenderSettings.ambientLight=sky==2?new Color(.19f,.24f,.38f):new Color(.58f,.62f,.69f);
+    RenderSettings.fog=project.fog;
+    RenderSettings.fogColor=palettes[sky];
+    RenderSettings.fogDensity=.009f;
+   }
+   if(editorSun==null){
+    var sun=new GameObject("WorldBuilder Studio Sun");
+    editorSun=sun.AddComponent<Light>();
+    editorSun.type=LightType.Directional;
+   }
+   editorSun.intensity=project.skyPreset==2?.14f:project.skyPreset==1?.68f:1.05f;
+   editorSun.transform.rotation=Quaternion.Euler(project.sunPitch,project.sunYaw,0);
+  }
+  void CompletePolygonRoom(){
+   if(polygonCorners.Count<3){Notice("Click at least three corners");return;}
+   Vector3 middle=Vector3.zero;
+   foreach(var p in polygonCorners)middle+=p;
+   middle/=polygonCorners.Count;
+   var local=new List<Vector3>();
+   foreach(var p in polygonCorners)local.Add(new Vector3(p.x-middle.x,0,p.z-middle.z));
+   try{
+    Mesh validation=PolygonGeometry.Create(local,FloorThickness);
+    Destroy(validation);
+    RememberChange();
+    string group=Guid.NewGuid().ToString("N");
+    for(int i=0;i<polygonCorners.Count;i++){
+     var wall=WallBetween(polygonCorners[i],polygonCorners[(i+1)%polygonCorners.Count]);
+     wall.roomId=group;AddWithoutHistory(wall);
+    }
+    var floor=new Piece("polygon-floor",new Vector3(middle.x,FloorCenter+buildingLevel*LevelHeight,middle.z),Vector3.one,Quaternion.identity);
+    floor.vertices=local;floor.roomId=group;AddWithoutHistory(floor);
+    polygonCorners.Clear();
+    Notice("Custom room created with "+local.Count+" corners");
+   }catch(Exception ex){Diagnostics.Add("WARN","Invalid room outline: "+ex.Message);Notice("Room outline invalid: "+ex.Message);}
   }
   void Update() {
    if(Time.unscaledTime>=nextRecoveryTime){
@@ -732,6 +795,11 @@ namespace WorldBuilder {
     return;
    }
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
+   if(currentTool==Tool.Room&&Input.GetKeyDown(KeyCode.C)){polygonMode=!polygonMode;polygonCorners.Clear();anchor=null;Notice(polygonMode?"Custom room: click corners, Enter to finish":"Rectangular room mode");}
+   if(currentTool==Tool.Room&&polygonMode){
+    if(Input.GetKeyDown(KeyCode.Return)||Input.GetKeyDown(KeyCode.KeypadEnter))CompletePolygonRoom();
+    if(Input.GetKeyDown(KeyCode.Backspace)&&polygonCorners.Count>0)polygonCorners.RemoveAt(polygonCorners.Count-1);
+   }
    if(Input.GetKeyDown(KeyCode.N)){furnitureSnap=!furnitureSnap;Notice("Furniture snap "+(furnitureSnap?"on":"off"));}
    if(!showPause&&!showConfirmExit&&!showSettings&&!showExport&&!showImport&&!showProjects){
     if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.D))DuplicateSelection();
@@ -790,7 +858,12 @@ namespace WorldBuilder {
    }
    if(currentTool==Tool.Erase) { Erase(p);return; }
    if(currentTool==Tool.Paint){PaintSurface();return;}
-   if(currentTool==Tool.Door||currentTool==Tool.Window){AddOpening(currentTool==Tool.Window);return;}
+   if(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage){AddOpening(currentTool==Tool.Window);return;}
+   if(currentTool==Tool.Room&&polygonMode){polygonCorners.Add(p);Notice("Corner "+polygonCorners.Count+" · Enter to close room");return;}
+   if(currentTool==Tool.Light){var piece=new Piece(lightMode==0?"light-point":"light-spot",p+Vector3.up*2.35f,Vector3.one,Quaternion.Euler(90,0,0));piece.lightIntensity=lightBrightness;piece.lightRange=lightRadius;Add(piece);return;}
+   if(currentTool==Tool.Mirror){Add(new Piece("vrc-mirror",p+Vector3.up*1.4f,new Vector3(1.5f,2f,.05f),Quaternion.identity));return;}
+   if(currentTool==Tool.Seat){Add(new Piece("vrc-seat",p+Vector3.up*.5f,new Vector3(.55f,.2f,.55f),Quaternion.identity));return;}
+   if(currentTool==Tool.Spawn){Add(new Piece("vrc-spawn",p+Vector3.up*1f,new Vector3(.3f,.3f,.3f),Quaternion.identity));return;}
    if(currentTool==Tool.Imported){
     if(string.IsNullOrEmpty(importedId)){Notice("Choose an imported model first");return;}
     var item=new Piece("imported",SnapFurniture(ImportedPlacement(p)),Vector3.one*importedScale,Quaternion.Euler(0,importedRotation,0));
@@ -803,6 +876,8 @@ namespace WorldBuilder {
    Vector3 start=anchor.Value;anchor=null;
    if(Vector3.Distance(start,p)<.01f)return;
    if(currentTool==Tool.Room){MakeRoom(start,p);return;}
+   if(currentTool==Tool.Terrain){Add(new Piece("terrain",(start+p)*.5f,new Vector3(Mathf.Max(2f,Mathf.Abs(start.x-p.x)),terrainAmplitude,Mathf.Max(2f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
+   if(currentTool==Tool.Water){Add(new Piece("water",(start+p)*.5f,new Vector3(Mathf.Max(1f,Mathf.Abs(start.x-p.x)),.08f,Mathf.Max(1f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
    if(currentTool==Tool.Roof){MakeRoof(start,p);return;}
    if(currentTool==Tool.Stairs){MakeStairs(start,p);return;}
    if(currentTool==Tool.Wall){
@@ -969,12 +1044,13 @@ namespace WorldBuilder {
    if(!FindOpeningWall(out int idx,out Vector3 wallPoint)){Notice("Aim at a wall to place an opening");return;}
    Piece original=project.pieces[idx];
    float length=original.scale.x,height=original.scale.y;
-   float width=window?1.2f:.9f;
+   float width=Mathf.Min(openingWidth,length-.20f);
    if(length<width+.3f||height<1.6f){Notice("Wall is too small for this opening");return;}
    Vector3 local=Quaternion.Inverse(original.rotation)*(wallPoint-original.position);
    float center=Mathf.Clamp(local.x,-length*.5f+width*.5f+.08f,length*.5f-width*.5f-.08f);
    float left=center-width*.5f,right=center+width*.5f;
-   float bottom=window?.85f:0f,openingHeight=window?Mathf.Min(1.15f,height-1.1f):Mathf.Min(2.1f,height-.15f);
+   float openingHeight=Mathf.Min(this.openingHeight,height-.10f);
+   float bottom=Mathf.Clamp(openingBottom,0,height-openingHeight);
    RememberChange();
    if(objects[idx]!=null)Destroy(objects[idx]);
    objects.RemoveAt(idx);project.pieces.RemoveAt(idx);
@@ -1011,7 +1087,7 @@ namespace WorldBuilder {
    trim(left-rim,right+rim,bottom+openingHeight,bottom+openingHeight+rim);
    if(window)trim(left-rim,right+rim,bottom-rim,bottom);
    // The gap remains an actual opening with colliders on surrounding pieces.
-   Notice(window?"Window opening created":"Door opening created");
+   Notice(currentTool==Tool.Garage?"Garage opening created":window?"Window opening created":"Door opening created");
   }
   Texture2D GetMaterialImage(string id){
    if(materialImages.TryGetValue(id,out Texture2D tex))return tex;
