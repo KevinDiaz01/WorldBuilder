@@ -142,12 +142,13 @@ namespace WorldBuilder {
    float w=Screen.width/scale,h=Screen.height/scale;
    Vector2 p=new Vector2(Input.mousePosition.x/scale,(Screen.height-Input.mousePosition.y)/scale);
    return (objectHandleVisible&&objectHandleArea.Contains(p))||p.y<88f||(showCatalog&&p.y>h-Mathf.Min(270f,h*.34f)-14f)||
-     (!showCatalog&&p.y>h-70f&&p.x<480f)||
+     (!showCatalog&&p.y>h-79f&&p.x<523f)||
      (showLibrary&&p.x<122f&&p.y>=94f&&p.y<735f)||
      (showInspector&&p.x>w-373f&&p.y>=94f&&p.y<(showCatalog?h-Mathf.Min(270f,h*.34f)-6f:h-90f))||
      (p.x>125f&&p.x<650f&&p.y<159f)||
-     (p.x>=135f&&p.x<=825f&&p.y>=h-(showCatalog?Mathf.Min(270f,h*.34f)+60f:60f)&&
-      p.y<=h-(showCatalog?Mathf.Min(270f,h*.34f)+8f:8f))||
+     (p.x>=135f&&p.x<=825f&&
+      p.y>=h-(showCatalog?Mathf.Min(270f,h*.34f)+60f:119f)&&
+      p.y<=h-(showCatalog?Mathf.Min(270f,h*.34f)+8f:68f))||
      showPause||showConfirmExit||showSettings||showHelp||
      (showProjects&&p.x>w*.5f-200f&&p.x<w*.5f+210f&&p.y<505f)||
      ((showImport||showExport)&&p.x>w*.5f-275f&&p.x<w*.5f+275f&&p.y<335f)||
@@ -1602,7 +1603,7 @@ namespace WorldBuilder {
    float top=showCatalog?h-Mathf.Min(270f,h*.34f)-9f:h-9f;
    float width=Mathf.Min(w-300f,690f);
    float left=135f;
-   float y=top-51f;
+   float y=showCatalog?top-51f:top-110f;
    if(y<169f)return;
    GUI.Box(new Rect(left,y,width,42f),"",panelStyle);
    bool notification=Time.time<statusUntil;
@@ -2170,9 +2171,11 @@ namespace WorldBuilder {
    if(showStudio)DrawStudio(w,h);
    if(showCatalog)DrawCatalog(w,h);
    else {
-    GUI.Box(new Rect(127,h-62,344,54),"",panelStyle);
-    if(Button(new Rect(134,h-56,162,42),"Open Catalog"))showCatalog=true;
-    if(Button(new Rect(302,h-56,162,42),"Import Model")){showImport=true;showExport=false;}
+    SoftPanel(new Rect(130,h-75,386,65),trayStyle);
+    if(Button(new Rect(138,h-67,203,46),"OPEN COLLECTION"))showCatalog=true;
+    if(Button(new Rect(349,h-67,160,46),"IMPORT 3D")){
+     showImport=true;showExport=false;
+    }
    }
    if(showImport){
     float x=w*.5f-265;
