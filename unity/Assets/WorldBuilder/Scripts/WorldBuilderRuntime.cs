@@ -287,7 +287,9 @@ namespace WorldBuilder {
   const float FloorThickness=0.15f;
   const float FloorCenter=FloorTop-FloorThickness*.5f;
   void UpdatePreview(){
-   if(OverUI()||currentTool==Tool.Erase||!MouseOnGround(out Vector3 p)){
+   bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
+   bool onGround=MouseOnGround(out Vector3 p);
+   if(OverUI()||currentTool==Tool.Erase||(!onGround&&!aimedAtWall)){
     if(preview!=null)preview.SetActive(false);
     return;
    }
@@ -524,7 +526,9 @@ namespace WorldBuilder {
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.S))Save();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.O))Load();
    if(!Input.GetMouseButtonDown(0) || Input.GetKey(KeyCode.LeftAlt) || Input.GetMouseButton(1))return;
-   if(OverUI()||!MouseOnGround(out Vector3 p))return;
+   if(OverUI())return;
+   bool clickedGround=MouseOnGround(out Vector3 p);
+   if(!clickedGround&&currentTool!=Tool.Door&&currentTool!=Tool.Window)return;
    if(currentTool==Tool.Select){
     Ray pick=sceneCamera.ScreenPointToRay(Input.mousePosition);
     if(Physics.Raycast(pick,out RaycastHit hit,500f)){
@@ -898,9 +902,9 @@ namespace WorldBuilder {
   void DrawLeft(float h){
    float y=96f;
    if(!showLibrary){if(Button(new Rect(12,y,104,42),"Tools >"))showLibrary=true;return;}
-   GUI.Box(new Rect(12,y,104,602),"",panelStyle);
+   GUI.Box(new Rect(12,y,104,635),"",panelStyle);
    if(Button(new Rect(19,y+7,90,35),"< Tools")){showLibrary=false;return;}
-   string[] names={"Select","Walls","Floors","Rooms","Doors","Windows","Stairs","Roofs","Furniture","Materials","Lighting","Terrain"};
+   string[] names={"Select","Walls","Floors","Rooms","Doors","Windows","Stairs","Roofs","Furniture","Materials","Lighting","Terrain","Erase"};
    string[] symbols={"◈","▥","▦","⬡","▯","⊞","≋","⌂","▣","▤","☼","△"};
    float step=45f;
    for(int k=0;k<names.Length;k++){
@@ -908,7 +912,7 @@ namespace WorldBuilder {
       (k==2&&currentTool==Tool.Floor)||(k==3&&currentTool==Tool.Room)||
       (k==4&&currentTool==Tool.Door)||(k==5&&currentTool==Tool.Window)||
       (k==6&&currentTool==Tool.Stairs)||(k==7&&currentTool==Tool.Roof)||
-      (k==8&&currentTool==Tool.Imported);
+      (k==8&&currentTool==Tool.Imported)||(k==12&&currentTool==Tool.Erase);
     float yy=y+47+k*step;
     if(Button(new Rect(19,yy,90,step-5),names[k],active)){
      if(k==0)SelectTool(Tool.Select);
@@ -919,6 +923,7 @@ namespace WorldBuilder {
      else if(k==5)SelectTool(Tool.Window);
      else if(k==6)SelectTool(Tool.Stairs);
      else if(k==7)SelectTool(Tool.Roof);
+     else if(k==12)SelectTool(Tool.Erase);
      else if(k==8){creativeMode=1;catalogCategory=0;showCatalog=true;Notice("Choose a model from My Assets");}
      else ComingSoon(names[k]);
     }
