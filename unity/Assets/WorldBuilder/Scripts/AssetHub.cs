@@ -40,31 +40,53 @@ namespace WorldBuilder {
    found.Sort((a,b)=>string.Compare(Name(a),Name(b),StringComparison.OrdinalIgnoreCase));
    return found;
   }
+  // Automatic recursive discovery. Events are recorded for the F2 console.
+  static readonly Dictionary<string,string> observed=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+  static readonly HashSet<string> reportedUnsupported=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
   public static int Scan(out string message){
    Initialize();
    int count=0;
    message="";
    foreach(string provider in Providers){
-    var folders=new List<string>{Downloads(provider)};
-    string older=Path.Combine(Downloads(provider),"Downloads");
-    if(Directory.Exists(older))folders.Add(older);
-    foreach(string folder in folders)foreach(string source in Directory.GetFiles(folder)){
+    string root=Downloads(provider);
+    string[] files;
+    try{files=Directory.GetFiles(root,"*",SearchOption.AllDirectories);}
+    catch(Exception ex){Diagnostics.Add("ERROR","Cannot scan "+provider+": "+ex.Message);continue;}
+    Array.Sort(files,StringComparer.OrdinalIgnoreCase);
+    foreach(string source in files){
      string ext=Path.GetExtension(source).ToLowerInvariant();
-     if(ext!=".zip"&&ext!=".obj"&&ext!=".gltf"&&ext!=".glb")continue;
-     string marker=source+".worldbuilder-imported";
-     if(File.Exists(marker)&&File.ReadAllText(marker)==new FileInfo(source).Length.ToString())continue;
-     // Never import a download while its writer still holds it.
+     if(source.EndsWith(".worldbuilder-imported",StringComparison.OrdinalIgnoreCase)||ext==".tmp"||ext==".crdownload"||ext==".part")continue;
+     bool model=ext==".obj"||ext==".gltf"||ext==".glb"||ext==".zip";
+     if(!model){
+      if((ext==".fbx"||ext==".blend"||ext==".unitypackage"||ext==".7z"||ext==".rar")&&reportedUnsupported.Add(source))
+       Diagnostics.Add("WARN","Unsupported 3D format: "+Path.GetFileName(source)+" ("+provider+"). Use OBJ, GLB, glTF or ZIP.");
+      continue;
+     }
      try{
-      using(var stream=new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.None)){}
+      FileInfo info=new FileInfo(source);
+      string fingerprint=info.Length+"|"+info.LastWriteTimeUtc.Ticks;
+      string marker=source+".worldbuilder-imported";
+      if(File.Exists(marker)&&File.ReadAllText(marker)==fingerprint){observed.Remove(source);continue;}
+      if(File.Exists(marker)&&File.ReadAllText(marker)==info.Length.ToString()){observed.Remove(source);continue;}
+      // Require the file to be unchanged for two scans before reading it.
+      // This prevents reading downloads that have not finished copying.
+      if(!observed.TryGetValue(source,out string previous)||previous!=fingerprint){
+       observed[source]=fingerprint;continue;
+      }
+      using(var handle=new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.None)){}
       string id=Import(source,provider);
-      File.WriteAllText(marker,new FileInfo(source).Length.ToString());
+      File.WriteAllText(marker,fingerprint);
+      observed.Remove(source);
       count++;
       message="Imported "+Name(id)+" from "+provider;
-     }catch(IOException){ /* unfinished download: retry next scan */ }
-     catch(Exception e){
-      message="Asset needs attention: "+Path.GetFileName(source)+" - "+e.Message;
-      Debug.LogWarning("Asset Hub: "+message);
-      // Permanent bad packages remain available for correction; avoid tight retry loops.
+      Diagnostics.Add("INFO",message);
+     }catch(IOException){ /* File is still being downloaded or copied. */ }
+     catch(Exception ex){
+      string problem=source+"|"+ex.Message;
+      if(reportedUnsupported.Add(problem)){
+       message="Could not import "+Path.GetFileName(source)+": "+ex.Message;
+       Diagnostics.Add("ERROR",message);
+      }
      }
     }
    }
@@ -83,10 +105,18 @@ namespace WorldBuilder {
     if(ext==".zip")ExtractSafe(source,temp);
     else{
      File.Copy(source,Path.Combine(temp,Path.GetFileName(source)),true);
-     foreach(string file in Directory.GetFiles(Path.GetDirectoryName(source))){
+     // Preserve the source folder hierarchy for external glTF buffers and textures.
+     string sourceFolder=Path.GetDirectoryName(source);
+     foreach(string file in Directory.GetFiles(sourceFolder,"*",SearchOption.AllDirectories)){
+      if(string.Equals(file,source,StringComparison.OrdinalIgnoreCase))continue;
       string extension=Path.GetExtension(file).ToLowerInvariant();
       if(extension==".mtl"||extension==".png"||extension==".jpg"||extension==".jpeg"||extension==".bin"||extension==".webp")
-       File.Copy(file,Path.Combine(temp,Path.GetFileName(file)),true);
+      {
+       string relative=file.Substring(sourceFolder.Length).TrimStart(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar);
+       string target=Path.Combine(temp,relative);
+       Directory.CreateDirectory(Path.GetDirectoryName(target));
+       File.Copy(file,target,true);
+      }
      }
     }
     string[] models=Directory.GetFiles(temp,"*.obj",SearchOption.AllDirectories);
@@ -113,7 +143,8 @@ namespace WorldBuilder {
       if(!File.Exists(dest))File.Copy(file,dest);
      }
     }
-    File.WriteAllText(Path.Combine(destination,"asset-name.txt"),Path.GetFileNameWithoutExtension(source));
+    string displayName=Path.GetFileNameWithoutExtension(source);
+    File.WriteAllText(Path.Combine(destination,"asset-name.txt"),displayName);
     File.WriteAllText(Path.Combine(destination,"asset-source.txt"),provider);
     GameObject check=ImportedObj.Load(Path.Combine(destination,"model.obj"));
     ThumbnailUtility.Save(check,Path.Combine(destination,"thumbnail.png"));
