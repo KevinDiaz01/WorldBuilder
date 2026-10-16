@@ -1,0 +1,438 @@
+#if UNITY_EDITOR
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Reflection;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+
+// Copy this script and the WorldBuilder export JSON into the target Unity project's Assets folder.
+// No manual geometry placement is required.
+public static class WorldBuilderSceneImporter {
+ [Serializable] private class Part {
+  public string kind;
+  public Vector3 position;
+  public Vector3 scale;
+  public Quaternion rotation;
+  public string assetId;
+  public bool fitToSurface;
+  public string finish;
+  public System.Collections.Generic.List<Vector3> vertices;
+  public float lightIntensity;
+  public float lightRange;
+  public float lightAngle;
+  public Color lightColor;
+  public float textureTile;
+ }
+ [Serializable] private class World {
+  public int schema;
+  public Part[] pieces;
+  public int skyPreset;
+  public float sunYaw;
+  public float sunPitch;
+  public bool fog;
+ }
+ [InitializeOnLoadMethod]
+ static void ScheduleAutomaticImport(){
+  EditorApplication.delayCall+=()=>{
+   string marker="Assets/WorldBuilderExport/WorldBuilderAutoImport.request";
+   if(!File.Exists(marker))return;
+   // Consume the marker first so a domain reload cannot trigger an import loop.
+   File.Delete(marker);
+   AssetDatabase.Refresh();
+   Import();
+  };
+ }
+ [MenuItem("Tools/WorldBuilder/Import World")]
+ public static void Import(){
+  string path="Assets/WorldBuilderExport/world.json";
+  if(!File.Exists(path)){EditorUtility.DisplayDialog("WorldBuilder","Missing "+path+". Copy the exported WorldBuilderExport folder into this project's Assets folder first.","OK");return;}
+  try{
+   var world=JsonUtility.FromJson<World>(File.ReadAllText(path));
+   if(world==null||world.schema!=2||world.pieces==null)throw new Exception("Unsupported WorldBuilder project format.");
+   var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
+   GameObject root=new GameObject("WorldBuilder Imported World");
+   string materialDir="Assets/WorldBuilderExport/Materials";
+   if(!AssetDatabase.IsValidFolder(materialDir))AssetDatabase.CreateFolder("Assets/WorldBuilderExport","Materials");
+   var palette=new System.Collections.Generic.Dictionary<string,Material>();
+   foreach(var p in world.pieces){
+    if(p==null)continue;
+    GameObject obj;
+    if(p.kind=="tree"){
+     obj=new GameObject("WB_Tree");
+     var trunk=GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+     trunk.name="Natural Trunk";trunk.transform.SetParent(obj.transform,false);
+     trunk.transform.localPosition=new Vector3(0,1.06f,0);
+     trunk.transform.localScale=new Vector3(.30f,1.06f,.30f);
+     trunk.GetComponent<Renderer>().sharedMaterial=MakeVegetationMaterial("Trunk",new Color(.35f,.26f,.17f));
+     Vector3[] centers={
+      new Vector3(0,3.02f,0),new Vector3(-.82f,2.56f,.17f),
+      new Vector3(.79f,2.62f,-.1f),new Vector3(.19f,3.59f,.15f),new Vector3(-.24f,2.83f,-.66f)};
+     Vector3[] sizes={
+      new Vector3(1.85f,1.75f,1.6f),new Vector3(1.45f,1.25f,1.42f),
+      new Vector3(1.42f,1.35f,1.28f),new Vector3(1.3f,1.18f,1.2f),
+      new Vector3(1.24f,1.34f,1.38f)};
+     for(int n=0;n<centers.Length;n++){
+      var crown=GameObject.CreatePrimitive(PrimitiveType.Sphere);
+      crown.name="Leaf Cluster "+(n+1);
+      crown.transform.SetParent(obj.transform,false);
+      crown.transform.localPosition=centers[n];crown.transform.localScale=sizes[n];
+      crown.GetComponent<Renderer>().sharedMaterial=MakeVegetationMaterial(
+        n%2==0?"CanopyA":"CanopyB",new Color(.28f,.47f,.24f)*(n%2==0?1.06f:.88f));
+     }
+    }else if(p.kind=="light-point"||p.kind=="light-spot"){
+     obj=new GameObject("WB_"+p.kind);
+     var lamp=obj.AddComponent<Light>();
+     lamp.type=p.kind=="light-spot"?LightType.Spot:LightType.Point;
+     lamp.intensity=Mathf.Max(.05f,p.lightIntensity);
+     lamp.range=Mathf.Max(1f,p.lightRange);
+     lamp.spotAngle=Mathf.Clamp(p.lightAngle,1f,170f);
+     lamp.color=p.lightColor;
+     lamp.shadows=LightShadows.Soft;
+    }else if(p.kind=="polygon-floor"||p.kind=="terrain"){
+     obj=new GameObject("WB_"+p.kind);
+     Mesh mesh=p.kind=="polygon-floor"?WBPolygonGeometry.Create(p.vertices,.21f):
+       WBTerrainGeometry.Create(32,Mathf.Max(2,p.scale.x),Mathf.Max(2,p.scale.z),p.scale.y,
+        Mathf.RoundToInt(p.position.x*13f+p.position.z*17f));
+     obj.AddComponent<MeshFilter>().sharedMesh=mesh;
+     obj.AddComponent<MeshRenderer>();
+     obj.AddComponent<MeshCollider>().sharedMesh=mesh;
+    }else if(p.kind=="imported"){
+     if(string.IsNullOrEmpty(p.assetId))throw new InvalidDataException("Imported object has no asset identifier");
+     string modelPath="Assets/WorldBuilderExport/ImportedAssets/"+p.assetId+"/model.obj";
+     AssetDatabase.ImportAsset(modelPath,ImportAssetOptions.ForceSynchronousImport);
+     GameObject prefab=AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+     if(prefab==null)throw new FileNotFoundException("Could not import OBJ asset",modelPath);
+     obj=(GameObject)PrefabUtility.InstantiatePrefab(prefab);
+     if(obj==null)throw new Exception("Unable to place imported OBJ prefab");
+     obj.name="WB_Imported_"+p.assetId;
+     AssignSimpleObjMaterial(obj,p.assetId,modelPath);
+     // Keep Unity model hierarchy and per-material submeshes intact.
+     foreach(var filter in obj.GetComponentsInChildren<MeshFilter>()){
+      if(filter.sharedMesh!=null&&filter.GetComponent<Collider>()==null){
+       var meshCollider=filter.gameObject.AddComponent<MeshCollider>();
+       meshCollider.sharedMesh=filter.sharedMesh;
+      }
+     }
+     if(p.fitToSurface){
+      var renderers=obj.GetComponentsInChildren<Renderer>();
+      if(renderers.Length>0){
+       Bounds bounds=renderers[0].bounds;
+       for(int i=1;i<renderers.Length;i++)bounds.Encapsulate(renderers[i].bounds);
+       GameObject pivot=new GameObject("WB_ImportPivot");
+       obj.transform.SetParent(pivot.transform,false);
+       obj.transform.localPosition=new Vector3(-bounds.center.x,-bounds.min.y,-bounds.center.z);
+       obj=pivot;
+      }
+     }
+    }else obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
+    obj.name="WB_"+p.kind;
+    obj.transform.SetParent(root.transform);
+    var position=p.position;
+    // Legacy saved floors were below the preview surface. Match current WorldBuilder rendering.
+    if(p.kind=="floor" && position.y < .085f)position.y=.105f;
+    obj.transform.SetPositionAndRotation(position,p.rotation);
+    obj.transform.localScale=p.scale;
+    if(p.kind=="imported"||p.kind=="light-point"||p.kind=="light-spot"||p.kind=="tree")continue;
+    if(p.kind=="vrc-mirror"){
+     Type mirror=FindType("VRC.SDK3.Components.VRCMirrorReflection");
+     if(mirror!=null)obj.AddComponent(mirror);
+     else Debug.LogWarning("WorldBuilder mirror requires VRChat Worlds SDK.");
+    }
+    if(p.kind=="vrc-seat"){
+     Type station=FindType("VRC.SDK3.Components.VRCStation");
+     if(station!=null)obj.AddComponent(station);
+     else Debug.LogWarning("WorldBuilder seat station requires VRChat Worlds SDK.");
+    }
+    Color color=p.kind=="wall"?new Color(.89f,.91f,.94f):p.kind=="floor"||p.kind=="polygon-floor"?new Color(.47f,.52f,.58f):p.kind=="terrain"?new Color(.30f,.52f,.27f):p.kind=="water"?new Color(.18f,.47f,.75f):p.kind=="path"?new Color(.47f,.43f,.38f):new Color(.25f,.6f,.7f);
+    if(!string.IsNullOrEmpty(p.finish)){
+     switch(p.finish){
+      case "Warm White":color=new Color(.91f,.88f,.80f);break;
+      case "Stone":color=new Color(.58f,.62f,.63f);break;
+      case "Charcoal":color=new Color(.19f,.23f,.28f);break;
+      case "Sand":color=new Color(.77f,.67f,.51f);break;
+      case "Terracotta":color=new Color(.67f,.34f,.26f);break;
+      case "Sage":color=new Color(.38f,.52f,.43f);break;
+      case "Ocean":color=new Color(.22f,.47f,.62f);break;
+     }
+    }
+    bool textured=!string.IsNullOrEmpty(p.finish)&&p.finish.StartsWith("texture:",StringComparison.Ordinal);
+    string materialId=textured?p.finish.Substring(8):"";
+    string materialLabel=textured?"Texture_"+materialId:(string.IsNullOrEmpty(p.finish)?"Default":p.finish.Replace(" ",""));
+    Material mat;
+    string materialKey=p.kind+"_"+materialLabel+"_"+(textured?p.textureTile.ToString("F2",System.Globalization.CultureInfo.InvariantCulture):"");
+    if(!palette.TryGetValue(materialKey,out mat)){
+     string matPath=materialDir+"/WB_"+(p.kind=="wall"?"Wall":p.kind=="floor"?"Floor":"Object")+"_"+materialLabel+
+       (textured?"_tile"+Mathf.RoundToInt(Mathf.Max(.1f,p.textureTile)*100f):"")+".mat";
+     mat=AssetDatabase.LoadAssetAtPath<Material>(matPath);
+     if(mat==null){
+      Shader shader=Shader.Find("Standard");
+      if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+      if(shader==null)throw new Exception("No compatible material shader found.");
+      mat=new Material(shader);
+      AssetDatabase.CreateAsset(mat,matPath);
+     }
+     mat.color=color;
+     if(textured){
+      string folder="Assets/WorldBuilderExport/SurfaceMaterials/"+materialId+"/";
+      string imagePath=null;
+      foreach(string extension in new[]{".png",".jpg",".jpeg"})
+       if(File.Exists(folder+"albedo"+extension)){imagePath=folder+"albedo"+extension;break;}
+      if(imagePath==null)throw new FileNotFoundException("Missing exported material texture: "+materialId);
+      AssetDatabase.ImportAsset(imagePath,ImportAssetOptions.ForceSynchronousImport);
+      Texture2D tex=AssetDatabase.LoadAssetAtPath<Texture2D>(imagePath);
+      if(tex==null)throw new InvalidDataException("Could not load exported texture: "+imagePath);
+      mat.mainTexture=tex;
+      float tile=Mathf.Clamp(p.textureTile<=0?1f:p.textureTile,.1f,20f);
+      mat.mainTextureScale=new Vector2(tile,tile);
+     }else{
+      mat.mainTexture=null;
+      mat.mainTextureScale=Vector2.one;
+     }
+     EditorUtility.SetDirty(mat);
+     palette[materialKey]=mat;
+    }
+    if(p.kind=="water"){
+     mat.color=new Color(.24f,.58f,.74f,.67f);
+     if(mat.HasProperty("_Mode"))mat.SetFloat("_Mode",3f);
+     if(mat.HasProperty("_Surface"))mat.SetFloat("_Surface",1f);
+     mat.SetInt("_SrcBlend",(int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+     mat.SetInt("_DstBlend",(int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+     mat.SetInt("_ZWrite",0);
+     mat.DisableKeyword("_ALPHATEST_ON");mat.EnableKeyword("_ALPHABLEND_ON");
+     mat.renderQueue=(int)UnityEngine.Rendering.RenderQueue.Transparent;
+    }
+    var surfaceRenderer=obj.GetComponent<Renderer>();
+    if(surfaceRenderer!=null)surfaceRenderer.sharedMaterial=mat;
+    // Primitive BoxColliders already provide physical collision.
+   }
+   var sun=new GameObject("Sun").AddComponent<Light>();
+   sun.type=LightType.Directional;
+   sun.intensity=world.skyPreset==2?.025f:world.skyPreset==1?.42f:world.skyPreset==3?.43f:.70f;
+   sun.transform.rotation=Quaternion.Euler(world.sunPitch==0?48f:world.sunPitch,world.sunYaw,0);
+   RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;
+   RenderSettings.ambientLight=world.skyPreset==2?new Color(.07f,.10f,.18f):world.skyPreset==1?new Color(.32f,.28f,.27f):new Color(.34f,.38f,.44f);
+   Color[] skies={new Color(.48f,.70f,.92f),new Color(.92f,.54f,.31f),new Color(.045f,.064f,.14f),new Color(.70f,.77f,.81f)};
+   Color sky=skies[Mathf.Clamp(world.skyPreset,0,skies.Length-1)];
+   RenderSettings.fog=world.fog;RenderSettings.fogColor=sky;RenderSettings.fogDensity=.009f;
+   Shader skyShader=Shader.Find("Skybox/Procedural");
+   if(skyShader!=null){
+    string skyPath=materialDir+"/WB_EnvironmentSky.mat";
+    Material skyMaterial=AssetDatabase.LoadAssetAtPath<Material>(skyPath);
+    if(skyMaterial==null){skyMaterial=new Material(skyShader);AssetDatabase.CreateAsset(skyMaterial,skyPath);}
+    skyMaterial.SetColor("_SkyTint",sky);
+    skyMaterial.SetColor("_GroundColor",world.skyPreset==2?new Color(.09f,.11f,.20f):new Color(.45f,.49f,.50f));
+    skyMaterial.SetFloat("_AtmosphereThickness",world.skyPreset==2?.35f:1f);
+    skyMaterial.SetFloat("_Exposure",world.skyPreset==2?.22f:world.skyPreset==1?.82f:1.25f);
+    RenderSettings.skybox=skyMaterial;EditorUtility.SetDirty(skyMaterial);
+   }
+   else Debug.LogWarning("WorldBuilder: procedural skybox shader unavailable; using ambient/fog colors.");
+   var spawn=new GameObject("WorldBuilder Spawn");
+   // Place spawn above a floor if one exists, otherwise above origin.
+   Vector3 spawnPos=new Vector3(0,1.05f,0);
+   foreach(var p in world.pieces)if(p!=null&&p.kind=="vrc-spawn"){spawnPos=p.position;break;}
+   foreach(var p in world.pieces)if(p!=null&&p.kind=="floor"&&spawnPos==new Vector3(0,1.05f,0)){
+    spawnPos=new Vector3(p.position.x,Mathf.Max(.18f,p.position.y+p.scale.y*.5f)+.9f,p.position.z);
+    break;
+   }
+   spawn.transform.position=spawnPos;
+   spawn.transform.rotation=Quaternion.identity;
+   var descriptorType=FindType("VRC.SDK3.Components.VRCSceneDescriptor");
+   if(descriptorType!=null){
+    Component descriptor=spawn.AddComponent(descriptorType);
+    var f=descriptorType.GetField("spawns",BindingFlags.Public|BindingFlags.Instance);
+    if(f!=null)f.SetValue(descriptor,new Transform[]{spawn.transform});
+    var property=descriptorType.GetProperty("spawns",BindingFlags.Public|BindingFlags.Instance);
+    if(property!=null&&property.CanWrite)property.SetValue(descriptor,new Transform[]{spawn.transform},null);
+    // VRC pipeline manager is mandatory and must share the descriptor GameObject.
+    var pipelineType=FindType("VRC.Core.PipelineManager");
+    if(pipelineType!=null && spawn.GetComponent(pipelineType)==null)spawn.AddComponent(pipelineType);
+   }else{
+    Debug.LogWarning("WorldBuilder: VRChat SDK world descriptor is not installed. Add the VRChat Worlds SDK before publishing.");
+   }
+   string output="Assets/WorldBuilderExport/WorldBuilderWorld.unity";
+   if(!EditorSceneManager.SaveScene(scene,output))throw new Exception("Could not save scene.");
+   AssetDatabase.SaveAssets();
+   AssetDatabase.Refresh();
+   EditorSceneManager.OpenScene(output,OpenSceneMode.Single);
+   EditorUtility.DisplayDialog("WorldBuilder","Imported "+world.pieces.Length+" objects into "+output+". Check spawn and VRChat SDK readiness before publishing.","OK");
+  }catch(Exception ex){Debug.LogException(ex);EditorUtility.DisplayDialog("WorldBuilder Import Error",ex.Message,"OK");}
+ }
+ private static Material MakeVegetationMaterial(string name,Color color){
+  string path="Assets/WorldBuilderExport/Materials/WB_"+name+".mat";
+  Material material=AssetDatabase.LoadAssetAtPath<Material>(path);
+  if(material==null){
+   Shader shader=Shader.Find("Standard");
+   if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+   if(shader==null)throw new Exception("Missing compatible shader for vegetation");
+   material=new Material(shader);
+   AssetDatabase.CreateAsset(material,path);
+  }
+  material.color=color;EditorUtility.SetDirty(material);return material;
+ }
+ // Apply each OBJ usemtl assignment to the corresponding Unity mesh submesh.
+ // Retains diffuse texture/color on compatible static imported models.
+ private sealed class MtlSurface {
+  public Color color=Color.white;
+  public string diffuse;
+ }
+ private static void AssignSimpleObjMaterial(GameObject obj,string assetId,string modelPath){
+  string directory=Path.GetDirectoryName(modelPath).Replace('\\','/');
+  if(!File.Exists(modelPath))return;
+  string[] lines=File.ReadAllLines(modelPath);
+  string mtlName=null;
+  var used=new List<string>();
+  foreach(string line in lines){
+   string t=line.Trim();
+   if(t.StartsWith("mtllib ",StringComparison.Ordinal)){mtlName=Path.GetFileName(t.Substring(7).Trim().Replace('\\','/'));}
+   if(t.StartsWith("usemtl ",StringComparison.Ordinal)){
+    string name=t.Substring(7).Trim();
+    if(!used.Contains(name))used.Add(name);
+   }
+  }
+  if(string.IsNullOrEmpty(mtlName))return;
+  string mtlPath=directory+"/"+mtlName;
+  if(!File.Exists(mtlPath))return;
+  var surfaces=new Dictionary<string,MtlSurface>(StringComparer.Ordinal);
+  MtlSurface surface=null;
+  foreach(string raw in File.ReadAllLines(mtlPath)){
+   string t=raw.Trim();
+   if(t.StartsWith("newmtl ",StringComparison.Ordinal)){
+    string name=t.Substring(7).Trim();
+    surface=new MtlSurface();surfaces[name]=surface;
+   }else if(surface!=null&&t.StartsWith("Kd ",StringComparison.Ordinal)){
+    var parts=t.Split((char[])null,StringSplitOptions.RemoveEmptyEntries);
+    if(parts.Length>=4)surface.color=new Color(
+     float.Parse(parts[1],System.Globalization.CultureInfo.InvariantCulture),
+     float.Parse(parts[2],System.Globalization.CultureInfo.InvariantCulture),
+     float.Parse(parts[3],System.Globalization.CultureInfo.InvariantCulture));
+   }else if(surface!=null&&t.StartsWith("map_Kd ",StringComparison.Ordinal)){
+    string name=t.Substring(7).Trim();
+    if(name.StartsWith("-",StringComparison.Ordinal)){
+     var words=name.Split((char[])null,StringSplitOptions.RemoveEmptyEntries);
+     if(words.Length>0)name=words[words.Length-1];
+    }
+    surface.diffuse=Path.GetFileName(name.Replace('\\','/'));
+   }
+  }
+  Shader shader=Shader.Find("Standard");
+  if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+  if(shader==null)return;
+  var materials=new Dictionary<string,Material>(StringComparer.Ordinal);
+  foreach(string name in used){
+   if(!surfaces.TryGetValue(name,out MtlSurface src))continue;
+   string destination=directory+"/WB_Mat_"+materials.Count+".mat";
+   Material mat=AssetDatabase.LoadAssetAtPath<Material>(destination);
+   if(mat==null){mat=new Material(shader);AssetDatabase.CreateAsset(mat,destination);}
+   mat.color=src.color;
+   if(!string.IsNullOrEmpty(src.diffuse)){
+    string file=directory+"/"+src.diffuse;
+    AssetDatabase.ImportAsset(file,ImportAssetOptions.ForceSynchronousImport);
+    Texture2D image=AssetDatabase.LoadAssetAtPath<Texture2D>(file);
+    if(image!=null)mat.mainTexture=image;
+   }
+   EditorUtility.SetDirty(mat);materials[name]=mat;
+  }
+  foreach(var renderer in obj.GetComponentsInChildren<MeshRenderer>()){
+   Material[] existing=renderer.sharedMaterials;
+   for(int i=0;i<existing.Length&&i<used.Count;i++)
+    if(materials.TryGetValue(used[i],out Material m))existing[i]=m;
+   renderer.sharedMaterials=existing;
+  }
+ }
+ private static Type FindType(string name){
+  foreach(var assembly in AppDomain.CurrentDomain.GetAssemblies()){
+   Type type=assembly.GetType(name,false);
+   if(type!=null)return type;
+  }
+  return null;
+ }
+}
+// Builds concave simple polygons with ear clipping; rejects self-intersecting outlines upstream.
+ internal static class WBPolygonGeometry {
+  static float Cross(Vector2 a,Vector2 b,Vector2 c){return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);}
+  static bool InTri(Vector2 p,Vector2 a,Vector2 b,Vector2 c){
+   float c1=Cross(a,b,p),c2=Cross(b,c,p),c3=Cross(c,a,p);
+   return c1>=-.00001f&&c2>=-.00001f&&c3>=-.00001f;
+  }
+  public static Mesh Create(IList<Vector3> corners,float thickness){
+   if(corners==null||corners.Count<3)throw new ArgumentException("Polygon requires three corners");
+   int n=corners.Count;
+   var points=new Vector2[n];float area=0f;
+   for(int i=0;i<n;i++){
+    points[i]=new Vector2(corners[i].x,corners[i].z);
+    int j=(i+1)%n;
+    area+=corners[i].x*corners[j].z-corners[j].x*corners[i].z;
+   }
+   if(Mathf.Abs(area)<.0001f)throw new ArgumentException("Polygon has zero area");
+   var ring=new List<int>();
+   if(area>0)for(int i=0;i<n;i++)ring.Add(i);
+   else for(int i=n-1;i>=0;i--)ring.Add(i);
+   var top=new List<int>();int guard=0;
+   while(ring.Count>3&&guard++<n*n){
+    bool found=false;
+    for(int k=0;k<ring.Count;k++){
+     int a=ring[(k+ring.Count-1)%ring.Count],b=ring[k],c=ring[(k+1)%ring.Count];
+     if(Cross(points[a],points[b],points[c])<=.00001f)continue;
+     bool occupied=false;
+     foreach(int p in ring)if(p!=a&&p!=b&&p!=c&&InTri(points[p],points[a],points[b],points[c])){occupied=true;break;}
+     if(occupied)continue;
+     top.Add(a);top.Add(b);top.Add(c);ring.RemoveAt(k);found=true;break;
+    }
+    if(!found)throw new ArgumentException("Polygon intersects itself or contains overlapping corners");
+   }
+   if(ring.Count!=3)throw new ArgumentException("Could not triangulate polygon");
+   top.Add(ring[0]);top.Add(ring[1]);top.Add(ring[2]);
+   var vertices=new Vector3[n*2];var uv=new Vector2[n*2];float y=corners[0].y;
+   for(int i=0;i<n;i++){
+    vertices[i]=new Vector3(corners[i].x,y+thickness*.5f,corners[i].z);
+    vertices[i+n]=new Vector3(corners[i].x,y-thickness*.5f,corners[i].z);
+    uv[i]=uv[i+n]=new Vector2(corners[i].x,corners[i].z);
+   }
+   var indices=new List<int>();
+   for(int k=0;k<top.Count;k+=3){
+    indices.Add(top[k]);indices.Add(top[k+2]);indices.Add(top[k+1]);
+    indices.Add(top[k]+n);indices.Add(top[k+1]+n);indices.Add(top[k+2]+n);
+   }
+   for(int k=0;k<n;k++){
+    int a=k,b=(k+1)%n;
+    indices.Add(a);indices.Add(b);indices.Add(a+n);
+    indices.Add(b);indices.Add(b+n);indices.Add(a+n);
+   }
+   Mesh mesh=new Mesh();mesh.name="WB Polygon";
+   if(vertices.Length>65535)mesh.indexFormat=UnityEngine.Rendering.IndexFormat.UInt32;
+   mesh.vertices=vertices;mesh.uv=uv;mesh.triangles=indices.ToArray();
+   mesh.RecalculateNormals();mesh.RecalculateBounds();return mesh;
+  }
+ }
+
+internal static class WBTerrainGeometry {
+  public static Mesh Create(int segments,float width,float depth,float height,int seed){
+   int n=Mathf.Clamp(segments,4,80),side=n+1;
+   Vector3[] vertices=new Vector3[side*side];
+   Vector2[] uv=new Vector2[vertices.Length];
+   int[] indices=new int[n*n*6];
+   for(int z=0;z<=n;z++)for(int x=0;x<=n;x++){
+    float tx=(float)x/n,tz=(float)z/n;
+    float edge=Mathf.Min(Mathf.Min(tx,1f-tx),Mathf.Min(tz,1f-tz));
+    float taper=Mathf.SmoothStep(0f,1f,Mathf.Clamp01(edge*3.4f));
+    float broad=Mathf.PerlinNoise(tx*2.1f+seed*.027f,tz*2.1f+seed*.043f);
+    float detail=Mathf.PerlinNoise(tx*5.2f+seed*.061f,tz*5.2f+seed*.078f);
+    float noise=Mathf.Clamp01((broad*.78f+detail*.22f-.19f)*1.15f);
+    int k=z*side+x;
+    vertices[k]=new Vector3((tx-.5f)*width,noise*height*taper,(tz-.5f)*depth);
+    uv[k]=new Vector2(tx*width*.2f,tz*depth*.2f);
+   }
+   int t=0;
+   for(int z=0;z<n;z++)for(int x=0;x<n;x++){
+    int a=z*side+x,b=a+1,c=a+side,d=c+1;
+    indices[t++]=a;indices[t++]=c;indices[t++]=b;
+    indices[t++]=b;indices[t++]=c;indices[t++]=d;
+   }
+   Mesh mesh=new Mesh();mesh.name="WB Terrain";
+   mesh.vertices=vertices;mesh.triangles=indices;mesh.uv=uv;
+   mesh.RecalculateNormals();mesh.RecalculateBounds();return mesh;
+  }
+ }
+#endif
