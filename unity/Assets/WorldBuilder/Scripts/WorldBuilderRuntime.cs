@@ -77,6 +77,7 @@ namespace WorldBuilder {
   private static readonly Color[] FinishColors={Color.white,new Color(.91f,.88f,.80f),new Color(.58f,.62f,.63f),new Color(.19f,.23f,.28f),new Color(.77f,.67f,.51f),new Color(.67f,.34f,.26f),new Color(.38f,.52f,.43f),new Color(.22f,.47f,.62f)};
   private Vector2 catalogScroll;
   private Vector2 catalogTabScroll;
+  private bool landscapeObjects=false;
   private Vector2 inspectorScroll;
   private bool inspectorAdvanced=false;
   private float inspectorHeight=0f;
@@ -1876,7 +1877,7 @@ namespace WorldBuilder {
    float width=w-left-13f;
    SoftPanel(new Rect(left,top,width,shelfHeight),trayStyle);
    bool building=creativeMode==0,landscaping=creativeMode==2;
-   string heading=building?"BUILD COLLECTION":landscaping?"LANDSCAPE COLLECTION":
+   string heading=building?"BUILD COLLECTION":landscaping?(landscapeObjects?"OUTDOOR OBJECTS":"LANDSCAPE COLLECTION"):
      catalogCategory==8?"SURFACE MATERIALS":"FURNITURE & OBJECTS";
    GUI.Label(new Rect(left+19,top+13,290,30),heading,sectionStyle);
    GUI.Label(new Rect(left+23,top+46,300,20),
@@ -1885,8 +1886,42 @@ namespace WorldBuilder {
    float cardY=top+103f;
    float cardH=Mathf.Max(123f,shelfHeight-118f);
    if(building||landscaping){
+    if(landscaping){
+     if(Button(new Rect(w-303,top+16,118,36),landscapeObjects?"LAND TOOLS":"MY PLANTS",landscapeObjects)){
+      landscapeObjects=!landscapeObjects;
+      catalogScroll=Vector2.zero;
+     }
+    }
     if(Button(new Rect(w-178,top+16,106,36),"STUDIO")){
      showStudio=!showStudio;studioTab=building?0:2;
+    }
+    if(landscaping&&landscapeObjects){
+     var filtered=new List<string>();
+     foreach(string id in AssetHub.Catalog()){
+      string category=AssetHub.Category(id);
+      if(category=="Plants"||category=="Outdoor")filtered.Add(id);
+     }
+     float viewWidth=width-36f;
+     if(filtered.Count==0){
+      GUI.Label(new Rect(left+24,cardY+9,680,36),
+       "Your garden collection is ready for plants",sectionStyle);
+      GUI.Label(new Rect(left+24,cardY+47,700,30),
+       "Download plants or outdoor models; compatible assets appear here automatically.",captionStyle);
+      if(Button(new Rect(left+24,cardY+89,173,42),"FIND FREE ASSETS"))ToggleAssetBrowser();
+     }else{
+      const float spacing=170f;
+      catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewWidth,cardH+15),catalogScroll,
+       new Rect(0,0,Mathf.Max(viewWidth-15,filtered.Count*spacing+7),cardH),true,false);
+      for(int i=0;i<filtered.Count;i++){
+       string id=filtered[i];
+       DrawAssetTile(new Rect(i*spacing+1,0,162,cardH-7),AssetHub.Name(id),
+        AssetHub.Category(id)+" · "+AssetHub.Provider(id),i,()=>{
+         selectedCatalogId=id;SelectImportedAsset(id);
+        },AssetThumbnail(id),selectedCatalogId==id);
+      }
+      GUI.EndScrollView();
+     }
+     return;
     }
     Tool[] available=building?
       new[]{Tool.Wall,Tool.Floor,Tool.Room,Tool.Room,Tool.Door,Tool.Window,Tool.Garage,Tool.Stairs,Tool.Roof,Tool.Select}:
