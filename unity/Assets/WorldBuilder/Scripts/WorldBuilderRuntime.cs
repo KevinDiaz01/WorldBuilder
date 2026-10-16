@@ -146,6 +146,8 @@ namespace WorldBuilder {
      (showLibrary&&p.x<122f&&p.y>=94f&&p.y<735f)||
      (showInspector&&p.x>w-373f&&p.y>=94f&&p.y<(showCatalog?h-Mathf.Min(270f,h*.34f)-6f:h-90f))||
      (p.x>125f&&p.x<650f&&p.y<159f)||
+     (p.x>=135f&&p.x<=825f&&p.y>=h-(showCatalog?Mathf.Min(270f,h*.34f)+60f:60f)&&
+      p.y<=h-(showCatalog?Mathf.Min(270f,h*.34f)+8f:8f))||
      showPause||showConfirmExit||showSettings||showHelp||
      (showProjects&&p.x>w*.5f-200f&&p.x<w*.5f+210f&&p.y<505f)||
      ((showImport||showExport)&&p.x>w*.5f-275f&&p.x<w*.5f+275f&&p.y<335f)||
@@ -1931,8 +1933,8 @@ namespace WorldBuilder {
     "Materials","Architecture","Other"};
    float searchX=w-555f;
    if(searchX<left+410f)searchX=left+410f;
-   if(GUI.Button(new Rect(searchX,top+13,163,35),"",subtleStyle)){} // searchable field surface
-   catalogSearch=GUI.TextField(new Rect(searchX+8f,top+13f,150f,35f),catalogSearch,regularStyle);
+   GUI.Label(new Rect(searchX-75,top+20,75,24),"SEARCH",mutedStyle);
+   catalogSearch=GUI.TextField(new Rect(searchX+3f,top+13f,157f,35f),catalogSearch,regularStyle);
    if(Button(new Rect(w-384,top+13,138,36),"IMPORT")){
     showImport=true;showExport=false;
    }
