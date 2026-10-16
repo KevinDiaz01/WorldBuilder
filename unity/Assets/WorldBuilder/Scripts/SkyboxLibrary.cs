@@ -203,7 +203,8 @@ namespace WorldBuilder {
      for(int x=0;x<w;x++){
       int exponent=channels[3][x];
       float scale=exponent==0?0f:Mathf.Pow(2f,exponent-136f);
-      colors[y*w+x]=new Color(channels[0][x]*scale,channels[1][x]*scale,
+      // Radiance stores its first scanline at the top; Unity pixels start at the bottom.
+      colors[(h-1-y)*w+x]=new Color(channels[0][x]*scale,channels[1][x]*scale,
        channels[2][x]*scale,1f);
      }
     }
