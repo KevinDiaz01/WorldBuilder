@@ -1177,7 +1177,7 @@ namespace WorldBuilder {
    float top=h-shelfHeight-10f;
    GUI.Box(new Rect(125,top,w-140,shelfHeight),"",panelStyle);
    if(Button(new Rect(w-72,top+63,48,42),"X")){showCatalog=false;return;}
-   string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials"};
+   string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials","Architecture","Other"};
    float x=139f;
    float availableForTabs=Mathf.Max(500f,w-570f);
    float desiredWidths=0f;
@@ -1191,15 +1191,18 @@ namespace WorldBuilder {
    float right=w-395;
    catalogSearch=GUI.TextField(new Rect(right,top+13,195,40),catalogSearch,regularStyle);
    if(Button(new Rect(w-188,top+13,172,40),"Browse Assets"))ToggleAssetBrowser();
-   if(catalogCategory==0){
+   if(catalogCategory!=8){
     var entries=AssetHub.Catalog();
     var visible=new List<string>();
     foreach(string id in entries){
-     if(catalogSearch.Length==0||AssetHub.Name(id).IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)>=0)visible.Add(id);
+     string category=catalogCategory==0?"All":categories[catalogCategory];
+     if(category!="All"&&AssetHub.Category(id)!=category)continue;
+     string keywords=AssetHub.Name(id)+" "+AssetHub.Category(id)+" "+AssetHub.Provider(id);
+     if(catalogSearch.Length==0||keywords.IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)>=0)visible.Add(id);
     }
     if(visible.Count==0){
-     Label(new Rect(160,top+93,w-480,33),"Your imported assets will appear here.",true);
-     Label(new Rect(160,top+134,w-480,29),"Use Browse Assets to download models, or Import OBJ to add local models.");
+     Label(new Rect(160,top+93,w-480,33),"No models found for this category.",true);
+     Label(new Rect(160,top+134,w-480,29),"Supported models appear automatically after download.");
      if(Button(new Rect(w-370,top+101,183,49),"Import Model")){showImport=true;showExport=false;}
     }else{
      float viewport=w-166;
@@ -1209,7 +1212,7 @@ namespace WorldBuilder {
       string id=visible[k];
       string modelName=AssetHub.Name(id);
       if(modelName==id)modelName="Imported Asset "+(k+1);
-      DrawAssetTile(new Rect(k*180,0,170,151),modelName,"Imported model",k,()=>{
+      DrawAssetTile(new Rect(k*180,0,170,151),modelName,AssetHub.Category(id)+" · "+AssetHub.Provider(id),k,()=>{
        SelectImportedAsset(id);
       },AssetThumbnail(id));
      }
@@ -1227,13 +1230,7 @@ namespace WorldBuilder {
       SelectTool(Tool.Paint);
      }
     }
-   }else if(catalogCategory==1){
-    DrawAssetTile(new Rect(144,top+70,170,151),"Sofa","Basic placeholder",0,()=>SelectTool(Tool.Couch));
-    DrawAssetTile(new Rect(324,top+70,170,151),"Table","Basic placeholder",1,()=>SelectTool(Tool.Table));
-    Label(new Rect(530,top+116,520,32),"Browse Assets to expand your furniture catalog.");
-   }else{
-    Label(new Rect(165,top+103,w-400,34),"This collection is coming soon.",true);
-   }
+
   }
   void ExitApplication(bool saveFirst){
    if(quitting)return;
