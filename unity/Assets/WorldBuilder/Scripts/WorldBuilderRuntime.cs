@@ -12,6 +12,7 @@ namespace WorldBuilder {
   public string assetId;
   public string roomId;
   public string finish;
+  public float textureTile=1f;
   public Piece(string kind, Vector3 position, Vector3 scale, Quaternion rotation) {
    this.kind=kind;this.position=position;this.scale=scale;this.rotation=rotation;
   }
@@ -58,6 +59,9 @@ namespace WorldBuilder {
   private int creativeMode=0;
   private int catalogCategory=0;
   private int selectedFinish=0;
+  private string selectedTextureId="";
+  private float selectedTextureTile=1f;
+  private readonly Dictionary<string,Texture2D> materialImages=new Dictionary<string,Texture2D>();
   private static readonly string[] FinishNames={"Default","Warm White","Stone","Charcoal","Sand","Terracotta","Sage","Ocean"};
   private static readonly Color[] FinishColors={Color.white,new Color(.91f,.88f,.80f),new Color(.58f,.62f,.63f),new Color(.19f,.23f,.28f),new Color(.77f,.67f,.51f),new Color(.67f,.34f,.26f),new Color(.38f,.52f,.43f),new Color(.22f,.47f,.62f)};
   private Vector2 catalogScroll;
@@ -139,6 +143,8 @@ namespace WorldBuilder {
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
    foreach(var tex in modelThumbnails.Values)if(tex!=null)Destroy(tex);
    modelThumbnails.Clear();
+   foreach(var tex in materialImages.Values)if(tex!=null)Destroy(tex);
+   materialImages.Clear();
   }
   void SelectObject(int index){
    selectedIndex=index;
@@ -183,6 +189,7 @@ namespace WorldBuilder {
    // Duplicate a piece as an independent object rather than joining its former room.
    copy.roomId=null;
    copy.finish=original.finish;
+   copy.textureTile=original.textureTile;
    Add(copy);
    SelectObject(project.pieces.Count-1);
    Notice("Object duplicated. Drag to reposition.");
@@ -442,6 +449,19 @@ namespace WorldBuilder {
     CopyTree(dir,Path.Combine(exportAssets,"ImportedAssets",item.assetId));
    }
   }
+  void CopyPaintedMaterials(string exportAssets){
+   var unique=new HashSet<string>();
+   foreach(var piece in project.pieces){
+    if(string.IsNullOrEmpty(piece.finish)||!piece.finish.StartsWith("texture:",StringComparison.Ordinal))continue;
+    string id=piece.finish.Substring(8);
+    if(!unique.Add(id))continue;
+    string color=MaterialLibrary.ColorFile(id);
+    if(color==null)throw new FileNotFoundException("Missing material texture for "+id);
+    string directory=Path.Combine(exportAssets,"SurfaceMaterials",id);
+    Directory.CreateDirectory(directory);
+    File.Copy(color,Path.Combine(directory,Path.GetFileName(color)),true);
+   }
+  }
   void ExportUnity(){
    try{
     if(project.pieces==null||project.pieces.Count==0){Notice("Build something before exporting");return;}
@@ -452,6 +472,7 @@ namespace WorldBuilder {
     Directory.CreateDirectory(assets);
     File.WriteAllText(Path.Combine(assets,"world.json"),JsonUtility.ToJson(project,true));
     CopyImportedAssets(assets);
+    CopyPaintedMaterials(assets);
     var importer=Resources.Load<TextAsset>("WorldBuilderSceneImporter");
     if(importer==null)throw new InvalidDataException("Scene importer resource missing");
     File.WriteAllText(Path.Combine(assets,"WorldBuilderSceneImporter.cs"),importer.text);
@@ -517,6 +538,7 @@ namespace WorldBuilder {
     nextAssetScan=Time.unscaledTime+6f;
     string msg;
     int count=AssetHub.Scan(out msg);
+    MaterialLibrary.Scan();
     if(msg.Length>0){assetStatus=msg;if(count>0)Notice(msg);}
     // Upgrade pre-existing imports with thumbnails, one model at a time.
     foreach(string id in AssetHub.Catalog()){
@@ -775,9 +797,11 @@ namespace WorldBuilder {
    if(index<0){Notice("Choose a WorldBuilder surface to paint");return;}
    Piece p=project.pieces[index];
    if(p.kind!="wall"&&p.kind!="floor"&&p.kind!="roof"){Notice("Paint currently supports walls, floors and roofs");return;}
-   if((string.IsNullOrEmpty(p.finish)&&selectedFinish==0)||p.finish==FinishNames[selectedFinish])return;
+   string desired=string.IsNullOrEmpty(selectedTextureId)?FinishNames[selectedFinish]:"texture:"+selectedTextureId;
+   if(p.finish==desired&&Mathf.Abs(p.textureTile-selectedTextureTile)<.001f)return;
    RememberChange();
-   p.finish=FinishNames[selectedFinish];
+   p.finish=desired;
+   p.textureTile=selectedTextureTile;
    if(objects[index]!=null)Destroy(objects[index]);
    objects[index]=Create(p);
    if(index==selectedIndex)RefreshSelectionOutline();
@@ -804,6 +828,7 @@ namespace WorldBuilder {
       new Vector3(xEnd-xStart,yEnd-yStart,t),original.rotation);
     section.roomId=original.roomId;
     section.finish=original.finish;
+    section.textureTile=original.textureTile;
     AddWithoutHistory(section);
    };
    part(-length*.5f,left,0,height,"wall");
@@ -820,6 +845,7 @@ namespace WorldBuilder {
       new Vector3(toX-fromX,toY-fromY,frameDepth),original.rotation);
     frame.roomId=original.roomId;
     frame.finish=original.finish;
+    frame.textureTile=original.textureTile;
     AddWithoutHistory(frame);
    };
    trim(left-rim,left,bottom,bottom+openingHeight);
@@ -828,6 +854,18 @@ namespace WorldBuilder {
    if(window)trim(left-rim,right+rim,bottom-rim,bottom);
    // The gap remains an actual opening with colliders on surrounding pieces.
    Notice(window?"Window opening created":"Door opening created");
+  }
+  Texture2D GetMaterialImage(string id){
+   if(materialImages.TryGetValue(id,out Texture2D tex))return tex;
+   string file=MaterialLibrary.ColorFile(id);
+   if(file==null)return null;
+   try{
+    tex=new Texture2D(2,2,TextureFormat.RGBA32,false);
+    if(!tex.LoadImage(File.ReadAllBytes(file))){Destroy(tex);return null;}
+    tex.wrapMode=TextureWrapMode.Repeat;
+    materialImages[id]=tex;
+    return tex;
+   }catch(Exception ex){Diagnostics.Add("ERROR","Material image unreadable: "+ex.Message);return null;}
   }
   GameObject Create(Piece piece){
    if(piece.kind=="imported"){
@@ -854,7 +892,21 @@ namespace WorldBuilder {
    obj.transform.SetPositionAndRotation(displayPosition,piece.rotation);
    obj.transform.localScale=piece.scale;
    Material material=piece.kind=="wall"?wallMaterial:piece.kind=="floor"?floorMaterial:furnitureMaterial;
-   if(!string.IsNullOrEmpty(piece.finish)&&piece.finish!="Default"){
+   if(!string.IsNullOrEmpty(piece.finish)&&piece.finish.StartsWith("texture:",StringComparison.Ordinal)){
+    string id=piece.finish.Substring(8);
+    Texture2D image=GetMaterialImage(id);
+    if(image!=null){
+     Shader shader=Shader.Find("Standard");
+     if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+     if(shader!=null){
+      Material finishMaterial=new Material(shader);
+      finishMaterial.mainTexture=image;
+      float repeat=Mathf.Clamp(piece.textureTile<=0?1f:piece.textureTile,.1f,20f);
+      finishMaterial.mainTextureScale=new Vector2(repeat,repeat);
+      obj.GetComponent<Renderer>().sharedMaterial=finishMaterial;
+     }
+    }else Diagnostics.Add("WARN","Missing texture material: "+id);
+   }else if(!string.IsNullOrEmpty(piece.finish)&&piece.finish!="Default"){
     int colorIndex=Array.IndexOf(FinishNames,piece.finish);
     if(colorIndex>0){
      var renderer=obj.GetComponent<Renderer>();
