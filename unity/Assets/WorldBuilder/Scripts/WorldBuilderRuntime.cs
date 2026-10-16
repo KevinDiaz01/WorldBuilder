@@ -627,9 +627,27 @@ namespace WorldBuilder {
   void MakeRoof(Vector3 a,Vector3 b){
    float width=Mathf.Abs(b.x-a.x),depth=Mathf.Abs(b.z-a.z);
    if(width<.25f||depth<.25f){Notice("Roof needs width and depth");return;}
-   Add(new Piece("roof",(a+b)*.5f+Vector3.up*((buildingLevel+1)*LevelHeight+.12f),
-     new Vector3(width+.4f,.24f,depth+.4f),Quaternion.identity));
-   Notice("Flat roof created");
+   float cx=(a.x+b.x)*.5f,cz=(a.z+b.z)*.5f;
+   // Seat the roof's underside directly on the actual top of nearby walls,
+   // including walls that use a custom height instead of the level preset.
+   float desiredBase=buildingLevel*LevelHeight+wallHeight;
+   float closest=float.MaxValue;
+   for(int i=0;i<project.pieces.Count;i++){
+    Piece wall=project.pieces[i];
+    if(wall.kind!="wall")continue;
+    float dx=Mathf.Abs(wall.position.x-cx),dz=Mathf.Abs(wall.position.z-cz);
+    if(dx>width*.5f+wall.scale.x*.5f+.3f||dz>depth*.5f+wall.scale.x*.5f+.3f)continue;
+    float wallBase=wall.position.y-wall.scale.y*.5f;
+    float levelBase=buildingLevel*LevelHeight;
+    if(Mathf.Abs(wallBase-levelBase)>1f)continue;
+    float top=wall.position.y+wall.scale.y*.5f;
+    float distance=Vector2.Distance(new Vector2(cx,cz),new Vector2(wall.position.x,wall.position.z));
+    if(distance<closest){closest=distance;desiredBase=top;}
+   }
+   float thickness=.20f;
+   Add(new Piece("roof",new Vector3(cx,desiredBase+thickness*.5f,cz),
+      new Vector3(width,thickness,depth),Quaternion.identity));
+   Notice("Roof aligned to wall top at "+desiredBase.ToString("F2")+" m");
   }
   void MakeStairs(Vector3 a,Vector3 b){
    Vector3 delta=b-a;delta.y=0;
