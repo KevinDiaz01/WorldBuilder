@@ -62,7 +62,8 @@ jobs:
             -p:PublishSingleFile=true -p:EnableWindowsTargeting=true \
             --output asset-browser/publish
           test -f asset-browser/publish/WorldBuilderAssetBrowser.exe
-          cp -R asset-browser/publish/. unity/Build/
+          sudo cp -R asset-browser/publish/. unity/Build/
+          test -f unity/Build/WorldBuilderAssetBrowser.exe
       - name: Validate Unity output and prepare signed-by-hash update assets
         shell: bash
         run: |
