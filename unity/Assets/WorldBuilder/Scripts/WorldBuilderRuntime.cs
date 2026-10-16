@@ -11,6 +11,7 @@ namespace WorldBuilder {
   public Quaternion rotation;
   public string assetId;
   public string roomId;
+  public string finish;
   public Piece(string kind, Vector3 position, Vector3 scale, Quaternion rotation) {
    this.kind=kind;this.position=position;this.scale=scale;this.rotation=rotation;
   }
@@ -33,7 +34,7 @@ namespace WorldBuilder {
   const float LevelHeight=2.85f;
   const float DefaultWallHeight=2.7f;
   const float DefaultWallThickness=.16f;
-  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs }
+  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs, Paint }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
   private readonly Stack<string> undoHistory=new Stack<string>();
@@ -53,6 +54,9 @@ namespace WorldBuilder {
   private LineRenderer selectionOutline;
   private int creativeMode=0;
   private int catalogCategory=0;
+  private int selectedFinish=0;
+  private static readonly string[] FinishNames={"Default","Warm White","Stone","Charcoal","Sand","Terracotta","Sage","Ocean"};
+  private static readonly Color[] FinishColors={Color.white,new Color(.91f,.88f,.80f),new Color(.58f,.62f,.63f),new Color(.19f,.23f,.28f),new Color(.77f,.67f,.51f),new Color(.67f,.34f,.26f),new Color(.38f,.52f,.43f),new Color(.22f,.47f,.62f)};
   private Vector2 catalogScroll;
   private string catalogSearch="";
   private int editingPiece=-1;
@@ -162,6 +166,7 @@ namespace WorldBuilder {
    copy.assetId=original.assetId;
    // Duplicate a piece as an independent object rather than joining its former room.
    copy.roomId=null;
+   copy.finish=original.finish;
    Add(copy);
    SelectObject(project.pieces.Count-1);
    Notice("Object duplicated. Drag to reposition.");
@@ -532,7 +537,7 @@ namespace WorldBuilder {
    if(!Input.GetMouseButtonDown(0) || Input.GetKey(KeyCode.LeftAlt) || Input.GetMouseButton(1))return;
    if(OverUI())return;
    bool clickedGround=MouseOnGround(out Vector3 p);
-   if(!clickedGround&&currentTool!=Tool.Door&&currentTool!=Tool.Window)return;
+   if(!clickedGround&&currentTool!=Tool.Door&&currentTool!=Tool.Window&&currentTool!=Tool.Paint)return;
    if(currentTool==Tool.Select){
     Ray pick=sceneCamera.ScreenPointToRay(Input.mousePosition);
     if(Physics.Raycast(pick,out RaycastHit hit,500f)){
@@ -550,6 +555,7 @@ namespace WorldBuilder {
     return;
    }
    if(currentTool==Tool.Erase) { Erase(p);return; }
+   if(currentTool==Tool.Paint){PaintSurface();return;}
    if(currentTool==Tool.Door||currentTool==Tool.Window){AddOpening(currentTool==Tool.Window);return;}
    if(currentTool==Tool.Imported){
     if(string.IsNullOrEmpty(importedId)){Notice("Import an OBJ first");return;}
@@ -703,6 +709,26 @@ namespace WorldBuilder {
    }
    return false;
   }
+  void PaintSurface(){
+   if(sceneCamera==null)return;
+   Ray ray=sceneCamera.ScreenPointToRay(Input.mousePosition);
+   if(!Physics.Raycast(ray,out RaycastHit hit,500f)){Notice("Aim at a wall, floor or roof");return;}
+   int index=-1;
+   for(int i=0;i<objects.Count;i++){
+    if(objects[i]==null)continue;
+    if(hit.collider.gameObject==objects[i]||hit.collider.transform.IsChildOf(objects[i].transform)){index=i;break;}
+   }
+   if(index<0){Notice("Choose a WorldBuilder surface to paint");return;}
+   Piece p=project.pieces[index];
+   if(p.kind!="wall"&&p.kind!="floor"&&p.kind!="roof"){Notice("Paint currently supports walls, floors and roofs");return;}
+   if(p.finish==FinishNames[selectedFinish])return;
+   RememberChange();
+   p.finish=FinishNames[selectedFinish];
+   if(objects[index]!=null)Destroy(objects[index]);
+   objects[index]=Create(p);
+   if(index==selectedIndex)RefreshSelectionOutline();
+   Notice("Applied "+p.finish);
+  }
   void AddOpening(bool window){
    if(!FindOpeningWall(out int idx,out Vector3 wallPoint)){Notice("Aim at a wall to place an opening");return;}
    Piece original=project.pieces[idx];
@@ -723,6 +749,7 @@ namespace WorldBuilder {
     Piece section=new Piece(kind,original.position+original.rotation*localPos,
       new Vector3(xEnd-xStart,yEnd-yStart,t),original.rotation);
     section.roomId=original.roomId;
+    section.finish=original.finish;
     AddWithoutHistory(section);
    };
    part(-length*.5f,left,0,height,"wall");
@@ -738,6 +765,7 @@ namespace WorldBuilder {
     Piece frame=new Piece("opening-frame",original.position+original.rotation*localPos,
       new Vector3(toX-fromX,toY-fromY,frameDepth),original.rotation);
     frame.roomId=original.roomId;
+    frame.finish=original.finish;
     AddWithoutHistory(frame);
    };
    trim(left-rim,left,bottom,bottom+openingHeight);
@@ -772,7 +800,15 @@ namespace WorldBuilder {
    obj.transform.SetPositionAndRotation(displayPosition,piece.rotation);
    obj.transform.localScale=piece.scale;
    Material material=piece.kind=="wall"?wallMaterial:piece.kind=="floor"?floorMaterial:furnitureMaterial;
-   if(piece.kind=="opening-frame"){
+   if(!string.IsNullOrEmpty(piece.finish)&&piece.finish!="Default"){
+    int colorIndex=Array.IndexOf(FinishNames,piece.finish);
+    if(colorIndex>0){
+     var renderer=obj.GetComponent<Renderer>();
+     Shader shader=Shader.Find("Standard");
+     if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+     if(shader!=null){var finishMaterial=new Material(shader);finishMaterial.color=FinishColors[colorIndex];renderer.sharedMaterial=finishMaterial;}
+    }
+   }else if(piece.kind=="opening-frame"){
     obj.GetComponent<Renderer>().material.color=new Color(.15f,.75f,.94f);
    }else if(material!=null)obj.GetComponent<Renderer>().sharedMaterial=material;
    else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.89f,.91f,.94f):piece.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
@@ -933,7 +969,7 @@ namespace WorldBuilder {
       (k==2&&currentTool==Tool.Floor)||(k==3&&currentTool==Tool.Room)||
       (k==4&&currentTool==Tool.Door)||(k==5&&currentTool==Tool.Window)||
       (k==6&&currentTool==Tool.Stairs)||(k==7&&currentTool==Tool.Roof)||
-      (k==8&&currentTool==Tool.Imported)||(k==12&&currentTool==Tool.Erase);
+      (k==8&&currentTool==Tool.Imported)||(k==9&&currentTool==Tool.Paint)||(k==12&&currentTool==Tool.Erase);
     float yy=y+47+k*step;
     if(Button(new Rect(19,yy,90,step-5),names[k],active)){
      if(k==0)SelectTool(Tool.Select);
@@ -945,6 +981,7 @@ namespace WorldBuilder {
      else if(k==6)SelectTool(Tool.Stairs);
      else if(k==7)SelectTool(Tool.Roof);
      else if(k==12)SelectTool(Tool.Erase);
+     else if(k==9){catalogCategory=8;showCatalog=true;SelectTool(Tool.Paint);}
      else if(k==8){creativeMode=1;catalogCategory=0;showCatalog=true;Notice("Choose a model from My Assets");}
      else ComingSoon(names[k]);
     }
@@ -1112,6 +1149,18 @@ namespace WorldBuilder {
       });
      }
      GUI.EndScrollView();
+    }
+   }else if(catalogCategory==8){
+    Label(new Rect(154,top+64,800,29),"Choose a finish, then click a wall, floor or roof to apply it.");
+    for(int i=0;i<FinishNames.Length;i++){
+     int ix=i;
+     float x=149+i*181f;
+     if(x+176>w-25)break;
+     GUI.DrawTexture(new Rect(x,top+108,169,58),ThumbnailTexture(FinishColors[i]),ScaleMode.StretchToFill);
+     if(Button(new Rect(x,top+174,169,43),FinishNames[i],selectedFinish==i)){
+      selectedFinish=ix;
+      SelectTool(Tool.Paint);
+     }
     }
    }else if(catalogCategory==1){
     DrawAssetTile(new Rect(144,top+70,170,151),"Sofa","Basic placeholder",0,()=>SelectTool(Tool.Couch));
