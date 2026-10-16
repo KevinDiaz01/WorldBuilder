@@ -11,6 +11,7 @@ on:
     paths:
       - 'unity/**'
       - 'launcher/**'
+      - 'asset-browser/**'
 
 permissions:
   contents: write
@@ -61,7 +62,7 @@ jobs:
             -p:PublishSingleFile=true -p:EnableWindowsTargeting=true \
             --output asset-browser/publish
           test -f asset-browser/publish/WorldBuilderAssetBrowser.exe
-          cp asset-browser/publish/WorldBuilderAssetBrowser.exe unity/Build/WorldBuilderAssetBrowser.exe
+          cp -R asset-browser/publish/. unity/Build/
       - name: Validate Unity output and prepare signed-by-hash update assets
         shell: bash
         run: |
