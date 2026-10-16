@@ -1230,7 +1230,7 @@ namespace WorldBuilder {
       SelectTool(Tool.Paint);
      }
     }
-
+   }
   }
   void ExitApplication(bool saveFirst){
    if(quitting)return;
