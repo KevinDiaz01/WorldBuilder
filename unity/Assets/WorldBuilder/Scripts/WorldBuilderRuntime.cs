@@ -11,6 +11,7 @@ namespace WorldBuilder {
   public Quaternion rotation;
   public string assetId;
   public string roomId;
+  public string groupId;
   public string finish;
   public List<Vector3> vertices=new List<Vector3>();
   public float lightIntensity=1.5f;
@@ -62,6 +63,7 @@ namespace WorldBuilder {
   private bool quitting=false;
   private bool showSettings=false;
   private int selectedIndex=-1;
+  private readonly HashSet<int> multiSelection=new HashSet<int>();
   private bool draggingSelection=false;
   private Vector3 selectionDragOffset;
   private LineRenderer selectionOutline;
@@ -177,11 +179,43 @@ namespace WorldBuilder {
   }
   void SelectObject(int index){
    selectedIndex=index;
+   multiSelection.Clear();
    if(index<0)objectHandleVisible=false;
-   if(index>=0)showInspector=true;
+   if(index>=0&&index<project.pieces.Count){
+    showInspector=true;
+    string group=project.pieces[index].groupId;
+    if(!string.IsNullOrEmpty(group)){
+     for(int i=0;i<project.pieces.Count;i++)
+      if(project.pieces[i].groupId==group)multiSelection.Add(i);
+    }else multiSelection.Add(index);
+   }
    editingPiece=-1;
    RefreshSelectionOutline();
   }
+  void ToggleMultiple(int index){
+   if(index<0||index>=project.pieces.Count)return;
+   if(multiSelection.Contains(index)){
+    multiSelection.Remove(index);
+    if(multiSelection.Count==0){SelectObject(-1);return;}
+    foreach(int remaining in multiSelection){selectedIndex=remaining;break;}
+   }else{multiSelection.Add(index);selectedIndex=index;}
+   showInspector=true;editingPiece=-1;RefreshSelectionOutline();
+   Notice(multiSelection.Count+" objects selected");
+  }
+  void GroupSelected(){
+   if(multiSelection.Count<2){Notice("Shift-click two or more objects to group");return;}
+   RememberChange();
+   string group=Guid.NewGuid().ToString("N");
+   foreach(int i in multiSelection)if(i>=0&&i<project.pieces.Count)project.pieces[i].groupId=group;
+   Notice("Grouped "+multiSelection.Count+" objects · select one to move all");
+  }
+  void UngroupSelected(){
+   if(multiSelection.Count==0)return;
+   RememberChange();
+   foreach(int i in multiSelection)if(i>=0&&i<project.pieces.Count)project.pieces[i].groupId=null;
+   Notice("Objects ungrouped");
+  }
+
   void RefreshSelectionOutline(){
    if(selectionOutline==null){
     var helper=new GameObject("WorldBuilder Selection Outline");
@@ -218,6 +252,7 @@ namespace WorldBuilder {
    copy.assetId=original.assetId;
    // Duplicate a piece as an independent object rather than joining its former room.
    copy.roomId=null;
+   copy.groupId=null;
    copy.finish=original.finish;
    copy.textureTile=original.textureTile;
    Add(copy);
@@ -812,6 +847,9 @@ namespace WorldBuilder {
    }
    if(Input.GetKeyDown(KeyCode.N)){furnitureSnap=!furnitureSnap;Notice("Furniture snap "+(furnitureSnap?"on":"off"));}
    if(!showPause&&!showConfirmExit&&!showSettings&&!showExport&&!showImport&&!showProjects){
+    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.G)){
+     if(Input.GetKey(KeyCode.LeftShift)||Input.GetKey(KeyCode.RightShift))UngroupSelected();else GroupSelected();
+    }
     if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.D))DuplicateSelection();
     if(Input.GetKeyDown(KeyCode.R)&&currentTool==Tool.Select)RotateSelection();
     else if(currentTool==Tool.Imported&&(Input.GetKeyDown(KeyCode.R)||Input.GetKeyDown(KeyCode.E))){importedRotation=(importedRotation+45f)%360f;Notice("Asset rotation: "+importedRotation.ToString("F0")+"°");}
@@ -827,7 +865,13 @@ namespace WorldBuilder {
      target.y=piece.position.y;
      Vector3 movement=target-piece.position;
      if(movement.sqrMagnitude>.000001f){
-      if(IsRoomFloor(selectedIndex)){
+      if(multiSelection.Count>1&&!IsRoomFloor(selectedIndex)){
+       foreach(int i in multiSelection){
+        if(i<0||i>=project.pieces.Count||objects[i]==null)continue;
+        project.pieces[i].position+=movement;
+        objects[i].transform.position=project.pieces[i].position;
+       }
+      }else if(IsRoomFloor(selectedIndex)){
        string group=piece.roomId;
        for(int j=0;j<project.pieces.Count;j++){
         if(project.pieces[j].roomId!=group||objects[j]==null)continue;
@@ -857,8 +901,9 @@ namespace WorldBuilder {
      for(int j=0;j<objects.Count;j++){
       if(objects[j]!=null&&(objects[j]==hit.collider.gameObject||hit.collider.transform.IsChildOf(objects[j].transform))){hitIndex=j;break;}
      }
-     SelectObject(hitIndex);
-     if(hitIndex>=0){
+     if((Input.GetKey(KeyCode.LeftShift)||Input.GetKey(KeyCode.RightShift))&&hitIndex>=0)ToggleMultiple(hitIndex);
+     else SelectObject(hitIndex);
+     if(hitIndex>=0&&!Input.GetKey(KeyCode.LeftShift)&&!Input.GetKey(KeyCode.RightShift)){
       RememberChange();
       draggingSelection=true;
       selectionDragOffset=project.pieces[hitIndex].position-p;
@@ -1459,6 +1504,11 @@ namespace WorldBuilder {
    }
    if(selectedIndex>=0&&selectedIndex<project.pieces.Count){
     var p=project.pieces[selectedIndex];
+    if(multiSelection.Count>1){
+     Label(new Rect(x+23,183,283,23),multiSelection.Count+" objects selected");
+     if(Button(new Rect(x+23,188,137,30),"Group"))GroupSelected();
+     if(Button(new Rect(x+169,188,137,30),"Ungroup"))UngroupSelected();
+    }
     Label(new Rect(x+23,y,283,25),"POSITION (meters)");y+=27;
     float nextX=FloatField(new Rect(x+23,y,88,40),0,p.position.x);
     float nextY=FloatField(new Rect(x+120,y,88,40),1,p.position.y);
