@@ -49,12 +49,26 @@ jobs:
           targetPlatform: StandaloneWindows64
           buildMethod: WorldBuilder.WorldBuilderBuild.BuildWindows
           versioning: None
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build bundled Windows WebView2 Assets browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet publish asset-browser/WorldBuilderAssetBrowser.csproj \
+            --configuration Release --runtime win-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:EnableWindowsTargeting=true \
+            --output asset-browser/publish
+          test -f asset-browser/publish/WorldBuilderAssetBrowser.exe
+          cp asset-browser/publish/WorldBuilderAssetBrowser.exe unity/Build/WorldBuilderAssetBrowser.exe
       - name: Validate Unity output and prepare signed-by-hash update assets
         shell: bash
         run: |
           set -euo pipefail
           test -f unity/Build/WorldBuilder.exe
           test -d unity/Build/WorldBuilder_Data
+          test -f unity/Build/WorldBuilderAssetBrowser.exe
           if [ -n "$WB_VERSION" ]; then
             [[ "$WB_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Expected version X.Y.Z"; exit 1; }
             python3 - <<'PY'
