@@ -78,9 +78,10 @@ namespace WorldBuilder {
    float scale=UIScale;
    float w=Screen.width/scale,h=Screen.height/scale;
    Vector2 p=new Vector2(Input.mousePosition.x/scale,(Screen.height-Input.mousePosition.y)/scale);
-   return p.y<88f||p.y>h-272f||
-     (p.x<122f&&p.y>=94f)||
-     (p.x>w-359f&&p.y>=94f)||
+   return p.y<88f||(showCatalog&&p.y>h-272f)||
+     (!showCatalog&&p.y>h-70f&&p.x<480f)||
+     (showLibrary&&p.x<122f&&p.y>=94f&&p.y<735f)||
+     (showInspector&&p.x>w-359f&&p.y>=94f&&p.y<h-175f)||
      (p.x>125f&&p.x<515f&&p.y<159f)||
      showPause||showConfirmExit||showSettings||showHelp||
      (showProjects&&p.x>w*.5f-200f&&p.x<w*.5f+210f&&p.y<505f)||
@@ -596,10 +597,10 @@ namespace WorldBuilder {
      else {creativeMode=n;if(n>0)ComingSoon(modes[n]+" tools");}
     }
    }
-   if(Button(new Rect(w-330,22,64,46),"↶"))UndoLast();
+   if(Button(new Rect(w-330,22,64,46),"Undo"))UndoLast();
    if(Button(new Rect(w-258,22,70,46),"Save"))Save();
-   if(Button(new Rect(w-180,22,77,46),"Assets"))ToggleAssetBrowser();
-   if(Button(new Rect(w-95,22,71,46),"☰"))showPause=!showPause;
+   if(Button(new Rect(w-180,22,77,46),"Panels"))showInspector=!showInspector;
+   if(Button(new Rect(w-95,22,71,46),"Menu"))showPause=!showPause;
   }
   void SetCameraView(bool overhead){
    var orbit=sceneCamera!=null?sceneCamera.GetComponent<OrbitCamera>():null;
@@ -618,19 +619,21 @@ namespace WorldBuilder {
   }
   void DrawLeft(float h){
    float y=96f;
-   GUI.Box(new Rect(12,y,104,h-325),"",panelStyle);
+   if(!showLibrary){if(Button(new Rect(12,y,104,42),"Tools >"))showLibrary=true;return;}
+   GUI.Box(new Rect(12,y,104,602),"",panelStyle);
+   if(Button(new Rect(19,y+7,90,35),"< Tools")){showLibrary=false;return;}
    string[] names={"Select","Walls","Floors","Rooms","Doors","Windows","Stairs","Roofs","Furniture","Materials","Lighting","Terrain"};
    string[] symbols={"◈","▥","▦","⬡","▯","⊞","≋","⌂","▣","▤","☼","△"};
-   float step=Mathf.Clamp((h-347f)/12f,43f,67f);
+   float step=45f;
    for(int k=0;k<names.Length;k++){
     bool active=(k==0&&currentTool==Tool.Select)||(k==1&&currentTool==Tool.Wall)||
       (k==2&&currentTool==Tool.Floor)||(k==8&&currentTool==Tool.Imported);
-    float yy=y+8+k*step;
+    float yy=y+47+k*step;
     if(Button(new Rect(19,yy,90,step-5),names[k],active)){
      if(k==0)SelectTool(Tool.Select);
      else if(k==1)SelectTool(Tool.Wall);
      else if(k==2)SelectTool(Tool.Floor);
-     else if(k==8){creativeMode=1;catalogCategory=0;Notice("Choose a model from My Assets");}
+     else if(k==8){creativeMode=1;catalogCategory=0;showCatalog=true;Notice("Choose a model from My Assets");}
      else ComingSoon(names[k]);
     }
    }
