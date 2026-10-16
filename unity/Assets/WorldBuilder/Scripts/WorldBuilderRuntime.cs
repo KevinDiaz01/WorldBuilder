@@ -549,6 +549,10 @@ namespace WorldBuilder {
     preview.transform.position=wall.position+wall.rotation*local+forward*(facing*(wall.scale.z*.5f+.04f));
     preview.transform.rotation=wall.rotation;
     preview.transform.localScale=new Vector3(previewWidth,previewHeight,.07f);
+   }else if(currentTool==Tool.Light||currentTool==Tool.Mirror||currentTool==Tool.Seat||currentTool==Tool.Spawn){
+    float size=currentTool==Tool.Mirror?1.4f:.3f;
+    preview.transform.position=p+Vector3.up*(currentTool==Tool.Light?2.35f:currentTool==Tool.Mirror?1.4f:.5f);
+    preview.transform.localScale=Vector3.one*size;
    }else if(currentTool==Tool.Couch||currentTool==Tool.Table){
     bool sofa=currentTool==Tool.Couch;
     preview.transform.position=p+Vector3.up*.4f;
@@ -839,7 +843,7 @@ namespace WorldBuilder {
    if(!Input.GetMouseButtonDown(0) || Input.GetKey(KeyCode.LeftAlt) || Input.GetMouseButton(1))return;
    if(OverUI())return;
    bool clickedGround=MouseOnGround(out Vector3 p);
-   if(!clickedGround&&currentTool!=Tool.Door&&currentTool!=Tool.Window&&currentTool!=Tool.Paint)return;
+   if(!clickedGround&&currentTool!=Tool.Door&&currentTool!=Tool.Window&&currentTool!=Tool.Garage&&currentTool!=Tool.Paint)return;
    if(currentTool==Tool.Select){
     Ray pick=sceneCamera.ScreenPointToRay(Input.mousePosition);
     if(Physics.Raycast(pick,out RaycastHit hit,500f)){
@@ -1102,6 +1106,36 @@ namespace WorldBuilder {
    }catch(Exception ex){Diagnostics.Add("ERROR","Material image unreadable: "+ex.Message);return null;}
   }
   GameObject Create(Piece piece){
+   if(piece.kind=="polygon-floor"||piece.kind=="terrain"){
+    GameObject meshObj=new GameObject("WB_"+piece.kind);
+    Mesh mesh=piece.kind=="polygon-floor"?PolygonGeometry.Create(piece.vertices,FloorThickness):
+      TerrainGeometry.Create(32,Mathf.Max(2,piece.scale.x),Mathf.Max(2,piece.scale.z),piece.scale.y,
+       Mathf.RoundToInt(piece.position.x*13f+piece.position.z*17f));
+    var filter=meshObj.AddComponent<MeshFilter>();filter.sharedMesh=mesh;
+    var renderer=meshObj.AddComponent<MeshRenderer>();
+    Shader shader=Shader.Find("Standard");
+    if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+    if(shader!=null){var mat=new Material(shader);mat.color=piece.kind=="terrain"?new Color(.30f,.52f,.27f):new Color(.60f,.61f,.60f);renderer.sharedMaterial=mat;}
+    var collider=meshObj.AddComponent<MeshCollider>();collider.sharedMesh=mesh;
+    meshObj.transform.SetPositionAndRotation(piece.position,piece.rotation);
+    return meshObj;
+   }
+   if(piece.kind=="light-point"||piece.kind=="light-spot"){
+    var holder=GameObject.CreatePrimitive(PrimitiveType.Sphere);
+    holder.name="WB_"+piece.kind;
+    holder.transform.SetPositionAndRotation(piece.position,piece.rotation);
+    holder.transform.localScale=Vector3.one*.28f;
+    var renderer=holder.GetComponent<Renderer>();
+    if(renderer!=null)renderer.material.color=piece.lightColor;
+    Light light=holder.AddComponent<Light>();
+    light.type=piece.kind=="light-spot"?LightType.Spot:LightType.Point;
+    light.range=Mathf.Max(1f,piece.lightRange);
+    light.intensity=Mathf.Max(0,piece.lightIntensity);
+    light.spotAngle=Mathf.Clamp(piece.lightAngle,1f,170f);
+    light.color=piece.lightColor;
+    light.shadows=LightShadows.Soft;
+    return holder;
+   }
    if(piece.kind=="imported"){
     try{
      string file=Path.Combine(AssetLibrary(),piece.assetId??"","model.obj");
@@ -1151,7 +1185,7 @@ namespace WorldBuilder {
    }else if(piece.kind=="opening-frame"){
     obj.GetComponent<Renderer>().material.color=new Color(.15f,.75f,.94f);
    }else if(material!=null)obj.GetComponent<Renderer>().sharedMaterial=material;
-   else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.89f,.91f,.94f):piece.kind=="floor"?new Color(.47f,.52f,.58f):new Color(.25f,.6f,.7f);
+   else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.89f,.91f,.94f):piece.kind=="floor"?new Color(.47f,.52f,.58f):piece.kind=="water"?new Color(.18f,.47f,.75f):piece.kind=="vrc-mirror"?new Color(.55f,.72f,.82f):piece.kind=="vrc-spawn"?new Color(.22f,.86f,.40f):new Color(.25f,.6f,.7f);
    return obj;
   }
   void Erase(Vector3 point){
