@@ -460,6 +460,14 @@ namespace WorldBuilder {
     string directory=Path.Combine(exportAssets,"SurfaceMaterials",id);
     Directory.CreateDirectory(directory);
     File.Copy(color,Path.Combine(directory,Path.GetFileName(color)),true);
+    foreach(string map in Directory.GetFiles(Path.Combine(MaterialLibrary.Root,id),"normal.*")){
+     string ext=Path.GetExtension(map).ToLowerInvariant();
+     if(ext==".png"||ext==".jpg"||ext==".jpeg")File.Copy(map,Path.Combine(directory,Path.GetFileName(map)),true);
+    }
+    foreach(string map in Directory.GetFiles(Path.Combine(MaterialLibrary.Root,id),"roughness.*")){
+     string ext=Path.GetExtension(map).ToLowerInvariant();
+     if(ext==".png"||ext==".jpg"||ext==".jpeg")File.Copy(map,Path.Combine(directory,Path.GetFileName(map)),true);
+    }
    }
   }
   void ExportUnity(){
