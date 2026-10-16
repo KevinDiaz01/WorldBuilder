@@ -95,6 +95,7 @@ namespace WorldBuilder {
     if(!File.Exists(exe)){Notice("Asset browser component is missing. Reinstall the complete update.");return;}
     IntPtr hwnd=System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
     if(hwnd==IntPtr.Zero){Notice("Unable to locate WorldBuilder window");return;}
+    if(browserProcess!=null){browserProcess.Dispose();browserProcess=null;}
     browserProcess=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe,
       hwnd.ToInt64().ToString()+" "+QuoteArg(AssetHub.Root)){UseShellExecute=false});
     showAssets=true;
@@ -361,6 +362,7 @@ namespace WorldBuilder {
   }
   void Update() {
    if(walkthrough!=null&&walkthrough.IsWalking)return;
+   if(showAssets&&(browserProcess==null||browserProcess.HasExited)){showAssets=false;if(browserProcess!=null){browserProcess.Dispose();browserProcess=null;}}
    if(Time.unscaledTime>=nextAssetScan){
     nextAssetScan=Time.unscaledTime+6f;
     string msg;
@@ -498,6 +500,7 @@ namespace WorldBuilder {
   private GUIStyle panelStyle, headingStyle, captionStyle, menuStyle, activeStyle, regularStyle, sectionStyle, smallStyle;
   private Texture2D darkTexture, sideTexture, blueTexture, fieldTexture, hoverTexture, strokeTexture;
   private Font interfaceFont;
+  private string selectedCatalogId="";
   private const float DesignWidth=1600f;
   float UIScale { get { return Mathf.Max(.65f,Mathf.Min(Screen.width/DesignWidth,Screen.height/850f)); } }
   Texture2D Rounded(Color fill,Color border,int radius=20){
@@ -620,7 +623,7 @@ namespace WorldBuilder {
     bool active=(k==0&&currentTool==Tool.Select)||(k==1&&currentTool==Tool.Wall)||
       (k==2&&currentTool==Tool.Floor)||(k==8&&currentTool==Tool.Imported);
     float yy=y+8+k*step;
-    if(Button(new Rect(19,yy,90,step-5),symbols[k]+"  "+names[k],active)){
+    if(Button(new Rect(19,yy,90,step-5),names[k],active)){
      if(k==0)SelectTool(Tool.Select);
      else if(k==1)SelectTool(Tool.Wall);
      else if(k==2)SelectTool(Tool.Floor);
@@ -651,11 +654,11 @@ namespace WorldBuilder {
     float nextY=FloatField(new Rect(x+120,y,88,40),1,p.position.y);
     float nextZ=FloatField(new Rect(x+217,y,88,40),2,p.position.z);
     y+=41;
-    Label(new Rect(x+17,y,235,22),"SIZE (meters)");y+=25;
-    float sx=FloatField(new Rect(x+17,y,72,29),3,p.scale.x);
-    float sy=FloatField(new Rect(x+100,y,72,29),4,p.scale.y);
-    float sz=FloatField(new Rect(x+183,y,72,29),5,p.scale.z);
-    y+=42;
+    Label(new Rect(x+23,y+8,283,25),"SIZE (meters)");y+=40;
+    float sx=FloatField(new Rect(x+23,y,88,40),3,p.scale.x);
+    float sy=FloatField(new Rect(x+120,y,88,40),4,p.scale.y);
+    float sz=FloatField(new Rect(x+217,y,88,40),5,p.scale.z);
+    y+=51;
     if(Button(new Rect(x+23,y,283,45),"Apply Dimensions")){
      p.position=new Vector3(nextX,nextY,nextZ);
      p.scale=new Vector3(Mathf.Max(.02f,sx),Mathf.Max(.02f,sy),Mathf.Max(.02f,sz));
@@ -665,11 +668,11 @@ namespace WorldBuilder {
      RefreshSelectionOutline();
      Notice("Object dimensions updated");
     }
-    y+=49;
+    y+=56;
     if(Button(new Rect(x+23,y,137,43),"Duplicate"))DuplicateSelection();
     if(Button(new Rect(x+169,y,137,43),"Rotate 45°"))RotateSelection();
-    y+=39;
-    if(Button(new Rect(x+17,y,235,32),"Delete Selected"))DeleteSelection();
+    y+=51;
+    if(Button(new Rect(x+23,y,283,43),"Delete Selected"))DeleteSelection();
    }else{
     Label(new Rect(x+23,y,283,45),"Select a placed object to edit it.");
     y+=45;
@@ -706,8 +709,9 @@ namespace WorldBuilder {
                    new Color(.21f,.30f,.27f,.95f),new Color(.26f,.27f,.34f,.94f)};
    GUI.DrawTexture(new Rect(card.x+6,card.y+6,card.width-12,card.height-46),
      ThumbnailTexture(colors[colorIndex%colors.Length]),ScaleMode.StretchToFill);
-   GUI.Label(new Rect(card.x+14,card.y+card.height-41,card.width-24,22),title,sectionStyle);
-   GUI.Label(new Rect(card.x+14,card.y+card.height-21,card.width-24,19),subtitle,smallStyle);
+   string display=title.Length>19?title.Substring(0,16)+"...":title;
+   GUI.Label(new Rect(card.x+12,card.y+card.height-43,card.width-22,23),display,smallStyle);
+   GUI.Label(new Rect(card.x+12,card.y+card.height-22,card.width-22,18),subtitle,smallStyle);
    if(GUI.Button(card,GUIContent.none,GUIStyle.none))callback();
   }
   private readonly Dictionary<int,Texture2D> catalogBackgrounds=new Dictionary<int,Texture2D>();
@@ -724,10 +728,14 @@ namespace WorldBuilder {
    GUI.Box(new Rect(125,top,w-140,206),"",panelStyle);
    string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials"};
    float x=139f;
+   float availableForTabs=Mathf.Max(500f,w-570f);
+   float desiredWidths=0f;
+   for(int k=0;k<categories.Length;k++)desiredWidths+=(k==0?122f:Mathf.Clamp(categories[k].Length*11f+22f,86f,126f))+7f;
+   float tabRatio=Mathf.Min(1f,availableForTabs/desiredWidths);
    for(int k=0;k<categories.Length;k++){
-    float width=k==0?122f:Mathf.Clamp(categories[k].Length*11f+22f,86f,126f);
+    float width=(k==0?122f:Mathf.Clamp(categories[k].Length*11f+22f,86f,126f))*tabRatio;
     if(Button(new Rect(x,top+13,width,40),categories[k],catalogCategory==k))catalogCategory=k;
-    x+=width+7f;
+    x+=width+7f*tabRatio;
    }
    float right=w-395;
    catalogSearch=GUI.TextField(new Rect(right,top+13,195,40),catalogSearch,regularStyle);
