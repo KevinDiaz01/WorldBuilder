@@ -31,7 +31,7 @@ namespace WorldBuilder {
    // Use our own packaged gradient instead of Unity's stripped procedural sky.
    // If shader import fails, ApplySceneMood safely uses the camera background.
    Shader skyShader=Resources.Load<Shader>("WorldBuilderSky");
-   if(skyShader!=null)skyMaterial=new Material(skyShader);
+   if(skyShader!=null&&skyShader.isSupported)skyMaterial=new Material(skyShader);
   }
   static Texture2D CreateGrassTexture(int size){
    var image=new Texture2D(size,size,TextureFormat.RGB24,true);
