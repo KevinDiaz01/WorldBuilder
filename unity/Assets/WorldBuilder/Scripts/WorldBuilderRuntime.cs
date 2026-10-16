@@ -107,6 +107,7 @@ namespace WorldBuilder {
   private bool showRecoveryPrompt=false;
   private string importedId;
   private float importedScale=1f;
+  private float importedFitBase=1f;
   private float importedRotation=0f;
   private Bounds importedBounds;
   private bool importedBoundsReady=false;
@@ -498,7 +499,8 @@ namespace WorldBuilder {
      importedBoundsReady=true;
      float largest=Mathf.Max(importedBounds.size.x,Mathf.Max(importedBounds.size.y,importedBounds.size.z));
      if(largest>.001f){
-      importedScale=Mathf.Clamp(2f/largest,.0001f,20f);
+      importedFitBase=Mathf.Clamp(2f/largest,.0001f,20f);
+      importedScale=importedFitBase;
       if(largest>12f||largest<.05f)
        Diagnostics.Add("WARN","Model units normalized for "+AssetHub.Name(id)+
         " (original "+largest.ToString("F2")+" m; placement "+importedScale.ToString("F3")+"x)");
@@ -2021,8 +2023,9 @@ namespace WorldBuilder {
     }
     if(currentTool==Tool.Imported){
      GUI.Label(new Rect(ox,y,282,25),"FURNITURE PLACEMENT",miniStyle);y+=33;
-     GUI.Label(new Rect(ox,y,282,22),"Scale "+importedScale.ToString("F2")+"x",smallStyle);y+=27;
-     importedScale=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),importedScale,.1f,4f);y+=37;
+     GUI.Label(new Rect(ox,y,282,22),"Scale "+(importedScale/Mathf.Max(.000001f,importedFitBase)).ToString("F2")+"x  ·  fitted model",smallStyle);y+=27;
+     importedScale=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),importedScale,
+      Mathf.Max(.00001f,importedFitBase*.1f),importedFitBase*5f);y+=37;
      GUI.Label(new Rect(ox,y,282,24),"Rotation "+importedRotation.ToString("F0")+"°",smallStyle);y+=27;
      importedRotation=GUI.HorizontalSlider(new Rect(ox+8,y,270,20),importedRotation,0f,360f);y+=40;
     }
