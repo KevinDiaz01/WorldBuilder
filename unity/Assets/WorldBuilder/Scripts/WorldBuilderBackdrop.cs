@@ -19,10 +19,8 @@ namespace WorldBuilder {
    ground.transform.localScale=new Vector3(22f,1f,22f);
    Collider collider=ground.GetComponent<Collider>();
    if(collider!=null)Destroy(collider);
-   Shader shader=Shader.Find("Standard");
-   if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
-   if(shader==null)shader=Shader.Find("Unlit/Texture");
-   groundMaterial=new Material(shader);
+   // Shaders referenced only through Shader.Find get stripped in standalone builds.
+   groundMaterial=new Material(WorldBuilderShaders.Lit);
    grassTexture=CreateGrassTexture(160);
    grassTexture.wrapMode=TextureWrapMode.Repeat;
    grassTexture.filterMode=FilterMode.Bilinear;
@@ -30,12 +28,7 @@ namespace WorldBuilder {
    groundMaterial.mainTextureScale=new Vector2(26f,26f);
    var renderer=ground.GetComponent<Renderer>();
    if(renderer!=null)renderer.sharedMaterial=groundMaterial;
-   Shader skyShader=Shader.Find("Skybox/Procedural");
-   if(skyShader!=null){
-    skyMaterial=new Material(skyShader);
-    skyMaterial.SetFloat("_AtmosphereThickness",.85f);
-    skyMaterial.SetFloat("_SunSize",.032f);
-   }
+   // Use the stable sky-color fallback until a packaged skybox shader is available.
   }
   static Texture2D CreateGrassTexture(int size){
    var image=new Texture2D(size,size,TextureFormat.RGB24,true);

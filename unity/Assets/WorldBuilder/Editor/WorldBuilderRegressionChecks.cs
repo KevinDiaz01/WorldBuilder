@@ -13,11 +13,25 @@ namespace WorldBuilder {
   }
   public static void Run(WorldBuilderRuntime runtime){
    if(runtime==null)throw new ArgumentNullException(nameof(runtime));
+   RuntimeShaders();
    ToolSwitching(runtime);
    MeshImports();
    GltfMaterialRoundTrip();
    Geometry();
-   Debug.Log("WorldBuilder regression checks passed: tool switching, OBJ materials, polygon and terrain");
+   Debug.Log("WorldBuilder regression checks passed: bundled shaders, tool switching, OBJ/glTF materials, polygon and terrain");
+  }
+  static void RuntimeShaders(){
+   Shader lit=Resources.Load<Shader>("WorldBuilderLit");
+   Shader overlay=Resources.Load<Shader>("WorldBuilderOverlay");
+   Expect(lit!=null&&overlay!=null,"standalone runtime shader resources are missing");
+   Material a=WorldBuilderShaders.NewLit(Color.white);
+   Material b=WorldBuilderShaders.NewOverlay(new Color(.2f,.4f,.6f,.5f));
+   try{
+    Expect(a.shader==lit&&b.shader==overlay,"runtime shaders are not used");
+   }finally{
+    UnityEngine.Object.DestroyImmediate(a);
+    UnityEngine.Object.DestroyImmediate(b);
+   }
   }
   static void ToolSwitching(WorldBuilderRuntime runtime){
    Type type=typeof(WorldBuilderRuntime);

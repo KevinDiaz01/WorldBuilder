@@ -241,7 +241,7 @@ namespace WorldBuilder {
    if(selectionOutline==null){
     var helper=new GameObject("WorldBuilder Selection Outline");
     selectionOutline=helper.AddComponent<LineRenderer>();
-    selectionOutline.material=new Material(Shader.Find("Sprites/Default"));
+    selectionOutline.material=new Material(WorldBuilderShaders.Overlay);
     selectionOutline.startWidth=.025f;selectionOutline.endWidth=.025f;
     selectionOutline.startColor=selectionOutline.endColor=new Color(.18f,.77f,1f,1f);
     selectionOutline.useWorldSpace=true;
@@ -475,7 +475,7 @@ namespace WorldBuilder {
     for(int axis=0;axis<2;axis++){
      var go=new GameObject("Grid");
      var line=go.AddComponent<LineRenderer>();
-     line.material=new Material(Shader.Find("Sprites/Default"));
+     line.material=new Material(WorldBuilderShaders.Overlay);
      line.positionCount=2;line.startWidth=.012f;line.endWidth=.012f;
      line.startColor=line.endColor=new Color(.58f,.64f,.70f,.19f);
      line.SetPosition(0,axis==0?new Vector3(-20,.012f,i):new Vector3(i,.012f,-20));
@@ -553,10 +553,7 @@ namespace WorldBuilder {
      var original=renderer.sharedMaterials;
      var ghosts=new Material[original.Length];
      for(int i=0;i<original.Length;i++){
-      Shader shader=Shader.Find("Standard");
-      if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
-      if(shader==null)shader=Shader.Find("Sprites/Default");
-      ghosts[i]=new Material(shader);
+      ghosts[i]=new Material(WorldBuilderShaders.Overlay);
       if(original[i]!=null&&original[i].mainTexture!=null)ghosts[i].mainTexture=original[i].mainTexture;
       ghosts[i].color=new Color(.35f,.83f,1f,.72f);
      }
@@ -639,14 +636,14 @@ namespace WorldBuilder {
     preview=GameObject.CreatePrimitive(PrimitiveType.Cube);
     preview.name="Build cursor";
     Destroy(preview.GetComponent<Collider>());
-    var m=new Material(Shader.Find("Sprites/Default"));
+    var m=new Material(WorldBuilderShaders.Overlay);
     m.color=new Color(.24f,.54f,.91f,.45f);
     preview.GetComponent<Renderer>().material=m;
     openingGuide=preview.AddComponent<LineRenderer>();
     openingGuide.useWorldSpace=false;
     openingGuide.positionCount=5;
     openingGuide.startWidth=openingGuide.endWidth=.053f;
-    openingGuide.material=new Material(Shader.Find("Sprites/Default"));
+    openingGuide.material=new Material(WorldBuilderShaders.Overlay);
     openingGuide.enabled=false;
    }
    if(currentTool==Tool.Imported){
@@ -1339,7 +1336,7 @@ namespace WorldBuilder {
     trunk.name="Natural Trunk";trunk.transform.SetParent(root.transform,false);
     trunk.transform.localPosition=new Vector3(0,1.06f,0);
     trunk.transform.localScale=new Vector3(.30f,1.06f,.30f);
-    trunk.GetComponent<Renderer>().material.color=wood;
+    trunk.GetComponent<Renderer>().sharedMaterial=WorldBuilderShaders.NewLit(wood);
     Vector3[] centers={
      new Vector3(0f,3.02f,0f),new Vector3(-.82f,2.56f,.17f),
      new Vector3(.79f,2.62f,-.1f),new Vector3(.19f,3.59f,.15f),
@@ -1352,8 +1349,8 @@ namespace WorldBuilder {
      GameObject crown=GameObject.CreatePrimitive(PrimitiveType.Sphere);
      crown.name="Leaf Cluster "+(n+1);crown.transform.SetParent(root.transform,false);
      crown.transform.localPosition=centers[n];crown.transform.localScale=sizes[n];
-     crown.GetComponent<Renderer>().material.color=leaf*
-      (n%2==0?1.06f:.88f);
+     crown.GetComponent<Renderer>().sharedMaterial=WorldBuilderShaders.NewLit(leaf*
+      (n%2==0?1.06f:.88f));
     }
     root.transform.localScale=new Vector3(piece.scale.x,piece.scale.y/4f,piece.scale.z);
     return root;
@@ -1366,8 +1363,7 @@ namespace WorldBuilder {
        Mathf.RoundToInt(piece.position.x*13f+piece.position.z*17f));
     var filter=meshObj.AddComponent<MeshFilter>();filter.sharedMesh=mesh;
     var renderer=meshObj.AddComponent<MeshRenderer>();
-    Shader shader=Shader.Find("Standard");
-    if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+    Shader shader=WorldBuilderShaders.Lit;
     if(shader!=null){var mat=new Material(shader);mat.color=piece.kind=="terrain"?new Color(.30f,.52f,.27f):new Color(.60f,.61f,.60f);renderer.sharedMaterial=mat;}
     var collider=meshObj.AddComponent<MeshCollider>();collider.sharedMesh=mesh;
     meshObj.transform.SetPositionAndRotation(piece.position,piece.rotation);
@@ -1378,21 +1374,8 @@ namespace WorldBuilder {
     water.name="WB_Water";
     water.transform.SetPositionAndRotation(piece.position+Vector3.up*.015f,piece.rotation);
     water.transform.localScale=piece.scale;
-    Shader shader=Shader.Find("Standard");
-    if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
-    if(shader!=null){
-     Material mat=new Material(shader);
-     mat.color=new Color(.24f,.58f,.74f,.67f);
-     if(mat.HasProperty("_Mode"))mat.SetFloat("_Mode",3f);
-     if(mat.HasProperty("_Surface"))mat.SetFloat("_Surface",1f);
-     mat.SetInt("_SrcBlend",(int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-     mat.SetInt("_DstBlend",(int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-     mat.SetInt("_ZWrite",0);
-     mat.DisableKeyword("_ALPHATEST_ON");
-     mat.EnableKeyword("_ALPHABLEND_ON");
-     mat.renderQueue=(int)UnityEngine.Rendering.RenderQueue.Transparent;
-     water.GetComponent<Renderer>().sharedMaterial=mat;
-    }
+    water.GetComponent<Renderer>().sharedMaterial=
+     WorldBuilderShaders.NewOverlay(new Color(.24f,.58f,.74f,.67f));
     return water;
    }
    if(piece.kind=="light-point"||piece.kind=="light-spot"){
@@ -1401,7 +1384,7 @@ namespace WorldBuilder {
     holder.transform.SetPositionAndRotation(piece.position,piece.rotation);
     holder.transform.localScale=Vector3.one*.28f;
     var renderer=holder.GetComponent<Renderer>();
-    if(renderer!=null)renderer.material.color=piece.lightColor;
+    if(renderer!=null)renderer.sharedMaterial=WorldBuilderShaders.NewLit(piece.lightColor);
     Light light=holder.AddComponent<Light>();
     light.type=piece.kind=="light-spot"?LightType.Spot:LightType.Point;
     light.range=Mathf.Max(1f,piece.lightRange);
@@ -1433,12 +1416,14 @@ namespace WorldBuilder {
      missing.name="MISSING ASSET "+piece.assetId;
      missing.transform.position=piece.position;
      missing.transform.localScale=Vector3.one*.45f;
-     missing.GetComponent<Renderer>().material.color=new Color(.95f,.21f,.32f);
+     missing.GetComponent<Renderer>().sharedMaterial=WorldBuilderShaders.NewLit(new Color(.95f,.21f,.32f));
      return missing;
     }
    }
    GameObject obj=GameObject.CreatePrimitive(PrimitiveType.Cube);
    obj.name="WB_"+piece.kind;
+   // Assign a bundled material instead of relying on Unity's default primitive shader.
+   obj.GetComponent<Renderer>().sharedMaterial=WorldBuilderShaders.NewLit(Color.white);
    // Older saves put floor tops at y=0, coplanar with the base plane.
    // Correct their render height without modifying the saved schema.
    Vector3 displayPosition=piece.position;
@@ -1450,8 +1435,7 @@ namespace WorldBuilder {
     string id=piece.finish.Substring(8);
     Texture2D image=GetMaterialImage(id);
     if(image!=null){
-     Shader shader=Shader.Find("Standard");
-     if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+     Shader shader=WorldBuilderShaders.Lit;
      if(shader!=null){
       Material finishMaterial=new Material(shader);
       finishMaterial.mainTexture=image;
@@ -1464,8 +1448,7 @@ namespace WorldBuilder {
     int colorIndex=Array.IndexOf(FinishNames,piece.finish);
     if(colorIndex>0){
      var renderer=obj.GetComponent<Renderer>();
-     Shader shader=Shader.Find("Standard");
-     if(shader==null)shader=Shader.Find("Universal Render Pipeline/Lit");
+     Shader shader=WorldBuilderShaders.Lit;
      if(shader!=null){var finishMaterial=new Material(shader);finishMaterial.color=FinishColors[colorIndex];renderer.sharedMaterial=finishMaterial;}
     }
    }else if(piece.kind=="stairs"){
@@ -1501,9 +1484,19 @@ namespace WorldBuilder {
    try{
     var loaded=JsonUtility.FromJson<Project>(File.ReadAllText(filePath));
     if(loaded==null||loaded.schema!=2||loaded.pieces==null)throw new InvalidDataException("Unsupported project schema");
+    // Create first: never empty the user's active project on a failed load.
+    var constructed=new List<GameObject>();
+    try{
+     foreach(var piece in loaded.pieces)constructed.Add(Create(piece));
+    }catch{
+     foreach(var candidate in constructed)if(candidate!=null)Destroy(candidate);
+     throw;
+    }
+    SelectObject(-1);
     foreach(var obj in objects)if(obj!=null)Destroy(obj);
-    objects.Clear();SelectObject(-1);project=loaded;
-    foreach(var piece in project.pieces)objects.Add(Create(piece));ApplyEnvironment();Notice("Loaded: "+Path.GetFileName(filePath));
+    objects.Clear();objects.AddRange(constructed);
+    project=loaded;
+    ApplyEnvironment();Notice("Loaded: "+Path.GetFileName(filePath));
    }catch(Exception e){
     Debug.LogError("Load failed: "+e.Message);
     Diagnostics.Add("ERROR","Project could not be loaded: "+e.Message);
