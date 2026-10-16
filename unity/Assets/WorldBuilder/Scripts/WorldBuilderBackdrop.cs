@@ -8,6 +8,9 @@ namespace WorldBuilder {
   private Material groundMaterial;
   private Texture2D grassTexture;
   private Material skyMaterial;
+  private Material panoramaMaterial;
+  private Texture2D panoramaTexture;
+  private string loadedSkyId="";
   private bool visible=true;
   public bool Visible {get{return visible;}}
   public void Initialize(){
@@ -32,6 +35,8 @@ namespace WorldBuilder {
    // If shader import fails, ApplySceneMood safely uses the camera background.
    Shader skyShader=Resources.Load<Shader>("WorldBuilderSky");
    if(skyShader!=null&&skyShader.isSupported)skyMaterial=new Material(skyShader);
+   Shader hdrShader=Resources.Load<Shader>("WorldBuilderPanoramaSky");
+   if(hdrShader!=null&&hdrShader.isSupported)panoramaMaterial=new Material(hdrShader);
   }
   static Texture2D CreateGrassTexture(int size){
    var image=new Texture2D(size,size,TextureFormat.RGB24,true);
@@ -46,7 +51,7 @@ namespace WorldBuilder {
    }
    image.Apply(true);return image;
   }
-  public void ApplySceneMood(int preset,Camera sceneCamera){
+  public void ApplySceneMood(int preset,Camera sceneCamera,string skyId=null){
    if(ground==null)Initialize();
    int mood=Mathf.Clamp(preset,0,3);
    Color[] top={
@@ -58,7 +63,22 @@ namespace WorldBuilder {
    Color[] below={
     new Color(.51f,.61f,.66f),new Color(.45f,.39f,.42f),
     new Color(.035f,.052f,.082f),new Color(.49f,.52f,.55f)};
-   if(skyMaterial!=null){
+   // Retain existing gradient presets for older projects and unsupported files.
+   string requested=skyId??"";
+   if(loadedSkyId!=requested){
+    if(panoramaTexture!=null){Destroy(panoramaTexture);panoramaTexture=null;}
+    loadedSkyId=requested;
+    if(requested.Length>0&&panoramaMaterial!=null){
+     try{panoramaTexture=SkyboxLibrary.LoadTexture(requested);}
+     catch(System.Exception ex){Diagnostics.Add("WARN","Custom sky could not load: "+ex.Message);}
+    }
+   }
+   if(panoramaMaterial!=null&&panoramaTexture!=null){
+    panoramaMaterial.SetTexture("_MainTex",panoramaTexture);
+    panoramaMaterial.SetFloat("_Exposure",1f);
+    RenderSettings.skybox=panoramaMaterial;
+    if(sceneCamera!=null)sceneCamera.clearFlags=CameraClearFlags.Skybox;
+   }else if(skyMaterial!=null){
     skyMaterial.SetColor("_SkyTop",top[mood]);
     skyMaterial.SetColor("_SkyHorizon",horizon[mood]);
     skyMaterial.SetColor("_SkyGround",below[mood]);
@@ -81,6 +101,8 @@ namespace WorldBuilder {
    if(groundMaterial!=null)Destroy(groundMaterial);
    if(grassTexture!=null)Destroy(grassTexture);
    if(skyMaterial!=null)Destroy(skyMaterial);
+   if(panoramaMaterial!=null)Destroy(panoramaMaterial);
+   if(panoramaTexture!=null)Destroy(panoramaTexture);
   }
  }
 }

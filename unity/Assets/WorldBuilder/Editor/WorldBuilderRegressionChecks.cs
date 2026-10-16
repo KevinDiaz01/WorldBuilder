@@ -17,6 +17,8 @@ namespace WorldBuilder {
    WorkspaceLayout(runtime);
    SpanGestureEligibility();
    CatalogToolConsistency(runtime);
+   AssetCategories();
+   SkyboxImports();
    ToolSwitching(runtime);
    MeshImports();
    GltfMaterialRoundTrip();
@@ -27,16 +29,21 @@ namespace WorldBuilder {
    Shader lit=Resources.Load<Shader>("WorldBuilderLit");
    Shader overlay=Resources.Load<Shader>("WorldBuilderOverlay");
    Shader sky=Resources.Load<Shader>("WorldBuilderSky");
-   Expect(lit!=null&&overlay!=null&&sky!=null,"standalone runtime shader resources are missing");
+   Shader panorama=Resources.Load<Shader>("WorldBuilderPanoramaSky");
+   Expect(lit!=null&&overlay!=null&&sky!=null&&panorama!=null,
+    "standalone runtime shaders must include HDRI panoramas");
    Material a=WorldBuilderShaders.NewLit(Color.white);
    Material b=WorldBuilderShaders.NewOverlay(new Color(.2f,.4f,.6f,.5f));
    Material c=new Material(sky);
+   Material d=new Material(panorama);
    try{
-    Expect(a.shader==lit&&b.shader==overlay&&c.shader==sky,"runtime shaders are not used");
+    Expect(a.shader==lit&&b.shader==overlay&&c.shader==sky&&d.shader==panorama,
+     "runtime shaders are not used");
    }finally{
     UnityEngine.Object.DestroyImmediate(a);
     UnityEngine.Object.DestroyImmediate(b);
     UnityEngine.Object.DestroyImmediate(c);
+    UnityEngine.Object.DestroyImmediate(d);
    }
   }
   static void WorkspaceLayout(WorldBuilderRuntime runtime){
@@ -70,6 +77,51 @@ namespace WorldBuilder {
    Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"Other must deactivate Paint");
    choose.Invoke(runtime,new object[]{0});
    Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"My Assets should be non-painting");
+   choose.Invoke(runtime,new object[]{12});
+   Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"Skyboxes must not activate Paint");
+  }
+  static void AssetCategories(){
+   string folder=Path.Combine(Application.temporaryCachePath,"WB-categories-"+Guid.NewGuid().ToString("N"));
+   Directory.CreateDirectory(folder);
+   string source=Path.Combine(folder,"tree.obj");
+   try{
+    File.WriteAllText(source,"# empty placeholder for category test");
+    File.WriteAllText(source+".worldbuilder-category","Trees");
+    Expect(AssetHub.RequestedCategory(source)=="Trees","download intent lost");
+    Expect(AssetHub.ModelCategory(source,"decorated crate")=="Trees","tree was guessed as Other");
+    File.WriteAllText(source+".worldbuilder-category","Terrain");
+    Expect(AssetHub.ModelCategory(source,"rock")=="Outdoor","terrain browsing category mapping");
+    File.Delete(source+".worldbuilder-category");
+    Expect(AssetHub.ModelCategory(source,"Oak Tree")=="Trees","tree fallback classification");
+   }finally{Directory.Delete(folder,true);}
+  }
+  static void SkyboxImports(){
+   // Minimal two-scanline Radiance RLE file, no network/asset store dependency.
+   string folder=Path.Combine(Application.temporaryCachePath,"WB-skytest-"+Guid.NewGuid().ToString("N"));
+   Directory.CreateDirectory(folder);
+   string path=Path.Combine(folder,"valid.hdr");
+   Texture2D texture=null;
+   try{
+    using(var stream=File.Create(path)){
+     byte[] header=System.Text.Encoding.ASCII.GetBytes(
+      "#?RADIANCE\\nFORMAT=32-bit_rle_rgbe\\n\\n-Y 2 +X 8\\n".Replace("\\n","\n"));
+     stream.Write(header,0,header.Length);
+     for(int y=0;y<2;y++){
+      byte[] scanline={2,2,0,8,136,128,136,64,136,32,136,128};
+      stream.Write(scanline,0,scanline.Length);
+     }
+    }
+    MethodInfo read=typeof(SkyboxLibrary).GetMethod("ReadTexture",
+     BindingFlags.Static|BindingFlags.NonPublic);
+    Expect(read!=null,"sky decoder missing");
+    texture=(Texture2D)read.Invoke(null,new object[]{path});
+    Expect(texture!=null&&texture.width==8&&texture.height==2,"Radiance panorama decoder failed");
+    var serialized=JsonUtility.ToJson(new Project{skyboxId="test-sky"});
+    Expect(JsonUtility.FromJson<Project>(serialized).skyboxId=="test-sky","saved project lost sky selection");
+   }finally{
+    if(texture!=null)UnityEngine.Object.DestroyImmediate(texture);
+    if(Directory.Exists(folder))Directory.Delete(folder,true);
+   }
   }
   static void ToolSwitching(WorldBuilderRuntime runtime){
    Type type=typeof(WorldBuilderRuntime);

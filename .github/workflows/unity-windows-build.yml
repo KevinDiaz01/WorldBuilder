@@ -13,6 +13,11 @@ on:
       - 'launcher/**'
       - 'asset-browser/**'
       - '.github/workflows/unity-windows-build.yml'
+  pull_request:
+    paths:
+      - 'unity/**'
+      - 'asset-browser/**'
+      - '.github/workflows/unity-windows-build.yml'
 
 permissions:
   contents: write

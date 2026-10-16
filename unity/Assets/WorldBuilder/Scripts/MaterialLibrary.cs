@@ -90,7 +90,9 @@ namespace WorldBuilder {
    return Id(sb.ToString());
   }
   static void ScanFolder(string path,string provider){
-   string[] images=Array.FindAll(Directory.GetFiles(path),Image);
+   string[] images=Array.FindAll(Directory.GetFiles(path),file=>
+    Image(file)&&AssetHub.RequestedCategory(file)!="Skyboxes"&&
+    AssetHub.RequestedCategory(file)!="Materials");
    if(images.Length==0)return;
    Array.Sort(images,StringComparer.OrdinalIgnoreCase);
    // A model's texture directory is not an architectural surface library.
@@ -133,7 +135,7 @@ namespace WorldBuilder {
    return false;
   }
   static void ScanZip(string file,string provider){
-   if(IsModelArchive(file))return;
+   if(AssetHub.RequestedCategory(file)=="Skyboxes"||IsModelArchive(file))return;
    FileInfo info=new FileInfo(file);
    string signature=info.Length+"|"+info.LastWriteTimeUtc.Ticks;
    if(!observed.TryGetValue(file,out string before)||before!=signature){observed[file]=signature;return;}
@@ -172,6 +174,12 @@ namespace WorldBuilder {
      folders.AddRange(Directory.GetDirectories(root,"*",SearchOption.AllDirectories));
      foreach(string dir in folders){
       string[] files=Directory.GetFiles(dir);
+      // Each explicitly tagged standalone texture is its own material.
+      // Do not combine all provider-root JPGs into one ambiguous material.
+      foreach(string file in files){
+       if(!Image(file)||AssetHub.RequestedCategory(file)!="Materials"||Rank(file)<0)continue;
+       Store("single:"+file,NiceName(file),provider,file,null,null,Signature(new[]{file}));
+      }
       bool hasModel=false;
       foreach(string file in files){
        string ext=Path.GetExtension(file).ToLowerInvariant();

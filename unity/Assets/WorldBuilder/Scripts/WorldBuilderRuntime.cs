@@ -28,6 +28,8 @@ namespace WorldBuilder {
   public int schema=2;
   public List<Piece> pieces=new List<Piece>();
   public int skyPreset=0;
+  // Optional imported environment. Missing field in old schema-2 saves is safe.
+  public string skyboxId="";
   public float sunYaw=35f;
   public float sunPitch=48f;
   public bool fog=false;
@@ -770,13 +772,36 @@ namespace WorldBuilder {
    try{
     string path=importPath.Trim().Trim('"');
     if(!File.Exists(path))throw new FileNotFoundException("Choose an existing model file.");
-    string id=AssetHub.Import(path,"Other");
+    string[] categories={"All","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor",
+     "Materials","Architecture","Other","Trees","Skyboxes"};
+    string requested=catalogCategory>0&&catalogCategory<categories.Length&&
+     catalogCategory!=8&&catalogCategory!=12?categories[catalogCategory]:null;
+    string id=AssetHub.Import(path,"Other",requested);
     SelectImportedAsset(id);
     showImport=false;
     importError="";
     catalogCategory=0;showCatalog=true;
     Notice("Imported "+AssetHub.Name(id)+". Click the ground to place it.");
    }catch(Exception e){Debug.LogException(e);importError=e.Message;Notice("Import failed: "+e.Message);}
+  }
+  void ImportMaterialFile(){
+   try{
+    var psi=new System.Diagnostics.ProcessStartInfo();
+    psi.FileName="powershell.exe";
+    psi.Arguments="-NoProfile -STA -Command \"Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Material package (*.zip;*.png;*.jpg;*.jpeg)|*.zip;*.png;*.jpg;*.jpeg'; $d.CheckFileExists=$true; if($d.ShowDialog() -eq 'OK') { [Console]::Write($d.FileName) }\"";
+    psi.UseShellExecute=false;psi.CreateNoWindow=true;psi.RedirectStandardOutput=true;
+    using(var process=System.Diagnostics.Process.Start(psi)){
+     string chosen=process.StandardOutput.ReadToEnd().Trim();
+     process.WaitForExit();
+     if(string.IsNullOrEmpty(chosen))return;
+     string folder=AssetHub.Downloads("Other");
+     string target=Path.Combine(folder,Guid.NewGuid().ToString("N")+"-"+Path.GetFileName(chosen));
+     File.Copy(chosen,target);
+     File.WriteAllText(target+".worldbuilder-category","Materials");
+     MaterialLibrary.Scan();
+     Notice("Material queued for discovery. Open Materials in a moment.");
+    }
+   }catch(Exception ex){Diagnostics.Add("ERROR","Material import failed: "+ex.Message);Notice("Material import failed: "+ex.Message);}
   }
   void CopyTree(string source,string destination){
    Directory.CreateDirectory(destination);
@@ -851,6 +876,31 @@ namespace WorldBuilder {
     }
     showExport=false;
    }catch(Exception e){Debug.LogException(e);Notice("Export failed: "+e.Message);}
+  }
+  void SelectSkybox(string id){
+   if(!string.IsNullOrEmpty(id)&&SkyboxLibrary.ImagePath(id)==null){
+    Notice("Skybox file is unavailable; see F2 Diagnostics");return;
+   }
+   if(project.skyboxId==id)return;
+   RememberChange();
+   project.skyboxId=id??"";
+   ApplyEnvironment();
+   Notice(string.IsNullOrEmpty(id)?"Gradient sky restored":"Skybox applied · Save your world to keep it");
+  }
+  void ImportSkyFile(){
+   try{
+    var psi=new System.Diagnostics.ProcessStartInfo();
+    psi.FileName="powershell.exe";
+    psi.Arguments="-NoProfile -STA -Command \"Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Sky panoramas (*.hdr;*.jpg;*.jpeg;*.png)|*.hdr;*.jpg;*.jpeg;*.png'; $d.CheckFileExists=$true; if($d.ShowDialog() -eq 'OK') { [Console]::Write($d.FileName) }\"";
+    psi.UseShellExecute=false;psi.CreateNoWindow=true;psi.RedirectStandardOutput=true;
+    using(var process=System.Diagnostics.Process.Start(psi)){
+     string path=process.StandardOutput.ReadToEnd().Trim();
+     process.WaitForExit();
+     if(string.IsNullOrEmpty(path))return;
+     string id=SkyboxLibrary.Import(path,"Other");
+     SelectSkybox(id);
+    }
+   }catch(Exception ex){Diagnostics.Add("ERROR","Skybox import failed: "+ex.Message);Notice("Could not import sky: "+ex.Message);}
   }
   void NewProject(){RememberChange();SelectObject(-1);ResetWallDefaults();project=new Project();foreach(var obj in objects)if(obj!=null)Destroy(obj);objects.Clear();anchor=null;Notice("New empty project. Save to keep it.");}
   string ProjectsFolder(){string p=Path.Combine(Application.persistentDataPath,"Projects");Directory.CreateDirectory(p);return p;}
@@ -932,7 +982,7 @@ namespace WorldBuilder {
    }
    editorSun.intensity=project.skyPreset==2?.025f:project.skyPreset==1?.42f:project.skyPreset==3?.43f:.70f;
    editorSun.transform.rotation=Quaternion.Euler(project.sunPitch,project.sunYaw,0);
-   if(scenicBackdrop!=null)scenicBackdrop.ApplySceneMood(project.skyPreset,sceneCamera);
+   if(scenicBackdrop!=null)scenicBackdrop.ApplySceneMood(project.skyPreset,sceneCamera,project.skyboxId);
   }
   void CompletePolygonRoom(){
    if(polygonCorners.Count<3){Notice("Click at least three corners");return;}
@@ -970,6 +1020,7 @@ namespace WorldBuilder {
     string msg;
     int count=AssetHub.Scan(out msg);
     MaterialLibrary.Scan();
+    SkyboxLibrary.Scan();
     if(msg.Length>0){assetStatus=msg;if(count>0)Notice(msg);}
     // Upgrade pre-existing imports with thumbnails, one model at a time.
     foreach(string id in AssetHub.Catalog()){
@@ -1798,8 +1849,8 @@ namespace WorldBuilder {
     if(Button(new Rect(x+406,line,188,42),"Fog: "+(project.fog?"On":"Off"))){project.fog=!project.fog;ApplyEnvironment();}
     string[] names={"Day","Sunset","Night","Overcast"};
     for(int i=0;i<4;i++){int k=i;if(Button(new Rect(x+18+i*146,line+53,138,36),names[i],project.skyPreset==i)){project.skyPreset=k;ApplyEnvironment();}}
-    if(Button(new Rect(x+18,line+95,140,32),"Plant Tree")){SelectTool(Tool.Tree);showStudio=false;}
-    if(Button(new Rect(x+168,line+95,140,32),"Path / Driveway")){SelectTool(Tool.Path);showStudio=false;}
+    if(Button(new Rect(x+18,line+95,140,32),"Find Skyboxes")){ToggleAssetBrowser("Skyboxes");}
+    if(Button(new Rect(x+168,line+95,140,32),"My Skyboxes")){creativeMode=1;showCatalog=true;catalogCategory=12;showStudio=false;}
     Label(new Rect(x+19,line+133,300,24),"Terrain elevation: "+terrainAmplitude.ToString("F1")+" m");
     terrainAmplitude=GUI.HorizontalSlider(new Rect(x+22,line+160,285,19),terrainAmplitude,.25f,12f);
     Label(new Rect(x+330,line+133,265,24),"Sun angle: "+project.sunPitch.ToString("F0")+"°");
@@ -1872,7 +1923,7 @@ namespace WorldBuilder {
    GUI.Label(new Rect(left+16,y+9,width-27,26),message,miniStyle);
   }
   void ChooseCatalogCategory(int category){
-   if(category<0||category>10)return;
+   if(category<0||category>12)return;
    catalogCategory=category;
    catalogScroll=Vector2.zero;
    // Browsing furniture must not leave the material brush active.
@@ -1953,7 +2004,7 @@ namespace WorldBuilder {
     Piece selectedPiece=project.pieces[selectedIndex];
     contentH=270f;
     if(multiSelection.Count>1)contentH+=82f;
-    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?178f:130f;
+    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?320f:130f;
     if(selectedPiece.kind=="wall")contentH+=176f;
     if(selectedPiece.kind=="light-point"||selectedPiece.kind=="light-spot")contentH+=215f;
     if(IsRoomFloor(selectedIndex))contentH+=91f;
@@ -1996,6 +2047,19 @@ namespace WorldBuilder {
      if(piece.kind=="imported"){
       if(Button(new Rect(ox,y,286,40),"FIT MODEL TO REAL SIZE"))FitSelectedImportedModel();
       y+=48;
+      string id=piece.assetId;
+      if(!string.IsNullOrEmpty(id)){
+       GUI.Label(new Rect(ox,y,282,24),"ORGANIZE IN MY ASSETS",miniStyle);y+=29;
+       string[] groups={"Furniture","Lighting","Decor","Kitchen","Bathroom",
+        "Trees","Plants","Outdoor","Architecture","Other"};
+       int current=Array.IndexOf(groups,AssetHub.Category(id));
+       int next=GUI.SelectionGrid(new Rect(ox,y,286,104),current,groups,3,railStyle);
+       if(next>=0&&next!=current){
+        try{AssetHub.SetCategory(id,groups[next]);Notice("Moved to "+groups[next]);}
+        catch(Exception ex){Notice("Could not sort model: "+ex.Message);}
+       }
+       y+=118;
+      }
      }
     }
     if(piece.kind=="wall"){
@@ -2124,7 +2188,7 @@ namespace WorldBuilder {
    if(float.TryParse(dimensionDraft[index],out float number))return number;
    return value;
   }
-  void DrawAssetTile(Rect tile,string title,string subtitle,int colorIndex,Action callback,Texture2D previewImage=null,bool selected=false){
+  void DrawAssetTile(Rect tile,string title,string subtitle,int colorIndex,Action callback,Texture2D previewImage=null,bool selected=false,string fallbackLabel="3D MODEL"){
    GUI.Box(tile,"",selected?selectedCardStyle:cardStyle);
    Color[] fallback={
     new Color(.86f,.90f,.97f,.98f),new Color(.91f,.87f,.93f,.98f),
@@ -2133,7 +2197,7 @@ namespace WorldBuilder {
    GUI.DrawTexture(imageBox,previewImage!=null?previewImage:ThumbnailTexture(fallback[colorIndex%fallback.Length]),
     ScaleMode.ScaleToFit);
    if(previewImage==null)GUI.Label(new Rect(imageBox.x,imageBox.y+imageBox.height*.5f-20,imageBox.width,40),
-    "3D MODEL",paletteSymbolStyle);
+    fallbackLabel,paletteSymbolStyle);
    string display=title.Length>22?title.Substring(0,19)+"...":title;
    GUI.Label(new Rect(tile.x+11,tile.y+tile.height-48,tile.width-19,24),display,cardTitleStyle);
    string provider=subtitle.Length>28?subtitle.Substring(0,25)+"...":subtitle;
@@ -2169,6 +2233,84 @@ namespace WorldBuilder {
    }
    return result;
   }
+  void DrawSkyboxCollection(float left,float y,float viewport,float cardH){
+   var skies=SkyboxLibrary.Catalog();
+   var shown=new List<SkyboxLibrary.Entry>();
+   foreach(var item in skies)if(catalogSearch.Length==0||
+     (item.name+" "+item.provider).IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)>=0)shown.Add(item);
+   if(shown.Count==0){
+    GUI.Label(new Rect(left+27,y+5,620,35),"No skyboxes downloaded yet",sectionStyle);
+    GUI.Label(new Rect(left+27,y+40,650,26),
+     "Find HDR panoramas, download a supported .hdr/.jpg/.png, and choose one here.",captionStyle);
+    if(Button(new Rect(left+28,y+75,180,38),"FIND SKYBOXES"))ToggleAssetBrowser("Skyboxes");
+    if(Button(new Rect(left+220,y+75,166,38),"USE GRADIENT"))SelectSkybox("");
+    return;
+   }
+   const float spacing=168f;
+   catalogScroll=GUI.BeginScrollView(new Rect(left+17,y,viewport,cardH+15),catalogScroll,
+    new Rect(0,0,Mathf.Max(viewport-15,(shown.Count+1)*spacing+8),cardH),true,false);
+   DrawAssetTile(new Rect(0,0,160,cardH-8),"Gradient Sky","Built-in · editable",0,
+    ()=>SelectSkybox(""),null,string.IsNullOrEmpty(project.skyboxId),"DEFAULT");
+   for(int k=0;k<shown.Count;k++){
+    var sky=shown[k];
+    DrawAssetTile(new Rect((k+1)*spacing,0,160,cardH-8),sky.name,
+     "HDRI · "+sky.provider,k+1,()=>SelectSkybox(sky.id),null,
+     project.skyboxId==sky.id,"HDRI SKY");
+   }
+   GUI.EndScrollView();
+  }
+  void DrawMyAssetCollection(float left,float y,float viewport,float cardH){
+   var models=AssetHub.Catalog();
+   var materials=MaterialLibrary.Catalog();
+   var skies=SkyboxLibrary.Catalog();
+   var types=new List<int>();
+   var indices=new List<int>();
+   Func<string,bool> matching=name=>catalogSearch.Length==0||
+    name.IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)>=0;
+   for(int i=0;i<models.Count;i++)
+    if(matching(AssetHub.Name(models[i])+" "+AssetHub.Category(models[i])+" "+AssetHub.Provider(models[i]))){
+     types.Add(0);indices.Add(i);
+    }
+   for(int i=0;i<materials.Count;i++)
+    if(matching(materials[i].name+" Materials "+materials[i].provider)){
+     types.Add(1);indices.Add(i);
+    }
+   for(int i=0;i<skies.Count;i++)
+    if(matching(skies[i].name+" Skyboxes HDRI "+skies[i].provider)){
+     types.Add(2);indices.Add(i);
+    }
+   if(types.Count==0){
+    GUI.Label(new Rect(left+28,y+12,670,34),"Your library is ready for its first assets",sectionStyle);
+    GUI.Label(new Rect(left+28,y+53,680,24),
+     "Find models, materials or skyboxes. Downloads appear here automatically.",captionStyle);
+    if(Button(new Rect(left+28,y+85,174,37),"FIND ASSETS"))ToggleAssetBrowser("Models");
+    return;
+   }
+   const float cell=170f;
+   catalogScroll=GUI.BeginScrollView(new Rect(left+17,y,viewport,cardH+15),catalogScroll,
+    new Rect(0,0,Mathf.Max(viewport-15,types.Count*cell+8),cardH),true,false);
+   for(int k=0;k<types.Count;k++){
+    int i=indices[k];
+    Rect tile=new Rect(k*cell,0,162,cardH-8);
+    if(types[k]==0){
+     string id=models[i];
+     DrawAssetTile(tile,AssetHub.Name(id),AssetHub.Category(id)+" · "+AssetHub.Provider(id),
+      k,()=>{selectedCatalogId=id;SelectImportedAsset(id);},
+      AssetThumbnail(id),selectedCatalogId==id);
+    }else if(types[k]==1){
+     var m=materials[i];
+     DrawAssetTile(tile,m.name,"Material · "+m.provider,k,()=>{
+      catalogCategory=8;selectedTextureId=m.id;SelectTool(Tool.Paint);
+      Notice("Material selected: "+m.name+" · click a wall or floor");
+     },GetMaterialImage(m.id),selectedTextureId==m.id,"MATERIAL");
+    }else{
+     var sky=skies[i];
+     DrawAssetTile(tile,sky.name,"Skybox · "+sky.provider,k,
+      ()=>SelectSkybox(sky.id),null,project.skyboxId==sky.id,"HDRI SKY");
+    }
+   }
+   GUI.EndScrollView();
+  }
   void DrawCatalog(float w,float h){
    float shelfHeight=CatalogHeight(h);
    float top=h-shelfHeight-9f;
@@ -2177,7 +2319,8 @@ namespace WorldBuilder {
    SoftPanel(new Rect(left,top,width,shelfHeight),trayStyle);
    bool building=creativeMode==0,landscaping=creativeMode==2;
    string heading=building?"BUILD COLLECTION":landscaping?(landscapeObjects?"OUTDOOR OBJECTS":"LANDSCAPE COLLECTION"):
-     catalogCategory==8?"SURFACE MATERIALS":"FURNITURE & OBJECTS";
+     catalogCategory==0?"MY ASSETS":catalogCategory==8?"SURFACE MATERIALS":
+     catalogCategory==12?"SKYBOXES & HDRI":"OBJECT COLLECTION";
    GUI.Label(new Rect(left+19,top+13,290,30),heading,sectionStyle);
    GUI.Label(new Rect(left+23,top+46,300,20),
     building?"Shapes, walls and openings":landscaping?"Create the world around your home":"Browse models, decor and finishes",mutedStyle);
@@ -2202,7 +2345,7 @@ namespace WorldBuilder {
      var filtered=new List<string>();
      foreach(string id in AssetHub.Catalog()){
       string category=AssetHub.Category(id);
-      if(category=="Plants"||category=="Outdoor")filtered.Add(id);
+      if(category=="Plants"||category=="Outdoor"||category=="Trees")filtered.Add(id);
      }
      float viewWidth=width-36f;
      if(filtered.Count==0){
@@ -2269,15 +2412,19 @@ namespace WorldBuilder {
 
    // Decorate: browse with readable, horizontally scrollable category tabs.
    string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor",
-    "Materials","Architecture","Other"};
+    "Materials","Architecture","Other","Trees","Skyboxes"};
    float searchX=w-555f;
    if(searchX<left+410f)searchX=left+410f;
    GUI.Label(new Rect(searchX-75,top+20,75,24),"SEARCH",mutedStyle);
    catalogSearch=GUI.TextField(new Rect(searchX+3f,top+13f,157f,35f),catalogSearch,regularStyle);
-   if(Button(new Rect(w-384,top+13,138,36),"IMPORT")){
-    showImport=true;showExport=false;
+   if(Button(new Rect(w-384,top+13,138,36),catalogCategory==12?"IMPORT SKY":catalogCategory==8?"IMPORT MAT.":"IMPORT 3D")){
+    if(catalogCategory==12)ImportSkyFile();
+    else if(catalogCategory==8)ImportMaterialFile();
+    else{showImport=true;showExport=false;}
    }
-   if(Button(new Rect(w-239,top+13,165,36),"FIND "+(catalogCategory==8?"MATERIALS":catalogCategory==0?"ASSETS":"MORE")))ToggleAssetBrowser(catalogCategory==8?"Materials":catalogCategory==0?"Models":new[]{"Models","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials","Architecture","Other"}[catalogCategory]);
+   string browseCategory=catalogCategory==0?"Models":categories[catalogCategory];
+   if(Button(new Rect(w-239,top+13,165,36),"FIND "+(catalogCategory==8?"MATERIALS":catalogCategory==12?"SKYBOXES":catalogCategory==0?"ASSETS":"MORE")))
+    ToggleAssetBrowser(browseCategory);
    float categoryLeft=left+16,categoryWidth=width-44;
    float total=0f;
    for(int i=0;i<categories.Length;i++)total+=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f)+7f;
@@ -2292,7 +2439,11 @@ namespace WorldBuilder {
    }
    GUI.EndScrollView();
    float viewportWidth=width-36f;
-   if(catalogCategory==8){
+   if(catalogCategory==0){
+    DrawMyAssetCollection(left,cardY,viewportWidth,cardH);
+   }else if(catalogCategory==12){
+    DrawSkyboxCollection(left,cardY,viewportWidth,cardH);
+   }else if(catalogCategory==8){
     var materials=MaterialLibrary.Catalog();
     float tileW=145f;
     int n=FinishNames.Length+materials.Count;
@@ -2339,11 +2490,10 @@ namespace WorldBuilder {
      visible.Add(id);
     }
     if(visible.Count==0){
-     GUI.Label(new Rect(left+31,cardY+15,500,37),
-       catalogSearch.Length>0?"No matching models yet":"Your collection is waiting for its first objects",sectionStyle);
-     GUI.Label(new Rect(left+31,cardY+52,660,29),
-       "Download a compatible 3D model, or choose Import. New assets appear automatically.",captionStyle);
-     if(Button(new Rect(left+33,cardY+93,160,38),"IMPORT MODEL")){showImport=true;showExport=false;}
+     GUI.Label(new Rect(left+31,cardY+15,600,37),
+      "No "+categories[catalogCategory].ToLowerInvariant()+" models in your library yet",sectionStyle);
+     if(Button(new Rect(left+31,cardY+62,174,39),"FIND "+categories[catalogCategory].ToUpperInvariant()))
+      ToggleAssetBrowser(categories[catalogCategory]);
     }else{
      const float cell=170f;
      catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewportWidth,cardH+15),catalogScroll,
@@ -2447,7 +2597,7 @@ namespace WorldBuilder {
    }
    GUI.EndScrollView();
    Label(new Rect(x+27,y+height-46,width-48,30),
-     "Supported 3D: OBJ, GLB, glTF, ZIP   ·   Textures-only packages do not appear under My Assets.");
+     "Models: OBJ/GLB/glTF/ZIP · Materials: albedo/PBR ZIP · Skies: HDR/JPG/PNG · See My Assets.");
   }
   void DrawRecoveryPrompt(float w,float h){
    DrawModalShade(w,h);
