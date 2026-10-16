@@ -28,7 +28,9 @@ namespace WorldBuilder {
   public float gridSize=1f;
   public float wallHeight=2.7f;
   public float wallThickness=.16f;
-  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window }
+  private int buildingLevel=0;
+  const float LevelHeight=2.85f;
+  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
   private readonly Stack<string> undoHistory=new Stack<string>();
@@ -261,12 +263,12 @@ namespace WorldBuilder {
    }else if(anchor.HasValue){
     Vector3 d=p-anchor.Value;
     if(currentTool==Tool.Wall){
-     preview.transform.position=(p+anchor.Value)*.5f+Vector3.up*wallHeight*.5f;
+     preview.transform.position=(p+anchor.Value)*.5f+Vector3.up*(wallHeight*.5f+buildingLevel*LevelHeight);
      preview.transform.localScale=new Vector3(Mathf.Max(.05f,d.magnitude),wallHeight,wallThickness);
      preview.transform.rotation=Quaternion.Euler(0,-Mathf.Atan2(d.z,d.x)*Mathf.Rad2Deg,0);
     }else{
-     preview.transform.position=(p+anchor.Value)*.5f+Vector3.up*FloorCenter;
-     preview.transform.localScale=new Vector3(Mathf.Max(gridSize,Mathf.Abs(d.x)),FloorThickness,Mathf.Max(gridSize,Mathf.Abs(d.z)));
+     preview.transform.position=(p+anchor.Value)*.5f+Vector3.up*(FloorCenter+buildingLevel*LevelHeight+(currentTool==Tool.Roof?wallHeight:0f));
+     preview.transform.localScale=new Vector3(Mathf.Max(gridSize,Mathf.Abs(d.x)),currentTool==Tool.Roof?.2f:FloorThickness,Mathf.Max(gridSize,Mathf.Abs(d.z)));
     }
    }else{
     preview.transform.position=p+Vector3.up*.04f;
@@ -475,12 +477,14 @@ namespace WorldBuilder {
    Vector3 start=anchor.Value;anchor=null;
    if(Vector3.Distance(start,p)<.01f)return;
    if(currentTool==Tool.Room){MakeRoom(start,p);return;}
+   if(currentTool==Tool.Roof){MakeRoof(start,p);return;}
+   if(currentTool==Tool.Stairs){MakeStairs(start,p);return;}
    if(currentTool==Tool.Wall){
     start=SnapToExistingEnd(start);p=SnapToExistingEnd(p);
     if(Vector3.Distance(start,p)>.01f)Add(WallBetween(start,p));
    }else{
     Vector3 delta=p-start;
-    Add(new Piece("floor",(start+p)*.5f+Vector3.up*FloorCenter,new Vector3(Mathf.Max(Mathf.Abs(delta.x),gridSize),FloorThickness,Mathf.Max(Mathf.Abs(delta.z),gridSize)),Quaternion.identity));
+    Add(new Piece("floor",(start+p)*.5f+Vector3.up*(FloorCenter+buildingLevel*LevelHeight),new Vector3(Mathf.Max(Mathf.Abs(delta.x),gridSize),FloorThickness,Mathf.Max(Mathf.Abs(delta.z),gridSize)),Quaternion.identity));
    }
   }
   void Add(Piece piece){RememberChange();AddWithoutHistory(piece);}
@@ -501,7 +505,7 @@ namespace WorldBuilder {
   }
   Piece WallBetween(Vector3 a,Vector3 b){
    Vector3 d=b-a;
-   return new Piece("wall",(a+b)*.5f+Vector3.up*wallHeight*.5f,
+   return new Piece("wall",(a+b)*.5f+Vector3.up*(wallHeight*.5f+buildingLevel*LevelHeight),
      new Vector3(d.magnitude,wallHeight,wallThickness),
      Quaternion.Euler(0,-Mathf.Atan2(d.z,d.x)*Mathf.Rad2Deg,0));
   }
@@ -516,9 +520,33 @@ namespace WorldBuilder {
    AddWithoutHistory(WallBetween(p2,p3));
    AddWithoutHistory(WallBetween(p3,p4));
    AddWithoutHistory(WallBetween(p4,p1));
-   AddWithoutHistory(new Piece("floor",new Vector3((x1+x2)*.5f,FloorCenter,(z1+z2)*.5f),
+   AddWithoutHistory(new Piece("floor",new Vector3((x1+x2)*.5f,FloorCenter+buildingLevel*LevelHeight,(z1+z2)*.5f),
      new Vector3(x2-x1,FloorThickness,z2-z1),Quaternion.identity));
    Notice("Room created: "+(x2-x1).ToString("F1")+" × "+(z2-z1).ToString("F1")+" m");
+  }
+  void MakeRoof(Vector3 a,Vector3 b){
+   float width=Mathf.Abs(b.x-a.x),depth=Mathf.Abs(b.z-a.z);
+   if(width<.25f||depth<.25f){Notice("Roof needs width and depth");return;}
+   Add(new Piece("roof",(a+b)*.5f+Vector3.up*((buildingLevel+1)*LevelHeight+.12f),
+     new Vector3(width+.4f,.24f,depth+.4f),Quaternion.identity));
+   Notice("Flat roof created");
+  }
+  void MakeStairs(Vector3 a,Vector3 b){
+   Vector3 delta=b-a;delta.y=0;
+   float run=delta.magnitude;
+   if(run<1.5f){Notice("Stairs need at least 1.5 meters of run");return;}
+   int steps=Mathf.Clamp(Mathf.CeilToInt(LevelHeight/.18f),8,24);
+   float stepRun=run/steps;
+   Vector3 direction=delta.normalized;
+   float angle=-Mathf.Atan2(direction.z,direction.x)*Mathf.Rad2Deg;
+   RememberChange();
+   for(int k=0;k<steps;k++){
+    float rise=LevelHeight*(k+1)/steps;
+    Vector3 center=a+direction*((k+.5f)*stepRun)+Vector3.up*(buildingLevel*LevelHeight+rise*.5f);
+    AddWithoutHistory(new Piece("stairs",center,new Vector3(stepRun+.02f,rise,1.2f),
+     Quaternion.Euler(0,angle,0)));
+   }
+   Notice("Staircase created: "+steps+" steps");
   }
   void AddOpening(bool window){
    if(sceneCamera==null)return;
@@ -737,6 +765,7 @@ namespace WorldBuilder {
     bool active=(k==0&&currentTool==Tool.Select)||(k==1&&currentTool==Tool.Wall)||
       (k==2&&currentTool==Tool.Floor)||(k==3&&currentTool==Tool.Room)||
       (k==4&&currentTool==Tool.Door)||(k==5&&currentTool==Tool.Window)||
+      (k==6&&currentTool==Tool.Stairs)||(k==7&&currentTool==Tool.Roof)||
       (k==8&&currentTool==Tool.Imported);
     float yy=y+47+k*step;
     if(Button(new Rect(19,yy,90,step-5),names[k],active)){
@@ -746,6 +775,8 @@ namespace WorldBuilder {
      else if(k==3)SelectTool(Tool.Room);
      else if(k==4)SelectTool(Tool.Door);
      else if(k==5)SelectTool(Tool.Window);
+     else if(k==6)SelectTool(Tool.Stairs);
+     else if(k==7)SelectTool(Tool.Roof);
      else if(k==8){creativeMode=1;catalogCategory=0;showCatalog=true;Notice("Choose a model from My Assets");}
      else ComingSoon(names[k]);
     }
@@ -797,6 +828,10 @@ namespace WorldBuilder {
    }else{
     Label(new Rect(x+23,y,283,45),"Select a placed object to edit it.");
     y+=45;
+    Label(new Rect(x+23,y,282,30),"Building level: "+(buildingLevel+1));y+=29;
+    if(Button(new Rect(x+23,y,137,39),"Level -"))buildingLevel=Mathf.Max(0,buildingLevel-1);
+    if(Button(new Rect(x+169,y,137,39),"Level +"))buildingLevel=Mathf.Min(8,buildingLevel+1);
+    y+=52;
     Label(new Rect(x+23,y,282,30),"Grid snapping: "+gridSize.ToString("F2")+" m");
     y+=28;
     gridSize=GUI.HorizontalSlider(new Rect(x+23,y,282,24),gridSize,.25f,2f);y+=34;
