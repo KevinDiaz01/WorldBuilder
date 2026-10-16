@@ -125,6 +125,14 @@ namespace WorldBuilder {
    }catch(Exception ex){Notice("Assets browser failed: "+ex.Message);UnityEngine.Debug.LogException(ex);}
   }
   string QuoteArg(string value){return "\""+value.Replace("\"","")+"\"";}
+  void OnEnable(){Application.logMessageReceived+=CaptureLog;}
+  void OnDisable(){Application.logMessageReceived-=CaptureLog;}
+  void CaptureLog(string message,string stack,LogType type){
+   if(type!=LogType.Error&&type!=LogType.Exception&&type!=LogType.Assert)return;
+   if(message.StartsWith("Asset Hub:",StringComparison.Ordinal))return;
+   string brief=message.Length>400?message.Substring(0,400)+"...":message;
+   Diagnostics.Add("ERROR",brief);
+  }
   void OnApplicationQuit(){
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
    foreach(var tex in modelThumbnails.Values)if(tex!=null)Destroy(tex);
