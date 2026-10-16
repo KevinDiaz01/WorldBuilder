@@ -772,13 +772,36 @@ namespace WorldBuilder {
    try{
     string path=importPath.Trim().Trim('"');
     if(!File.Exists(path))throw new FileNotFoundException("Choose an existing model file.");
-    string id=AssetHub.Import(path,"Other");
+    string[] categories={"All","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor",
+     "Materials","Architecture","Other","Trees","Skyboxes"};
+    string requested=catalogCategory>0&&catalogCategory<categories.Length&&
+     catalogCategory!=8&&catalogCategory!=12?categories[catalogCategory]:null;
+    string id=AssetHub.Import(path,"Other",requested);
     SelectImportedAsset(id);
     showImport=false;
     importError="";
     catalogCategory=0;showCatalog=true;
     Notice("Imported "+AssetHub.Name(id)+". Click the ground to place it.");
    }catch(Exception e){Debug.LogException(e);importError=e.Message;Notice("Import failed: "+e.Message);}
+  }
+  void ImportMaterialFile(){
+   try{
+    var psi=new System.Diagnostics.ProcessStartInfo();
+    psi.FileName="powershell.exe";
+    psi.Arguments="-NoProfile -STA -Command \"Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Material package (*.zip;*.png;*.jpg;*.jpeg)|*.zip;*.png;*.jpg;*.jpeg'; $d.CheckFileExists=$true; if($d.ShowDialog() -eq 'OK') { [Console]::Write($d.FileName) }\"";
+    psi.UseShellExecute=false;psi.CreateNoWindow=true;psi.RedirectStandardOutput=true;
+    using(var process=System.Diagnostics.Process.Start(psi)){
+     string chosen=process.StandardOutput.ReadToEnd().Trim();
+     process.WaitForExit();
+     if(string.IsNullOrEmpty(chosen))return;
+     string folder=AssetHub.Downloads("Other");
+     string target=Path.Combine(folder,Guid.NewGuid().ToString("N")+"-"+Path.GetFileName(chosen));
+     File.Copy(chosen,target);
+     File.WriteAllText(target+".worldbuilder-category","Materials");
+     MaterialLibrary.Scan();
+     Notice("Material queued for discovery. Open Materials in a moment.");
+    }
+   }catch(Exception ex){Diagnostics.Add("ERROR","Material import failed: "+ex.Message);Notice("Material import failed: "+ex.Message);}
   }
   void CopyTree(string source,string destination){
    Directory.CreateDirectory(destination);
@@ -1981,7 +2004,7 @@ namespace WorldBuilder {
     Piece selectedPiece=project.pieces[selectedIndex];
     contentH=270f;
     if(multiSelection.Count>1)contentH+=82f;
-    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?178f:130f;
+    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=selectedPiece.kind=="imported"?320f:130f;
     if(selectedPiece.kind=="wall")contentH+=176f;
     if(selectedPiece.kind=="light-point"||selectedPiece.kind=="light-spot")contentH+=215f;
     if(IsRoomFloor(selectedIndex))contentH+=91f;
@@ -2024,6 +2047,19 @@ namespace WorldBuilder {
      if(piece.kind=="imported"){
       if(Button(new Rect(ox,y,286,40),"FIT MODEL TO REAL SIZE"))FitSelectedImportedModel();
       y+=48;
+      string id=piece.assetId;
+      if(!string.IsNullOrEmpty(id)){
+       GUI.Label(new Rect(ox,y,282,24),"ORGANIZE IN MY ASSETS",miniStyle);y+=29;
+       string[] groups={"Furniture","Lighting","Decor","Kitchen","Bathroom",
+        "Trees","Plants","Outdoor","Architecture","Other"};
+       int current=Array.IndexOf(groups,AssetHub.Category(id));
+       int next=GUI.SelectionGrid(new Rect(ox,y,286,104),current,groups,3,railStyle);
+       if(next>=0&&next!=current){
+        try{AssetHub.SetCategory(id,groups[next]);Notice("Moved to "+groups[next]);}
+        catch(Exception ex){Notice("Could not sort model: "+ex.Message);}
+       }
+       y+=118;
+      }
      }
     }
     if(piece.kind=="wall"){
@@ -2377,8 +2413,9 @@ namespace WorldBuilder {
    if(searchX<left+410f)searchX=left+410f;
    GUI.Label(new Rect(searchX-75,top+20,75,24),"SEARCH",mutedStyle);
    catalogSearch=GUI.TextField(new Rect(searchX+3f,top+13f,157f,35f),catalogSearch,regularStyle);
-   if(Button(new Rect(w-384,top+13,138,36),catalogCategory==12?"IMPORT SKY":"IMPORT 3D")){
+   if(Button(new Rect(w-384,top+13,138,36),catalogCategory==12?"IMPORT SKY":catalogCategory==8?"IMPORT MAT.":"IMPORT 3D")){
     if(catalogCategory==12)ImportSkyFile();
+    else if(catalogCategory==8)ImportMaterialFile();
     else{showImport=true;showExport=false;}
    }
    string browseCategory=catalogCategory==0?"Models":categories[catalogCategory];
@@ -2556,7 +2593,7 @@ namespace WorldBuilder {
    }
    GUI.EndScrollView();
    Label(new Rect(x+27,y+height-46,width-48,30),
-     "Supported 3D: OBJ, GLB, glTF, ZIP   ·   Textures-only packages do not appear under My Assets.");
+     "Models: OBJ/GLB/glTF/ZIP · Materials: albedo/PBR ZIP · Skies: HDR/JPG/PNG · See My Assets.");
   }
   void DrawRecoveryPrompt(float w,float h){
    DrawModalShade(w,h);
