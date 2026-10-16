@@ -1168,10 +1168,10 @@ namespace WorldBuilder {
     Label(new Rect(154,top+64,800,29),"Choose a finish, then click a wall, floor or roof to apply it.");
     for(int i=0;i<FinishNames.Length;i++){
      int ix=i;
-     float x=149+i*181f;
-     if(x+176>w-25)break;
-     GUI.DrawTexture(new Rect(x,top+108,169,58),ThumbnailTexture(FinishColors[i]),ScaleMode.StretchToFill);
-     if(Button(new Rect(x,top+174,169,43),FinishNames[i],selectedFinish==i)){
+     float swatchX=149+i*181f;
+     if(swatchX+176>w-25)break;
+     GUI.DrawTexture(new Rect(swatchX,top+108,169,58),ThumbnailTexture(FinishColors[i]),ScaleMode.StretchToFill);
+     if(Button(new Rect(swatchX,top+174,169,43),FinishNames[i],selectedFinish==i)){
       selectedFinish=ix;
       SelectTool(Tool.Paint);
      }
