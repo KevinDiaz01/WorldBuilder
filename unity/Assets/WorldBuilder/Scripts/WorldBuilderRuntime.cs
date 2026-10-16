@@ -2243,15 +2243,18 @@ namespace WorldBuilder {
     GUI.Label(new Rect(left+27,y+40,650,26),
      "Find HDR panoramas, download a supported .hdr/.jpg/.png, and choose one here.",captionStyle);
     if(Button(new Rect(left+28,y+75,180,38),"FIND SKYBOXES"))ToggleAssetBrowser("Skyboxes");
+    if(Button(new Rect(left+220,y+75,166,38),"USE GRADIENT"))SelectSkybox("");
     return;
    }
    const float spacing=168f;
    catalogScroll=GUI.BeginScrollView(new Rect(left+17,y,viewport,cardH+15),catalogScroll,
-    new Rect(0,0,Mathf.Max(viewport-15,shown.Count*spacing+8),cardH),true,false);
+    new Rect(0,0,Mathf.Max(viewport-15,(shown.Count+1)*spacing+8),cardH),true,false);
+   DrawAssetTile(new Rect(0,0,160,cardH-8),"Gradient Sky","Built-in · editable",0,
+    ()=>SelectSkybox(""),null,string.IsNullOrEmpty(project.skyboxId),"DEFAULT");
    for(int k=0;k<shown.Count;k++){
     var sky=shown[k];
-    DrawAssetTile(new Rect(k*spacing,0,160,cardH-8),sky.name,
-     "HDRI · "+sky.provider,k,()=>SelectSkybox(sky.id),null,
+    DrawAssetTile(new Rect((k+1)*spacing,0,160,cardH-8),sky.name,
+     "HDRI · "+sky.provider,k+1,()=>SelectSkybox(sky.id),null,
      project.skyboxId==sky.id,"HDRI SKY");
    }
    GUI.EndScrollView();
