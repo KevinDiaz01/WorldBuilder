@@ -71,6 +71,10 @@ internal sealed class BrowserWindow : Form {
     await view.EnsureCoreWebView2Async(env);
     view.CoreWebView2.Settings.AreDevToolsEnabled=false;
     view.CoreWebView2.DownloadStarting+=HandleDownload;
+    view.CoreWebView2.NewWindowRequested+=(_,args)=>{
+     args.Handled=true;
+     if(!string.IsNullOrWhiteSpace(args.Uri))view.CoreWebView2.Navigate(args.Uri);
+    };
     view.CoreWebView2.NavigationCompleted+=(_,a)=>{if(!a.IsSuccess)status.Text="Page error: "+a.WebErrorStatus;};
     SelectSite(0);
    }catch(Exception e){status.Text="Browser unavailable: "+e.Message;}
