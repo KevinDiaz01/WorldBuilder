@@ -123,6 +123,8 @@ namespace WorldBuilder {
   string QuoteArg(string value){return "\""+value.Replace("\"","")+"\"";}
   void OnApplicationQuit(){
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
+   foreach(var tex in modelThumbnails.Values)if(tex!=null)Destroy(tex);
+   modelThumbnails.Clear();
   }
   void SelectObject(int index){
    selectedIndex=index;
@@ -356,7 +358,7 @@ namespace WorldBuilder {
    try{
     var psi=new System.Diagnostics.ProcessStartInfo();
     psi.FileName="powershell.exe";
-    psi.Arguments="-NoProfile -STA -Command \"Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Wavefront OBJ (*.obj)|*.obj'; $d.CheckFileExists=$true; if($d.ShowDialog() -eq 'OK') { [Console]::Write($d.FileName) }\"";
+    psi.Arguments="-NoProfile -STA -Command \"Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='3D Models (*.obj;*.glb;*.gltf;*.zip)|*.obj;*.glb;*.gltf;*.zip|All Files (*.*)|*.*'; $d.CheckFileExists=$true; if($d.ShowDialog() -eq 'OK') { [Console]::Write($d.FileName) }\"";
     psi.UseShellExecute=false;
     psi.CreateNoWindow=true;
     psi.RedirectStandardOutput=true;
@@ -370,25 +372,14 @@ namespace WorldBuilder {
   void ImportObj(){
    try{
     string path=importPath.Trim().Trim('"');
-    if(!File.Exists(path))throw new FileNotFoundException("File not found. Choose an existing OBJ file, not a folder.");
-    if(!string.Equals(Path.GetExtension(path),".obj",StringComparison.OrdinalIgnoreCase))
-     throw new InvalidDataException("This file is "+Path.GetExtension(path)+", not .obj.");
-    string id=Guid.NewGuid().ToString("N");
-    string directory=Path.Combine(AssetLibrary(),id);
-    Directory.CreateDirectory(directory);
-    foreach(string source in Directory.GetFiles(Path.GetDirectoryName(path))){
-     string ext=Path.GetExtension(source).ToLowerInvariant();
-     if(ext==".mtl"||ext==".png"||ext==".jpg"||ext==".jpeg")File.Copy(source,Path.Combine(directory,Path.GetFileName(source)),true);
-    }
-    string model=Path.Combine(directory,"model.obj");
-    File.Copy(path,model,true);
-    GameObject test=ImportedObj.Load(model);
-    Destroy(test);
+    if(!File.Exists(path))throw new FileNotFoundException("Choose an existing model file.");
+    string id=AssetHub.Import(path,"Other");
     importedId=id;
-    importError="";
     currentTool=Tool.Imported;
     showImport=false;
-    Notice("OBJ imported. Click ground to place.");
+    importError="";
+    catalogCategory=0;showCatalog=true;
+    Notice("Imported "+AssetHub.Name(id)+". Click the ground to place it.");
    }catch(Exception e){Debug.LogException(e);importError=e.Message;Notice("Import failed: "+e.Message);}
   }
   void CopyTree(string source,string destination){
@@ -1086,18 +1077,29 @@ namespace WorldBuilder {
    if(float.TryParse(dimensionDraft[index],out float number))return number;
    return value;
   }
-  void DrawAssetTile(Rect card,string title,string subtitle,int colorIndex,Action callback){
+  void DrawAssetTile(Rect card,string title,string subtitle,int colorIndex,Action callback,Texture2D previewImage=null){
    GUI.Box(card,"",panelStyle);
    Color[] colors={new Color(.17f,.29f,.36f,.92f),new Color(.28f,.25f,.24f,.95f),
                    new Color(.21f,.30f,.27f,.95f),new Color(.26f,.27f,.34f,.94f)};
    GUI.DrawTexture(new Rect(card.x+6,card.y+6,card.width-12,card.height-65),
-     ThumbnailTexture(colors[colorIndex%colors.Length]),ScaleMode.StretchToFill);
+     previewImage!=null?previewImage:ThumbnailTexture(colors[colorIndex%colors.Length]),ScaleMode.ScaleToFit);
    string display=title.Length>19?title.Substring(0,16)+"...":title;
    GUI.Label(new Rect(card.x+12,card.y+card.height-54,card.width-22,27),display,smallStyle);
    GUI.Label(new Rect(card.x+12,card.y+card.height-30,card.width-22,25),subtitle,smallStyle);
    if(GUI.Button(card,GUIContent.none,GUIStyle.none))callback();
   }
   private readonly Dictionary<int,Texture2D> catalogBackgrounds=new Dictionary<int,Texture2D>();
+  private readonly Dictionary<string,Texture2D> modelThumbnails=new Dictionary<string,Texture2D>();
+  Texture2D AssetThumbnail(string id){
+   if(modelThumbnails.TryGetValue(id,out Texture2D image))return image;
+   string path=Path.Combine(AssetLibrary(),id,"thumbnail.png");
+   if(!File.Exists(path))return null;
+   try{
+    image=new Texture2D(2,2,TextureFormat.RGBA32,false);
+    if(!image.LoadImage(File.ReadAllBytes(path))){Destroy(image);return null;}
+    modelThumbnails[id]=image;return image;
+   }catch(Exception ex){Debug.LogWarning("Thumbnail unreadable: "+ex.Message);return null;}
+  }
   Texture2D ThumbnailTexture(Color color){
    int key=ColorUtility.ToHtmlStringRGBA(color).GetHashCode();
    if(!catalogBackgrounds.TryGetValue(key,out Texture2D result)){
@@ -1135,7 +1137,7 @@ namespace WorldBuilder {
     if(visible.Count==0){
      Label(new Rect(160,top+93,w-480,33),"Your imported assets will appear here.",true);
      Label(new Rect(160,top+134,w-480,29),"Use Browse Assets to download models, or Import OBJ to add local models.");
-     if(Button(new Rect(w-370,top+101,183,49),"Import OBJ")){showImport=true;showExport=false;}
+     if(Button(new Rect(w-370,top+101,183,49),"Import Model")){showImport=true;showExport=false;}
     }else{
      float viewport=w-166;
      catalogScroll=GUI.BeginScrollView(new Rect(139,top+68,viewport,166),catalogScroll,
@@ -1147,7 +1149,7 @@ namespace WorldBuilder {
       DrawAssetTile(new Rect(k*180,0,170,151),modelName,"Imported model",k,()=>{
        importedId=id;SelectTool(Tool.Imported);
        Notice("Click the ground to place "+AssetHub.Name(id));
-      });
+      },AssetThumbnail(id));
      }
      GUI.EndScrollView();
     }
@@ -1237,16 +1239,16 @@ namespace WorldBuilder {
    else {
     GUI.Box(new Rect(127,h-62,344,54),"",panelStyle);
     if(Button(new Rect(134,h-56,162,42),"Open Catalog"))showCatalog=true;
-    if(Button(new Rect(302,h-56,162,42),"Import OBJ")){showImport=true;showExport=false;}
+    if(Button(new Rect(302,h-56,162,42),"Import Model")){showImport=true;showExport=false;}
    }
    if(showImport){
     float x=w*.5f-265;
     GUI.Box(new Rect(x,75,530,255),"",panelStyle);
-    Label(new Rect(x+20,90,480,32),"Import OBJ Model",true);
-    Label(new Rect(x+20,126,490,23),"Choose an OBJ file. Keep textures and MTL beside it.");
+    Label(new Rect(x+20,90,480,32),"Import 3D Model",true);
+    Label(new Rect(x+20,126,490,23),"Choose OBJ, GLB, glTF or a ZIP containing a model.");
     importPath=GUI.TextField(new Rect(x+20,158,350,30),importPath,regularStyle);
     if(Button(new Rect(x+380,158,130,30),"Browse Files"))BrowseObj();
-    if(Button(new Rect(x+20,206,235,36),"Import & Select"))ImportObj();
+    if(Button(new Rect(x+20,206,235,36),"Import Model"))ImportObj();
     if(Button(new Rect(x+275,206,235,36),"Cancel"))showImport=false;
    }
    if(showExport){
