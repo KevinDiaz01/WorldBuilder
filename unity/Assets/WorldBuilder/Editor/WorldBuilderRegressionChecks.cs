@@ -15,6 +15,7 @@ namespace WorldBuilder {
    if(runtime==null)throw new ArgumentNullException(nameof(runtime));
    ToolSwitching(runtime);
    MeshImports();
+   GltfMaterialRoundTrip();
    Geometry();
    Debug.Log("WorldBuilder regression checks passed: tool switching, OBJ materials, polygon and terrain");
   }
@@ -56,6 +57,38 @@ namespace WorldBuilder {
      "OBJ material colors not preserved");
    }finally{
     if(obj!=null)UnityEngine.Object.DestroyImmediate(obj);
+    if(Directory.Exists(folder))Directory.Delete(folder,true);
+   }
+  }
+  static void GltfMaterialRoundTrip(){
+   string folder=Path.Combine(Application.temporaryCachePath,"WB-gltf-"+Guid.NewGuid().ToString("N"));
+   Directory.CreateDirectory(folder);
+   GameObject converted=null;
+   try{
+    byte[] buffer=new byte[54];
+    float[] vertices={0f,0f,0f,1f,0f,0f,0f,1f,0f,0f,0f,1f};
+    for(int i=0;i<vertices.Length;i++)
+     Buffer.BlockCopy(BitConverter.GetBytes(vertices[i]),0,buffer,i*4,4);
+    for(int i=0;i<3;i++)
+     Buffer.BlockCopy(BitConverter.GetBytes((ushort)i),0,buffer,48+i*2,2);
+    string encoded=Convert.ToBase64String(buffer);
+    string input=Path.Combine(folder,"two-materials.gltf");
+    string json="{"+
+     "\"buffers\":[{\"byteLength\":54,\"uri\":\"data:application/octet-stream;base64,"+encoded+"\"}],"+
+     "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":0,\"byteLength\":48},{\"buffer\":0,\"byteOffset\":48,\"byteLength\":6}],"+
+     "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":4,\"type\":\"VEC3\"},{\"bufferView\":1,\"componentType\":5123,\"count\":3,\"type\":\"SCALAR\"}],"+
+     "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1,\"material\":0},{\"attributes\":{\"POSITION\":0},\"indices\":1,\"material\":1}]}],"+
+     "\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorFactor\":[1,0,0,1]}},{\"pbrMetallicRoughness\":{\"baseColorFactor\":[0,0,1,1]}}],"+
+     "\"nodes\":[{\"mesh\":0}],\"scenes\":[{\"nodes\":[0]}],\"scene\":0}";
+    File.WriteAllText(input,json);
+    string output=Path.Combine(folder,"model.obj");
+    GltfToObj.ConvertModel(input,output);
+    converted=ImportedObj.Load(output);
+    var renderer=converted.GetComponent<MeshRenderer>();
+    Expect(renderer!=null&&renderer.sharedMaterials.Length==2,
+     "glTF conversion lost individual material submeshes");
+   }finally{
+    if(converted!=null)UnityEngine.Object.DestroyImmediate(converted);
     if(Directory.Exists(folder))Directory.Delete(folder,true);
    }
   }
