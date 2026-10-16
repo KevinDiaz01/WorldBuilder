@@ -306,8 +306,21 @@ namespace WorldBuilder {
     preview.transform.localScale=Vector3.one*importedScale;
     preview.transform.rotation=Quaternion.Euler(0,importedRotation,0);
    }else if(currentTool==Tool.Door||currentTool==Tool.Window){
-    preview.transform.position=p+Vector3.up*(currentTool==Tool.Window?1.4f:1f);
-    preview.transform.localScale=new Vector3(currentTool==Tool.Window?1.2f:.9f,currentTool==Tool.Window?1.15f:2f,.08f);
+    if(!FindOpeningWall(out int wallIndex,out Vector3 hitPoint)){preview.SetActive(false);return;}
+    Piece wall=project.pieces[wallIndex];
+    bool window=currentTool==Tool.Window;
+    float openingWidth=window?1.2f:.9f;
+    float openingHeight=window?Mathf.Min(1.15f,wall.scale.y-1.1f):Mathf.Min(2.1f,wall.scale.y-.15f);
+    float openingBottom=window?.85f:0f;
+    Vector3 local=Quaternion.Inverse(wall.rotation)*(hitPoint-wall.position);
+    local.x=Mathf.Clamp(local.x,-wall.scale.x*.5f+openingWidth*.5f+.08f,wall.scale.x*.5f-openingWidth*.5f-.08f);
+    local.y=openingBottom+openingHeight*.5f-wall.scale.y*.5f;
+    local.z=0;
+    Vector3 forward=wall.rotation*Vector3.forward;
+    float facing=Vector3.Dot(sceneCamera.transform.position-wall.position,forward)>=0?1f:-1f;
+    preview.transform.position=wall.position+wall.rotation*local+forward*(facing*(wall.scale.z*.5f+.04f));
+    preview.transform.rotation=wall.rotation;
+    preview.transform.localScale=new Vector3(openingWidth,openingHeight,.07f);
    }else if(currentTool==Tool.Couch||currentTool==Tool.Table){
     bool sofa=currentTool==Tool.Couch;
     preview.transform.position=p+Vector3.up*.4f;
@@ -666,16 +679,24 @@ namespace WorldBuilder {
    }
    Notice("Staircase created: "+steps+" steps");
   }
-  void AddOpening(bool window){
-   if(sceneCamera==null)return;
+  bool FindOpeningWall(out int index,out Vector3 hitPoint){
+   index=-1;hitPoint=Vector3.zero;
+   if(sceneCamera==null)return false;
    Ray ray=sceneCamera.ScreenPointToRay(Input.mousePosition);
-   if(!Physics.Raycast(ray,out RaycastHit hit,300f)){Notice("Click an existing wall");return;}
-   int idx=-1;
-   for(int i=0;i<objects.Count;i++){
-    if(project.pieces[i].kind=="wall"&&objects[i]!=null&&
-       (hit.collider.gameObject==objects[i]||hit.collider.transform.IsChildOf(objects[i].transform))){idx=i;break;}
+   RaycastHit[] hits=Physics.RaycastAll(ray,300f);
+   Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
+   foreach(var hit in hits){
+    for(int i=0;i<objects.Count;i++){
+     if(project.pieces[i].kind!="wall"||objects[i]==null)continue;
+     if(hit.collider.gameObject!=objects[i]&&!hit.collider.transform.IsChildOf(objects[i].transform))continue;
+     if(project.pieces[i].scale.x<1.15f||project.pieces[i].scale.y<1.6f)continue;
+     index=i;hitPoint=hit.point;return true;
+    }
    }
-   if(idx<0){Notice("Click an existing wall to add an opening");return;}
+   return false;
+  }
+  void AddOpening(bool window){
+   if(!FindOpeningWall(out int idx,out Vector3 wallPoint)){Notice("Aim at a wall to place an opening");return;}
    Piece original=project.pieces[idx];
    float length=original.scale.x,height=original.scale.y;
    float width=window?1.2f:.9f;
