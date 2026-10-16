@@ -32,7 +32,7 @@ namespace WorldBuilder {
    string file=Path.Combine(Library,id,"asset-name.txt");
    return File.Exists(file)?File.ReadAllText(file):id;
   }
-  public static readonly string[] Categories={"All","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Architecture","Other"};
+  public static readonly string[] Categories={"All","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Architecture","Other","Trees"};
   public static string Category(string id){
    string path=Path.Combine(Library,id,"asset-category.txt");
    if(File.Exists(path)){
@@ -40,6 +40,28 @@ namespace WorldBuilder {
     if(Array.IndexOf(Categories,category)>=0)return category;
    }
    return GuessCategory(Name(id));
+  }
+  // The browser writes this sidecar only after downloads complete.
+  public static string RequestedCategory(string source){
+   string marker=source+".worldbuilder-category";
+   if(!File.Exists(marker))return null;
+   try{return File.ReadAllText(marker).Trim();}catch(IOException){return null;}
+  }
+  public static string ModelCategory(string source,string fallbackName){
+   string category=RequestedCategory(source);
+   if(category=="Tree"||category=="Trees")return "Trees";
+   if(category=="Terrain"||category=="Water")return "Outdoor";
+   if(category!=null&&Array.IndexOf(Categories,category)>=0&&category!="All")
+    return category;
+   return GuessCategory(fallbackName);
+  }
+  public static void SetCategory(string id,string category){
+   if(Array.IndexOf(Categories,category)<0||category=="All")
+    throw new InvalidDataException("Unknown model category");
+   string directory=Path.Combine(Library,id);
+   if(!File.Exists(Path.Combine(directory,"model.obj")))
+    throw new FileNotFoundException("Cannot categorize a model not in My Assets");
+   File.WriteAllText(Path.Combine(directory,"asset-category.txt"),category);
   }
   public static string Provider(string id){
    string path=Path.Combine(Library,id,"asset-source.txt");
@@ -51,7 +73,8 @@ namespace WorldBuilder {
    if(HasAny(t,"lamp","chandelier","light fixture","lantern","sconce"))return "Lighting";
    if(HasAny(t,"fridge","refrigerator","oven","stove","sink","kitchen","microwave","toaster"))return "Kitchen";
    if(HasAny(t,"bathtub","toilet","shower","bathroom","washbasin"))return "Bathroom";
-   if(HasAny(t,"tree","plant","flower","bush","grass","fern","succulent","palm","foliage"))return "Plants";
+   if(HasAny(t,"tree","sapling","oak","pine","fir","palm","cedar","spruce"))return "Trees";
+   if(HasAny(t,"plant","flower","bush","grass","fern","succulent","foliage"))return "Plants";
    if(HasAny(t,"rock","boulder","patio","fence","garden","outdoor","street"))return "Outdoor";
    if(HasAny(t,"wall","floor","window","door","stair","roof","building","house","architecture"))return "Architecture";
    if(HasAny(t,"vase","painting","art","candle","rug","carpet","pillow","curtain","mirror","decor"))return "Decor";
@@ -112,6 +135,8 @@ namespace WorldBuilder {
      string ext=Path.GetExtension(source).ToLowerInvariant();
      if(source.EndsWith(".worldbuilder-imported",StringComparison.OrdinalIgnoreCase)||ext==".tmp"||ext==".crdownload"||ext==".part")continue;
      bool model=ext==".obj"||ext==".gltf"||ext==".glb"||ext==".zip";
+     if(RequestedCategory(source)=="Skyboxes"||RequestedCategory(source)=="Materials")
+      continue; // Separate library scanners handle these packages.
      if(!model){
       if((ext==".fbx"||ext==".blend"||ext==".unitypackage"||ext==".7z"||ext==".rar")&&reportedUnsupported.Add(source))
        Diagnostics.Add("WARN",ext==".unitypackage"?"Unity Asset Store package requires import in Unity: "+Path.GetFileName(source)+". WorldBuilder cannot place .unitypackage directly.":"Unsupported 3D format: "+Path.GetFileName(source)+" ("+provider+"). Use OBJ, GLB, glTF or ZIP.");
@@ -205,7 +230,7 @@ namespace WorldBuilder {
     string displayName=Path.GetFileNameWithoutExtension(source);
     File.WriteAllText(Path.Combine(destination,"asset-name.txt"),displayName);
     File.WriteAllText(Path.Combine(destination,"asset-source.txt"),provider);
-    File.WriteAllText(Path.Combine(destination,"asset-category.txt"),GuessCategory(displayName));
+    File.WriteAllText(Path.Combine(destination,"asset-category.txt"),ModelCategory(source,displayName));
     GameObject check=null;
     try{
      check=ImportedObj.Load(Path.Combine(destination,"model.obj"));
