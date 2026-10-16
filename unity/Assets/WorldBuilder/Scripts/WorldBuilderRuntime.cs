@@ -367,6 +367,8 @@ namespace WorldBuilder {
     if(msg.Length>0){assetStatus=msg;if(count>0)Notice(msg);}
    }
    if(Input.GetKeyDown(KeyCode.Alpha0))SelectTool(Tool.Select);
+   if(Input.GetKeyDown(KeyCode.T))SetCameraView(true);
+   if(Input.GetKeyDown(KeyCode.P))SetCameraView(false);
    if(Input.GetKeyDown(KeyCode.Alpha1))SelectTool(Tool.Wall);
    if(Input.GetKeyDown(KeyCode.Alpha2))SelectTool(Tool.Floor);
    if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
@@ -562,6 +564,21 @@ namespace WorldBuilder {
    if(Button(new Rect(x+137,12,64,40),"Assets"))ToggleAssetBrowser();
    if(Button(new Rect(x+207,12,73,40),"Menu"))showPause=!showPause;
   }
+  void SetCameraView(bool overhead){
+   var orbit=sceneCamera!=null?sceneCamera.GetComponent<OrbitCamera>():null;
+   if(orbit==null){Notice("Camera controls unavailable");return;}
+   orbit.pitch=overhead?85f:48f;
+   if(overhead)orbit.yaw=0f;
+   orbit.distance=Mathf.Clamp(orbit.distance,8f,40f);
+   Notice(overhead?"Top-down camera":"Perspective camera");
+  }
+  void DrawViewportControls(float h){
+   float x=107f,y=83f;
+   GUI.Box(new Rect(x-5,y-5,310,50),"",panelStyle);
+   if(Button(new Rect(x,y,95,40),"Perspective"))SetCameraView(false);
+   if(Button(new Rect(x+101,y,89,40),"Top View"))SetCameraView(true);
+   if(Button(new Rect(x+196,y,104,40),showGrid?"Grid: On":"Grid: Off"))ToggleGrid();
+  }
   void DrawLeft(float h){
    GUI.Box(new Rect(0,66,92,h-214),"",panelStyle);
    string[] names={"Select","Walls","Floors","Rooms","Doors","Windows","Stairs","Roofs","Furniture","Materials","Lighting","Terrain"};
@@ -730,6 +747,7 @@ namespace WorldBuilder {
    }
    DrawToolbar(w);
    DrawLeft(h);
+   DrawViewportControls(h);
    DrawProperties(w,h);
    DrawCatalog(w,h);
    if(showImport){
