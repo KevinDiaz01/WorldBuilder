@@ -14,6 +14,7 @@ namespace WorldBuilder {
   public static void Run(WorldBuilderRuntime runtime){
    if(runtime==null)throw new ArgumentNullException(nameof(runtime));
    RuntimeShaders();
+   WorkspaceLayout(runtime);
    ToolSwitching(runtime);
    MeshImports();
    GltfMaterialRoundTrip();
@@ -32,6 +33,18 @@ namespace WorldBuilder {
     UnityEngine.Object.DestroyImmediate(a);
     UnityEngine.Object.DestroyImmediate(b);
    }
+  }
+  static void WorkspaceLayout(WorldBuilderRuntime runtime){
+   Type t=typeof(WorldBuilderRuntime);
+   FieldInfo catalog=t.GetField("showCatalog",BindingFlags.Instance|BindingFlags.NonPublic);
+   FieldInfo modes=t.GetField("catalogOpenForMode",BindingFlags.Instance|BindingFlags.NonPublic);
+   MethodInfo height=t.GetMethod("CatalogHeight",BindingFlags.Instance|BindingFlags.NonPublic);
+   Expect(catalog!=null&&modes!=null&&height!=null,"workspace layout controls missing");
+   Expect(!(bool)catalog.GetValue(runtime),"Build viewport should initially be unobstructed");
+   bool[] state=(bool[])modes.GetValue(runtime);
+   Expect(state.Length==3&&!state[0]&&state[1]&&!state[2],"mode palette defaults");
+   Expect(Mathf.Abs((float)height.Invoke(runtime,new object[]{900f})-245f)<.01f,
+     "catalog height should be capped at 245 pixels");
   }
   static void ToolSwitching(WorldBuilderRuntime runtime){
    Type type=typeof(WorldBuilderRuntime);

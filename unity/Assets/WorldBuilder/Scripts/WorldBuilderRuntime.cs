@@ -90,7 +90,9 @@ namespace WorldBuilder {
   private string status="Ready to build";
   private float statusUntil;
   private bool showLibrary=true;
-  private bool showCatalog=true;
+  private bool showCatalog=false;
+  // Build/Landscape have left-hand tools; palettes are available on demand.
+  private readonly bool[] catalogOpenForMode={false,true,false};
   private bool showInspector=false;
   private bool showProjects=false;
   private GameObject preview;
@@ -145,14 +147,14 @@ namespace WorldBuilder {
    float scale=UIScale;
    float w=Screen.width/scale,h=Screen.height/scale;
    Vector2 p=new Vector2(Input.mousePosition.x/scale,(Screen.height-Input.mousePosition.y)/scale);
-   return (objectHandleVisible&&objectHandleArea.Contains(p))||p.y<88f||(showCatalog&&p.y>h-Mathf.Min(270f,h*.34f)-14f)||
+   return (objectHandleVisible&&objectHandleArea.Contains(p))||p.y<88f||(showCatalog&&p.y>h-CatalogHeight(h)-14f)||
      (!showCatalog&&p.y>h-79f&&p.x<523f)||
      (showLibrary&&p.x<122f&&p.y>=94f&&p.y<735f)||
-     (showInspector&&p.x>w-373f&&p.y>=94f&&p.y<(showCatalog?h-Mathf.Min(270f,h*.34f)-6f:h-90f))||
+     (showInspector&&p.x>w-373f&&p.y>=94f&&p.y<(showCatalog?h-CatalogHeight(h)-6f:h-90f))||
      (p.x>125f&&p.x<842f&&p.y<159f)||
      (p.x>=135f&&p.x<=825f&&
-      p.y>=h-(showCatalog?Mathf.Min(270f,h*.34f)+60f:119f)&&
-      p.y<=h-(showCatalog?Mathf.Min(270f,h*.34f)+8f:68f))||
+      p.y>=h-(showCatalog?CatalogHeight(h)+60f:119f)&&
+      p.y<=h-(showCatalog?CatalogHeight(h)+8f:68f))||
      showPause||showConfirmExit||showSettings||showHelp||
      (showProjects&&p.x>w*.5f-200f&&p.x<w*.5f+210f&&p.y<505f)||
      ((showImport||showExport)&&p.x>w*.5f-275f&&p.x<w*.5f+275f&&p.y<335f)||
@@ -878,6 +880,25 @@ namespace WorldBuilder {
    if(!ground.Raycast(ray,out float distance))return false;
    point=Snap(ray.GetPoint(distance));return true;
   }
+  void BalanceSceneLights(){
+   const float maxIntensity=1.6f,maxRange=12f;
+   int count=0;
+   foreach(var p in project.pieces)if((p.kind=="light-point"||p.kind=="light-spot")&&
+    (p.lightIntensity>maxIntensity||p.lightRange>maxRange))count++;
+   if(count==0){Notice("Scene lighting already balanced");return;}
+   RememberChange();
+   for(int i=0;i<project.pieces.Count;i++){
+    Piece p=project.pieces[i];
+    if(p.kind!="light-point"&&p.kind!="light-spot")continue;
+    p.lightIntensity=Mathf.Min(p.lightIntensity,maxIntensity);
+    p.lightRange=Mathf.Min(p.lightRange,maxRange);
+    if(i<objects.Count&&objects[i]!=null){
+     Light light=objects[i].GetComponent<Light>();
+     if(light!=null){light.intensity=p.lightIntensity;light.range=p.lightRange;}
+    }
+   }
+   Notice("Balanced "+count+" light"+(count==1?"":"s")+" · Undo to restore");
+  }
   void ApplyEnvironment(){
    if(scenicBackdrop==null){
     var backdropObject=new GameObject("WorldBuilder Scenic Environment");
@@ -1093,7 +1114,13 @@ namespace WorldBuilder {
    }
   }
   void Add(Piece piece){RememberChange();AddWithoutHistory(piece);}
-  void AddWithoutHistory(Piece piece){SelectObject(-1);project.pieces.Add(piece);objects.Add(Create(piece));}
+  void AddWithoutHistory(Piece piece){
+   // Do not persist a new piece unless its geometry/material was created.
+   GameObject created=Create(piece);
+   SelectObject(-1);
+   project.pieces.Add(piece);
+   objects.Add(created);
+  }
   Vector3 SnapToExistingEnd(Vector3 input){
    float radius=Mathf.Max(.25f,gridSize*.55f);
    Vector3 snapped=input;float best=radius;
@@ -1516,6 +1543,8 @@ namespace WorldBuilder {
   private string selectedCatalogId="";
   private const float DesignWidth=1600f;
   float UIScale { get { return Mathf.Max(.65f,Mathf.Min(Screen.width/DesignWidth,Screen.height/850f)); } }
+  // Centralize panel size so the HUD and pointer hit-testing remain in sync.
+  float CatalogHeight(float height){return Mathf.Min(245f,height*.34f);}
   Texture2D Rounded(Color fill,Color border,int radius=20){
    const int size=64;
    var tex=new Texture2D(size,size,TextureFormat.RGBA32,false);
@@ -1642,9 +1671,10 @@ namespace WorldBuilder {
   }
   void SwitchMode(int mode){
    if(mode==3){EnterWalk();return;}
+   if(mode!=creativeMode)catalogOpenForMode[creativeMode]=showCatalog;
    creativeMode=mode;
    showStudio=false;
-   showCatalog=true;
+   showCatalog=catalogOpenForMode[mode];
    showInspector=selectedIndex>=0;
    if(mode==0){
     SelectTool(Tool.Select);
@@ -1724,7 +1754,11 @@ namespace WorldBuilder {
     lightBrightness=GUI.HorizontalSlider(new Rect(x+24,line+76,268,22),lightBrightness,0f,8f);
     Label(new Rect(x+323,line+49,280,24),"Light range: "+lightRadius.ToString("F1")+" m");
     lightRadius=GUI.HorizontalSlider(new Rect(x+327,line+76,265,22),lightRadius,2f,30f);
-    Label(new Rect(x+23,line+116,580,26),"Click the ground to place a light. Select it to adjust position and rotation.");
+    Label(new Rect(x+23,line+111,580,24),
+     lightBrightness>2f?"High intensity can wash out textures. Recommended: 0.5–2.0.":
+     "Click to place a light; select it later to fine-tune settings.");
+    if(Button(new Rect(x+22,line+145,238,38),"BALANCE SCENE LIGHTS"))BalanceSceneLights();
+    Label(new Rect(x+270,line+153,325,25),"Undo available · keeps positions");
    }else if(studioTab==2){
     if(Button(new Rect(x+18,line,186,42),"Terrain Hill")){SelectTool(Tool.Terrain);showStudio=false;}
     if(Button(new Rect(x+212,line,186,42),"Water")){SelectTool(Tool.Water);showStudio=false;}
@@ -1766,23 +1800,23 @@ namespace WorldBuilder {
    if(currentTool==Tool.Room&&polygonMode)return "Click corners to shape a room · Enter to finish · Backspace to undo corner";
    switch(currentTool){
     case Tool.Select:return "Click an object to edit it · Shift-click multiple objects";
-    case Tool.Wall:return "Click and drag to create walls · Change height in Details";
-    case Tool.Floor:return "Click two corners to create a floor";
-    case Tool.Room:return "Drag a room · Choose Freeform for custom shapes";
+    case Tool.Wall:return "Click a start point, then an end point to build a wall";
+    case Tool.Floor:return "Click a floor corner, then the opposite corner";
+    case Tool.Room:return "Click opposite room corners · Freeform: click points, then Enter";
     case Tool.Garage:return "Aim at a wall · Click to create a garage-sized opening";
     case Tool.Door:case Tool.Window:return "Aim at a wall · Click to create an opening";
     case Tool.Imported:return "Move your mouse to preview · Q/E rotate · Click to place";
     case Tool.Paint:return "Choose a finish below · Click a wall or floor";
-    case Tool.Terrain:return "Drag to create rolling terrain · Tune elevation in Studio";
-    case Tool.Water:return "Drag a water area onto the landscape";
-    case Tool.Path:return "Drag to make a garden path or driveway";
+    case Tool.Terrain:return "Click two corners for terrain · Tune height in Studio";
+    case Tool.Water:return "Click two corners to make a pond or pool";
+    case Tool.Path:return "Click two corners to create a path or driveway";
     case Tool.Tree:return "Click to plant trees";
-    case Tool.Light:return "Click to place a light · Adjust its settings in Details";
+    case Tool.Light:return "Click to add a light · Very bright lights can wash out textures";
     default:return "Click or drag in the world to use "+currentTool.ToString();
    }
   }
   void DrawGuidanceStrip(float w,float h){
-   float top=showCatalog?h-Mathf.Min(270f,h*.34f)-9f:h-9f;
+   float top=showCatalog?h-CatalogHeight(h)-9f:h-9f;
    float width=Mathf.Min(w-300f,690f);
    float left=135f;
    float y=showCatalog?top-51f:top-110f;
@@ -1816,7 +1850,7 @@ namespace WorldBuilder {
     tools=new[]{Tool.Select,Tool.Wall,Tool.Floor,Tool.Room,Tool.Door,Tool.Window,Tool.Garage,Tool.Stairs,Tool.Roof,Tool.Erase};
     labels=new[]{"SELECT","WALLS","FLOORS","ROOMS","DOORS","WINDOWS","GARAGE","STAIRS","ROOFS","ERASE"};
    }
-   float shelfTop=showCatalog?h-Mathf.Min(270f,h*.34f)-9f:h-9f;
+   float shelfTop=showCatalog?h-CatalogHeight(h)-9f:h-9f;
    float availableHeight=Mathf.Max(225f,shelfTop-y-13f);
    float space=Mathf.Clamp((availableHeight-84f)/tools.Length,31f,45f);
    float railHeight=Mathf.Min(availableHeight,tools.Length*space+82f);
@@ -1845,7 +1879,7 @@ namespace WorldBuilder {
   }
   void DrawProperties(float w,float h){
    float x=w-364f,top=96f,panelW=350f;
-   float catalogHeight=showCatalog?Mathf.Min(270f,h*.34f)+12f:72f;
+   float catalogHeight=showCatalog?CatalogHeight(h)+12f:72f;
    float panelH=Mathf.Max(185f,h-top-catalogHeight-13f);
    SoftPanel(new Rect(x,top,panelW,panelH),trayStyle);
    if(Button(new Rect(x+295,top+15,39,36),"X")){showInspector=false;return;}
@@ -2084,7 +2118,7 @@ namespace WorldBuilder {
    return result;
   }
   void DrawCatalog(float w,float h){
-   float shelfHeight=Mathf.Min(270f,h*.34f);
+   float shelfHeight=CatalogHeight(h);
    float top=h-shelfHeight-9f;
    float left=130f;
    float width=w-left-13f;
@@ -2095,7 +2129,9 @@ namespace WorldBuilder {
    GUI.Label(new Rect(left+19,top+13,290,30),heading,sectionStyle);
    GUI.Label(new Rect(left+23,top+46,300,20),
     building?"Shapes, walls and openings":landscaping?"Create the world around your home":"Browse models, decor and finishes",mutedStyle);
-   if(Button(new Rect(w-63,top+13,38,38),"−")){showCatalog=false;return;}
+   if(Button(new Rect(w-63,top+13,38,38),"−")){
+    showCatalog=false;catalogOpenForMode[creativeMode]=false;return;
+   }
    float cardY=top+103f;
    float cardH=Mathf.Max(123f,shelfHeight-118f);
    if(building||landscaping){
@@ -2420,7 +2456,9 @@ namespace WorldBuilder {
    if(showCatalog)DrawCatalog(w,h);
    else {
     SoftPanel(new Rect(130,h-75,386,65),trayStyle);
-    if(Button(new Rect(138,h-67,203,46),"OPEN COLLECTION"))showCatalog=true;
+    if(Button(new Rect(138,h-67,203,46),"OPEN PALETTE")){
+     showCatalog=true;catalogOpenForMode[creativeMode]=true;
+    }
     if(Button(new Rect(349,h-67,160,46),"IMPORT 3D")){
      showImport=true;showExport=false;
     }
