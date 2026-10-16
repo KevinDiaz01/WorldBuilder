@@ -1404,7 +1404,7 @@ namespace WorldBuilder {
   }
   // Premium rounded glass UI generated at runtime; no external font or art packages required.
   private GUIStyle panelStyle, headingStyle, captionStyle, menuStyle, activeStyle, regularStyle, sectionStyle, smallStyle;
-  private GUIStyle trayStyle,cardStyle,selectedCardStyle,softStyle,subtleStyle,mutedStyle,miniStyle,shadowStyle,destructiveStyle,paletteSymbolStyle,cardTitleStyle;
+  private GUIStyle trayStyle,cardStyle,selectedCardStyle,softStyle,subtleStyle,mutedStyle,miniStyle,shadowStyle,destructiveStyle,paletteSymbolStyle,cardTitleStyle,railStyle;
   private Texture2D darkTexture, sideTexture, blueTexture, fieldTexture, hoverTexture, strokeTexture;
   private Texture2D trayTexture,cardTexture,selectedCardTexture,softTexture,shadowTexture,destructiveTexture;
   private Font interfaceFont;
@@ -1487,6 +1487,21 @@ namespace WorldBuilder {
    miniStyle=new GUIStyle(captionStyle);miniStyle.fontSize=14;miniStyle.fontStyle=FontStyle.Bold;
    menuStyle=RoundedStyle(sideTexture,15);
    softStyle=RoundedStyle(softTexture,15);
+   railStyle=RoundedStyle(softTexture,12);
+   GUI.skin.horizontalScrollbar.normal.background=softTexture;
+   GUI.skin.horizontalScrollbar.hover.background=softTexture;
+   GUI.skin.horizontalScrollbarThumb.normal.background=blueTexture;
+   GUI.skin.horizontalScrollbarThumb.hover.background=blueTexture;
+   GUI.skin.horizontalScrollbar.fixedHeight=9f;
+   GUI.skin.verticalScrollbar.normal.background=softTexture;
+   GUI.skin.verticalScrollbar.hover.background=softTexture;
+   GUI.skin.verticalScrollbarThumb.normal.background=blueTexture;
+   GUI.skin.verticalScrollbarThumb.hover.background=blueTexture;
+   GUI.skin.verticalScrollbar.fixedWidth=9f;
+   GUI.skin.horizontalScrollbarLeftButton.fixedWidth=0f;
+   GUI.skin.horizontalScrollbarRightButton.fixedWidth=0f;
+   GUI.skin.verticalScrollbarUpButton.fixedHeight=0f;
+   GUI.skin.verticalScrollbarDownButton.fixedHeight=0f;
    activeStyle=RoundedStyle(blueTexture,15);
    activeStyle.normal.textColor=Color.white;
    activeStyle.hover.textColor=Color.white;
@@ -1702,7 +1717,7 @@ namespace WorldBuilder {
    for(int k=0;k<maxCount;k++){
     Tool choice=tools[k];
     bool isActive=currentTool==choice||(choice==Tool.Imported&&currentTool==Tool.Imported);
-    GUIStyle choiceStyle=isActive?activeStyle:choice==Tool.Erase?destructiveStyle:softStyle;
+    GUIStyle choiceStyle=isActive?activeStyle:choice==Tool.Erase?destructiveStyle:railStyle;
     if(GUI.Button(new Rect(x+9,row+k*space,91,space-4f),labels[k],choiceStyle)){
      if(choice==Tool.Imported){
       showCatalog=true;catalogCategory=0;creativeMode=1;
@@ -1720,7 +1735,7 @@ namespace WorldBuilder {
   void DrawProperties(float w,float h){
    float x=w-364f,top=96f,panelW=350f;
    float catalogHeight=showCatalog?Mathf.Min(270f,h*.34f)+12f:72f;
-   float panelH=Mathf.Max(280f,h-top-catalogHeight-13f);
+   float panelH=Mathf.Max(185f,h-top-catalogHeight-13f);
    SoftPanel(new Rect(x,top,panelW,panelH),trayStyle);
    if(Button(new Rect(x+295,top+15,39,36),"X")){showInspector=false;return;}
    bool selected=selectedIndex>=0&&selectedIndex<project.pieces.Count;
@@ -1736,7 +1751,23 @@ namespace WorldBuilder {
      for(int i=0;i<6;i++)dimensionDraft[i]=value[i].ToString("F2");
     }
    }
-   float contentH=selected?1080f:810f;
+   float contentH;
+   if(selected){
+    Piece selectedPiece=project.pieces[selectedIndex];
+    contentH=270f;
+    if(multiSelection.Count>1)contentH+=82f;
+    if(selectedPiece.kind=="imported"||selectedPiece.kind=="couch"||selectedPiece.kind=="table")contentH+=130f;
+    if(selectedPiece.kind=="wall")contentH+=176f;
+    if(selectedPiece.kind=="light-point"||selectedPiece.kind=="light-spot")contentH+=215f;
+    if(IsRoomFloor(selectedIndex))contentH+=91f;
+    if(inspectorAdvanced)contentH+=245f;
+   }else{
+    contentH=280f;
+    if(currentTool==Tool.Wall)contentH+=175f;
+    if(currentTool==Tool.Room)contentH+=140f;
+    if(currentTool==Tool.Imported)contentH+=115f;
+    if(currentTool==Tool.Light)contentH+=90f;
+   }
    Rect view=new Rect(x+12,top+92,panelW-25,Mathf.Max(120f,panelH-111f));
    inspectorScroll=GUI.BeginScrollView(view,inspectorScroll,new Rect(0,0,310,contentH));
    const float ox=7f;
