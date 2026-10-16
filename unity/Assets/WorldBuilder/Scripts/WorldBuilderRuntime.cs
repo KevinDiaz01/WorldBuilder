@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Diagnostics;
 using UnityEngine;
 
 namespace WorldBuilder {
@@ -48,6 +49,7 @@ namespace WorldBuilder {
   private string targetVrcProject="";
   private bool showImport=false;
   private bool showAssets=false;
+  private Process browserProcess;
   private PolyHavenCatalog polyHaven;
   private string assetSearch="";
   private int sourceTab=0;
@@ -66,6 +68,26 @@ namespace WorldBuilder {
      (showHelp&&p.x>Screen.width-380f&&p.y>Screen.height-215f)||
      ((showImport||showExport)&&p.x>Screen.width*.5f-265&&p.x<Screen.width*.5f+265&&p.y<330)||
      (showAssets&&p.x>Screen.width*.5f-360&&p.x<Screen.width*.5f+360&&p.y<Screen.height-65);
+  }
+  void ToggleAssetBrowser(){
+   try{
+    if(browserProcess!=null&&!browserProcess.HasExited){
+     browserProcess.Kill();browserProcess.Dispose();browserProcess=null;
+     showAssets=false;Notice("Assets browser closed");return;
+    }
+    string exe=Path.Combine(Path.GetDirectoryName(Application.dataPath),"WorldBuilderAssetBrowser.exe");
+    if(!File.Exists(exe)){Notice("Asset browser component is missing. Reinstall the complete update.");return;}
+    IntPtr hwnd=Process.GetCurrentProcess().MainWindowHandle;
+    if(hwnd==IntPtr.Zero){Notice("Unable to locate WorldBuilder window");return;}
+    browserProcess=Process.Start(new ProcessStartInfo(exe,
+      hwnd.ToInt64().ToString()+" "+QuoteArg(AssetHub.Root)){UseShellExecute=false});
+    showAssets=true;
+    Notice("Assets browser opening...");
+   }catch(Exception ex){Notice("Assets browser failed: "+ex.Message);UnityEngine.Debug.LogException(ex);}
+  }
+  string QuoteArg(string value){return "\""+value.Replace("\"","")+"\"";}
+  void OnApplicationQuit(){
+   if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
   }
   void UndoLast(){
    int i=objects.Count-1;
@@ -274,7 +296,7 @@ namespace WorldBuilder {
    if(Input.GetKeyDown(KeyCode.Alpha3))SelectTool(Tool.Couch);
    if(Input.GetKeyDown(KeyCode.Alpha4))SelectTool(Tool.Table);
    if(Input.GetKeyDown(KeyCode.Alpha5))SelectTool(Tool.Erase);
-   if(Input.GetKeyDown(KeyCode.Escape)){anchor=null;showImport=false;showExport=false;showAssets=false;}
+   if(Input.GetKeyDown(KeyCode.Escape)){anchor=null;showImport=false;showExport=false;}
    if(Input.GetKeyDown(KeyCode.F1))showHelp=!showHelp;
    if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Z))UndoLast();
@@ -367,7 +389,7 @@ namespace WorldBuilder {
     GUI.Box(new Rect(0,h-54,w,54),"Avatar height: "+avatarHeight.ToString("F2")+" m  |  Spatial scale preview, not a full VRChat simulator");
     return;
    }
-   if(GUI.Button(new Rect(w-966,15,123,36),"Assets")){showAssets=!showAssets;showImport=false;showExport=false;}
+   if(GUI.Button(new Rect(w-966,15,123,36),showAssets?"Close Assets":"Assets")){ToggleAssetBrowser();showImport=false;showExport=false;}
    if(GUI.Button(new Rect(w-835,15,137,36),"Import OBJ")){showImport=!showImport;showExport=false;}
    if(GUI.Button(new Rect(w-690,15,127,36),"Export Unity")){showExport=!showExport;showImport=false;}
    if(GUI.Button(new Rect(w-555,15,120,36),"Walk Preview")){
@@ -401,68 +423,6 @@ namespace WorldBuilder {
     GUI.Label(new Rect(14,h-158,180,24),"AVATAR HEIGHT");
     GUI.Label(new Rect(14,h-132,180,22),avatarHeight.ToString("F2")+" m");
     avatarHeight=GUI.HorizontalSlider(new Rect(14,h-108,176,20),avatarHeight,1.2f,2.2f);
-   }
-   if(showAssets){
-    float x=Mathf.Max(205,w*.5f-380), y=75;
-    float pw=Mathf.Min(760,w-x-10), ph=h-145;
-    GUI.Box(new Rect(x,y,pw,ph),"ASSETS  |  Discover & My Assets");
-    string[] tabs={"Poly Haven","Kenney","ambientCG","My Assets"};
-    for(int i=0;i<4;i++){
-     int tab=i;
-     if(GUI.Button(new Rect(x+12+i*(pw-24)/4,y+36,(pw-32)/4,32),tabs[i]))sourceTab=tab;
-    }
-    if(sourceTab==0){
-     GUI.Label(new Rect(x+16,y+78,pw-32,23),"Powered by Poly Haven - free CC0 models, no sign-in");
-     assetSearch=GUI.TextField(new Rect(x+16,y+106,pw-170,30),assetSearch);
-     if(GUI.Button(new Rect(x+pw-140,y+106,124,30),"Refresh")&&polyHaven!=null)polyHaven.Refresh();
-     if(polyHaven!=null){
-      GUI.Label(new Rect(x+16,y+142,pw-32,35),polyHaven.State);
-      if(polyHaven.Busy)GUI.HorizontalSlider(new Rect(x+16,y+177,pw-32,17),polyHaven.Progress,0,1);
-      var matches=new List<PolyHavenCatalog.Item>();
-      foreach(var a in polyHaven.Items){
-       if(assetSearch.Length==0||a.name.IndexOf(assetSearch,StringComparison.OrdinalIgnoreCase)>=0||a.category.IndexOf(assetSearch,StringComparison.OrdinalIgnoreCase)>=0)matches.Add(a);
-      }
-      float listTop=y+202, listHeight=Mathf.Max(70,ph-295);
-      assetScroll=GUI.BeginScrollView(new Rect(x+16,listTop,pw-32,listHeight),assetScroll,
-       new Rect(0,0,pw-62,Mathf.Max(listHeight,matches.Count*47)));
-      for(int i=0;i<matches.Count;i++){
-       var a=matches[i];
-       GUI.Label(new Rect(5,i*47+3,pw-210,24),a.name);
-       GUI.Label(new Rect(5,i*47+24,pw-210,19),a.category);
-       if(GUI.Button(new Rect(pw-175,i*47+6,122,34),"Download")&&!polyHaven.Busy)
-        polyHaven.Download(a);
-      }
-      GUI.EndScrollView();
-     }
-    }else if(sourceTab==3){
-     GUI.Label(new Rect(x+16,y+90,pw-32,32),"READY-TO-PLACE ASSETS");
-     var catalog=AssetHub.Catalog();
-     float listHeight=Mathf.Max(90,ph-210);
-     assetScroll=GUI.BeginScrollView(new Rect(x+16,y+133,pw-32,listHeight),assetScroll,
-      new Rect(0,0,pw-60,Mathf.Max(listHeight,catalog.Count*43)));
-     for(int i=0;i<catalog.Count;i++){
-      string id=catalog[i];
-      if(GUI.Button(new Rect(0,i*43,pw-90,37),AssetHub.Name(id))){
-       importedId=id;currentTool=Tool.Imported;showAssets=false;
-       Notice("Click the ground to place "+AssetHub.Name(id));
-      }
-     }
-     GUI.EndScrollView();
-    }else{
-     string provider=tabs[sourceTab];
-     GUI.Label(new Rect(x+16,y+96,pw-32,62),
-      provider+" in-app catalog is not connected yet. Coming in a later update.");
-     GUI.Label(new Rect(x+16,y+169,pw-32,38),
-      "No external website opens and no login is required in this prototype.");
-    }
-    GUI.Label(new Rect(x+16,y+ph-83,pw-32,27),"Model import: OBJ only. glTF downloads remain stored for later support.");
-    if(GUI.Button(new Rect(x+16,y+ph-51,160,34),"Downloads Folder"))
-     Application.OpenURL(new Uri(AssetHub.Downloads("Poly Haven")).AbsoluteUri);
-    if(GUI.Button(new Rect(x+184,y+ph-51,115,34),"Scan Files")){
-     string msg;int n=AssetHub.Scan(out msg);
-     assetStatus=n>0?msg:msg.Length>0?msg:"No new compatible OBJ/ZIP downloads";
-    }
-    if(GUI.Button(new Rect(x+pw-112,y+ph-51,95,34),"Close"))showAssets=false;
    }
    if(showImport){
     float x=w*.5f-265;
