@@ -76,7 +76,7 @@ namespace WorldBuilder {
    float scale=UIScale;
    float w=Screen.width/scale,h=Screen.height/scale;
    Vector2 p=new Vector2(Input.mousePosition.x/scale,(Screen.height-Input.mousePosition.y)/scale);
-   return p.y<88f||p.y>h-221f||
+   return p.y<88f||p.y>h-272f||
      (p.x<122f&&p.y>=94f)||
      (p.x>w-359f&&p.y>=94f)||
      (p.x>125f&&p.x<515f&&p.y<159f)||
@@ -707,11 +707,11 @@ namespace WorldBuilder {
    GUI.Box(card,"",panelStyle);
    Color[] colors={new Color(.17f,.29f,.36f,.92f),new Color(.28f,.25f,.24f,.95f),
                    new Color(.21f,.30f,.27f,.95f),new Color(.26f,.27f,.34f,.94f)};
-   GUI.DrawTexture(new Rect(card.x+6,card.y+6,card.width-12,card.height-46),
+   GUI.DrawTexture(new Rect(card.x+6,card.y+6,card.width-12,card.height-65),
      ThumbnailTexture(colors[colorIndex%colors.Length]),ScaleMode.StretchToFill);
    string display=title.Length>19?title.Substring(0,16)+"...":title;
-   GUI.Label(new Rect(card.x+12,card.y+card.height-43,card.width-22,23),display,smallStyle);
-   GUI.Label(new Rect(card.x+12,card.y+card.height-22,card.width-22,18),subtitle,smallStyle);
+   GUI.Label(new Rect(card.x+12,card.y+card.height-54,card.width-22,27),display,smallStyle);
+   GUI.Label(new Rect(card.x+12,card.y+card.height-30,card.width-22,25),subtitle,smallStyle);
    if(GUI.Button(card,GUIContent.none,GUIStyle.none))callback();
   }
   private readonly Dictionary<int,Texture2D> catalogBackgrounds=new Dictionary<int,Texture2D>();
@@ -724,8 +724,10 @@ namespace WorldBuilder {
    return result;
   }
   void DrawCatalog(float w,float h){
-   float top=h-216f;
-   GUI.Box(new Rect(125,top,w-140,206),"",panelStyle);
+   // Give thumbnail labels their own room, including on shorter screens.
+   float shelfHeight=252f;
+   float top=h-shelfHeight-10f;
+   GUI.Box(new Rect(125,top,w-140,shelfHeight),"",panelStyle);
    string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials"};
    float x=139f;
    float availableForTabs=Mathf.Max(500f,w-570f);
@@ -752,11 +754,13 @@ namespace WorldBuilder {
      if(Button(new Rect(w-370,top+101,183,49),"Import OBJ")){showImport=true;showExport=false;}
     }else{
      float viewport=w-166;
-     catalogScroll=GUI.BeginScrollView(new Rect(139,top+63,viewport,130),catalogScroll,
-      new Rect(0,0,Mathf.Max(viewport,visible.Count*163),122),false,false);
+     catalogScroll=GUI.BeginScrollView(new Rect(139,top+68,viewport,166),catalogScroll,
+      new Rect(0,0,Mathf.Max(viewport,visible.Count*180),154),false,false);
      for(int k=0;k<visible.Count;k++){
       string id=visible[k];
-      DrawAssetTile(new Rect(k*163,0,155,118),AssetHub.Name(id),"Imported model",k,()=>{
+      string modelName=AssetHub.Name(id);
+      if(modelName==id)modelName="Imported Asset "+(k+1);
+      DrawAssetTile(new Rect(k*180,0,170,151),modelName,"Imported model",k,()=>{
        importedId=id;SelectTool(Tool.Imported);
        Notice("Click the ground to place "+AssetHub.Name(id));
       });
@@ -764,9 +768,9 @@ namespace WorldBuilder {
      GUI.EndScrollView();
     }
    }else if(catalogCategory==1){
-    DrawAssetTile(new Rect(144,top+64,170,123),"Sofa","Basic placeholder",0,()=>SelectTool(Tool.Couch));
-    DrawAssetTile(new Rect(324,top+64,170,123),"Table","Basic placeholder",1,()=>SelectTool(Tool.Table));
-    Label(new Rect(530,top+108,520,32),"Browse Assets to expand your furniture catalog.");
+    DrawAssetTile(new Rect(144,top+70,170,151),"Sofa","Basic placeholder",0,()=>SelectTool(Tool.Couch));
+    DrawAssetTile(new Rect(324,top+70,170,151),"Table","Basic placeholder",1,()=>SelectTool(Tool.Table));
+    Label(new Rect(530,top+116,520,32),"Browse Assets to expand your furniture catalog.");
    }else{
     Label(new Rect(165,top+103,w-400,34),"This collection is coming soon.",true);
    }
@@ -857,9 +861,11 @@ namespace WorldBuilder {
    }
    if(showSettings||showHelp)DrawSettings(w,h);
    if(showPause)DrawPause(w,h);
-   if(Time.time<statusUntil&&!showPause){
-    GUI.Box(new Rect(97,h-215,Mathf.Min(w-400,690),32),"",panelStyle);
-    Label(new Rect(110,h-211,Mathf.Min(w-425,660),25),status);
+   if(Time.time<statusUntil&&!showPause&&!showSettings&&!showHelp){
+    // Notifications float above, never across the asset shelf or its tabs.
+    float noticeWidth=Mathf.Min(560f,w-550f);
+    GUI.Box(new Rect(140,h-314,noticeWidth,39),"",panelStyle);
+    GUI.Label(new Rect(156,h-308,noticeWidth-30,28),status,captionStyle);
    }
   }
  }
