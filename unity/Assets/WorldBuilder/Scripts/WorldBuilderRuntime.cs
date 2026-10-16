@@ -148,7 +148,7 @@ namespace WorldBuilder {
      (!showCatalog&&p.y>h-79f&&p.x<523f)||
      (showLibrary&&p.x<122f&&p.y>=94f&&p.y<735f)||
      (showInspector&&p.x>w-373f&&p.y>=94f&&p.y<(showCatalog?h-Mathf.Min(270f,h*.34f)-6f:h-90f))||
-     (p.x>125f&&p.x<650f&&p.y<159f)||
+     (p.x>125f&&p.x<842f&&p.y<159f)||
      (p.x>=135f&&p.x<=825f&&
       p.y>=h-(showCatalog?Mathf.Min(270f,h*.34f)+60f:119f)&&
       p.y<=h-(showCatalog?Mathf.Min(270f,h*.34f)+8f:68f))||
@@ -1730,6 +1730,11 @@ namespace WorldBuilder {
    if(Button(new Rect(x+337,y,145,44),scenery?"MEADOW ON":"MEADOW OFF")){
     if(scenicBackdrop!=null)scenicBackdrop.SetVisible(!scenery);
    }
+   // Floor level stays visible while building to avoid unexpectedly floating walls.
+   GUI.Box(new Rect(x+499,y-6,200,58),"",panelStyle);
+   if(Button(new Rect(x+507,y,40,44),"−"))buildingLevel=Mathf.Max(0,buildingLevel-1);
+   GUI.Label(new Rect(x+551,y+12,91,26),"LEVEL "+(buildingLevel+1),miniStyle);
+   if(Button(new Rect(x+646,y,43,44),"+"))buildingLevel=Mathf.Min(8,buildingLevel+1);
   }
   string ToolGuidance(){
    if(currentTool==Tool.Room&&polygonMode)return "Click corners to shape a room · Enter to finish · Backspace to undo corner";
