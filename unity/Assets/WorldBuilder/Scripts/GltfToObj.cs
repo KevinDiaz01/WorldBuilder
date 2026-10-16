@@ -13,7 +13,7 @@ namespace WorldBuilder {
  public static class GltfToObj {
   [Serializable] class Document {
    public Buffer[] buffers; public View[] bufferViews; public Accessor[] accessors;
-   public Mesh[] meshes; public Node[] nodes; public Scene[] scenes; public int scene;
+   public Mesh[] meshes; public Node[] nodes; public Scene[] scenes; public int scene; public GltfMaterial[] materials; public GltfTexture[] textures; public GltfImage[] images;
   }
   [Serializable] class Buffer {public string uri; public int byteLength;}
   [Serializable] class View {public int buffer;public int byteOffset;public int byteLength;public int byteStride;}
@@ -23,6 +23,11 @@ namespace WorldBuilder {
   [Serializable] class Attributes {public int POSITION=-1;public int NORMAL=-1;public int TEXCOORD_0=-1;}
   [Serializable] class Node {public int mesh=-1;public int[] children;public float[] translation;public float[] rotation;public float[] scale;public float[] matrix;}
   [Serializable] class Scene {public int[] nodes;}
+  [Serializable] class GltfMaterial {public Pbr pbrMetallicRoughness;}
+  [Serializable] class Pbr {public float[] baseColorFactor;public TextureIndex baseColorTexture;}
+  [Serializable] class TextureIndex {public int index=-1;}
+  [Serializable] class GltfTexture {public int source=-1;}
+  [Serializable] class GltfImage {public string uri;public string mimeType;public int bufferView=-1;}
   static readonly CultureInfo CI=CultureInfo.InvariantCulture;
   static string N(float x){return x.ToString("R",CI);}
   static string Resolve(string directory,string uri){
@@ -127,6 +132,54 @@ namespace WorldBuilder {
     if(buffers[i].Length<doc.buffers[i].byteLength)throw new InvalidDataException("Incomplete glTF buffer");
    }
    var lines=new StringBuilder("# Converted by WorldBuilder glTF import\n");
+   string materialText=null;
+   if(doc.materials!=null&&doc.materials.Length>0){
+    var pbr=doc.materials[0].pbrMetallicRoughness;
+    Color baseColor=Color.white;
+    if(pbr!=null&&pbr.baseColorFactor!=null&&pbr.baseColorFactor.Length>=3)
+     baseColor=new Color(pbr.baseColorFactor[0],pbr.baseColorFactor[1],pbr.baseColorFactor[2]);
+    var mtl=new StringBuilder("newmtl WorldBuilderBase\nKd "+N(baseColor.r)+" "+N(baseColor.g)+" "+N(baseColor.b)+"\n");
+    if(pbr!=null&&pbr.baseColorTexture!=null&&doc.textures!=null&&doc.images!=null){
+     int tex=pbr.baseColorTexture.index;
+     if(tex>=0&&tex<doc.textures.Length){
+      int imageIndex=doc.textures[tex].source;
+      if(imageIndex>=0&&imageIndex<doc.images.Length){
+       var pic=doc.images[imageIndex];
+       byte[] picture=null;
+       string extension=pic.mimeType=="image/jpeg"?".jpg":".png";
+       if(!string.IsNullOrEmpty(pic.uri)){
+        if(pic.uri.StartsWith("data:",StringComparison.OrdinalIgnoreCase)){
+         int comma=pic.uri.IndexOf(',');
+         if(comma>=0){
+          extension=pic.uri.Substring(0,comma).Contains("jpeg")?".jpg":".png";
+          picture=System.Convert.FromBase64String(pic.uri.Substring(comma+1));
+         }
+        }else if(!pic.uri.Contains("://")){
+         string sourcePath=Resolve(folder,pic.uri);
+         if(File.Exists(sourcePath)){
+          picture=File.ReadAllBytes(sourcePath);
+          extension=Path.GetExtension(sourcePath).ToLowerInvariant();
+         }
+        }
+       }else if(pic.bufferView>=0&&pic.bufferView<doc.bufferViews.Length){
+        View view=doc.bufferViews[pic.bufferView];
+        byte[] buffer=buffers[view.buffer];
+        if(view.byteOffset>=0&&view.byteLength>0&&(long)view.byteOffset+view.byteLength<=buffer.Length){
+         picture=new byte[view.byteLength];
+         System.Buffer.BlockCopy(buffer,view.byteOffset,picture,0,view.byteLength);
+        }
+       }
+       if(picture!=null&&(extension==".png"||extension==".jpg"||extension==".jpeg")){
+        string fileName="basecolor"+extension;
+        File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(output),fileName),picture);
+        mtl.Append("map_Kd ").Append(fileName).Append('\n');
+       }
+      }
+     }
+    }
+    materialText=mtl.ToString();
+    lines.Append("mtllib model.mtl\nusemtl WorldBuilderBase\n");
+   }
    int vertexBase=0,faces=0;
    Action<int,Matrix4x4> append=(meshIndex,transform)=>{
     if(meshIndex<0||meshIndex>=doc.meshes.Length)return;
@@ -184,6 +237,7 @@ namespace WorldBuilder {
    if(faces==0)throw new InvalidDataException("No uncompressed triangle mesh found (Draco/meshopt are unsupported)");
    Directory.CreateDirectory(Path.GetDirectoryName(output));
    File.WriteAllText(output,lines.ToString());
+   if(materialText!=null)File.WriteAllText(Path.Combine(Path.GetDirectoryName(output),"model.mtl"),materialText);
   }
  }
 }
