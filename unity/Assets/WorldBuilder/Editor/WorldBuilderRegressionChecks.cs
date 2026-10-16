@@ -16,6 +16,7 @@ namespace WorldBuilder {
    RuntimeShaders();
    WorkspaceLayout(runtime);
    SpanGestureEligibility();
+   CatalogToolConsistency(runtime);
    ToolSwitching(runtime);
    MeshImports();
    GltfMaterialRoundTrip();
@@ -58,6 +59,17 @@ namespace WorldBuilder {
    foreach(var tool in new[]{WorldBuilderRuntime.Tool.Select,WorldBuilderRuntime.Tool.Imported,
     WorldBuilderRuntime.Tool.Window,WorldBuilderRuntime.Tool.Garage,WorldBuilderRuntime.Tool.Erase})
     Expect(!WorldBuilderRuntime.IsSpanTool(tool),"single-click tool captured drag: "+tool);
+  }
+  static void CatalogToolConsistency(WorldBuilderRuntime runtime){
+   MethodInfo choose=typeof(WorldBuilderRuntime).GetMethod("ChooseCatalogCategory",
+     BindingFlags.Instance|BindingFlags.NonPublic);
+   Expect(choose!=null,"category selection handler missing");
+   choose.Invoke(runtime,new object[]{8});
+   Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Paint,"Materials should activate Paint");
+   choose.Invoke(runtime,new object[]{10});
+   Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"Other must deactivate Paint");
+   choose.Invoke(runtime,new object[]{0});
+   Expect(runtime.currentTool==WorldBuilderRuntime.Tool.Select,"My Assets should be non-painting");
   }
   static void ToolSwitching(WorldBuilderRuntime runtime){
    Type type=typeof(WorldBuilderRuntime);
