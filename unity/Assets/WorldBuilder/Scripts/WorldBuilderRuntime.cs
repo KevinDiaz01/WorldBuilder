@@ -835,9 +835,10 @@ namespace WorldBuilder {
      else {creativeMode=n;if(n>0)ComingSoon(modes[n]+" tools");}
     }
    }
-   if(Button(new Rect(w-330,22,64,46),"Undo"))UndoLast();
-   if(Button(new Rect(w-258,22,70,46),"Save"))Save();
-   if(Button(new Rect(w-180,22,77,46),"Panels"))showInspector=!showInspector;
+   if(Button(new Rect(w-403,22,64,46),"Undo"))UndoLast();
+   if(Button(new Rect(w-333,22,67,46),"Redo"))RedoLast();
+   if(Button(new Rect(w-260,22,70,46),"Save"))Save();
+   if(Button(new Rect(w-183,22,80,46),"Panels"))showInspector=!showInspector;
    if(Button(new Rect(w-95,22,71,46),"Menu"))showPause=!showPause;
   }
   void SetCameraView(bool overhead){
@@ -941,6 +942,8 @@ namespace WorldBuilder {
      if(Button(new Rect(x+23,y,137,42),"Copy Size"))CopyWallSize();
      if(Button(new Rect(x+169,y,137,42),"Paste Size"))PasteWallSize();
      y+=49;
+     if(Button(new Rect(x+23,y,283,42),"Build With This Wall"))UseSelectedWallForBuilding();
+     y+=49;
     }
     if(Button(new Rect(x+23,y,283,43),"Delete Selected"))DeleteSelection();
    }else{
@@ -958,6 +961,8 @@ namespace WorldBuilder {
      wallHeight=GUI.HorizontalSlider(new Rect(x+17,y,232,20),wallHeight,1.5f,5f);y+=39;
      Label(new Rect(x+17,y,220,25),"Thickness: "+wallThickness.ToString("F2")+" m");y+=25;
      wallThickness=GUI.HorizontalSlider(new Rect(x+17,y,232,20),wallThickness,.08f,.5f);
+     y+=34;
+     if(Button(new Rect(x+23,y,283,40),"Reset Wall Defaults"))ResetWallDefaults();
     }
     if(currentTool==Tool.Imported){
      y+=28;
@@ -1087,9 +1092,9 @@ namespace WorldBuilder {
    Label(new Rect(x+25,y+18,455,35),"Settings & Help",true);
    Label(new Rect(x+25,y+64,455,28),"BUILD CONTROLS");
    Label(new Rect(x+25,y+100,455,27),"1 Walls   2 Floors   3 Sofa   4 Table   5 Erase");
-   Label(new Rect(x+25,y+133,455,27),"0 Select   G Grid   Ctrl+Z Undo");
-   Label(new Rect(x+25,y+185,455,27),"Drag object to move   R Rotate   Ctrl+D Duplicate");
-   Label(new Rect(x+25,y+167,455,27),"Ctrl+S Save   Ctrl+O Reload   Esc Menu");
+   Label(new Rect(x+25,y+133,455,27),"0 Select   6 Rooms   G Grid   Ctrl+Z Undo   Ctrl+Y Redo");
+   Label(new Rect(x+25,y+185,455,27),"Drag object   R Rotate   Ctrl+D Duplicate   Del Remove");
+   Label(new Rect(x+25,y+167,455,27),"Ctrl+S Save   Ctrl+O Reload   Esc Menu   T/P Views");
    Label(new Rect(x+25,y+206,455,26),"CAMERA");
    Label(new Rect(x+25,y+239,455,28),"Right mouse: orbit    Scroll: zoom");
    Label(new Rect(x+25,y+271,455,28),"Walk Preview: WASD, mouse look, Esc to return");
