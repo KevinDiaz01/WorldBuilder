@@ -16,6 +16,7 @@ public static class WorldBuilderSceneImporter {
   public Quaternion rotation;
   public string assetId;
   public string finish;
+  public float textureTile;
  }
  [Serializable] private class World {
   public int schema;
@@ -86,10 +87,14 @@ public static class WorldBuilderSceneImporter {
       case "Ocean":color=new Color(.22f,.47f,.62f);break;
      }
     }
+    bool textured=!string.IsNullOrEmpty(p.finish)&&p.finish.StartsWith("texture:",StringComparison.Ordinal);
+    string materialId=textured?p.finish.Substring(8):"";
+    string materialLabel=textured?"Texture_"+materialId:(string.IsNullOrEmpty(p.finish)?"Default":p.finish.Replace(" ",""));
     Material mat;
-    string materialKey=p.kind+"_"+(p.finish??"Default");
+    string materialKey=p.kind+"_"+materialLabel+"_"+(textured?p.textureTile.ToString("F2",System.Globalization.CultureInfo.InvariantCulture):"");
     if(!palette.TryGetValue(materialKey,out mat)){
-     string matPath=materialDir+"/WB_"+(p.kind=="wall"?"Wall":p.kind=="floor"?"Floor":"Object")+"_"+(string.IsNullOrEmpty(p.finish)?"Default":p.finish.Replace(" ",""))+".mat";
+     string matPath=materialDir+"/WB_"+(p.kind=="wall"?"Wall":p.kind=="floor"?"Floor":"Object")+"_"+materialLabel+
+       (textured?"_tile"+Mathf.RoundToInt(Mathf.Max(.1f,p.textureTile)*100f):"")+".mat";
      mat=AssetDatabase.LoadAssetAtPath<Material>(matPath);
      if(mat==null){
       Shader shader=Shader.Find("Standard");
@@ -99,6 +104,22 @@ public static class WorldBuilderSceneImporter {
       AssetDatabase.CreateAsset(mat,matPath);
      }
      mat.color=color;
+     if(textured){
+      string folder="Assets/WorldBuilderExport/SurfaceMaterials/"+materialId+"/";
+      string imagePath=null;
+      foreach(string extension in new[]{".png",".jpg",".jpeg"})
+       if(File.Exists(folder+"albedo"+extension)){imagePath=folder+"albedo"+extension;break;}
+      if(imagePath==null)throw new FileNotFoundException("Missing exported material texture: "+materialId);
+      AssetDatabase.ImportAsset(imagePath,ImportAssetOptions.ForceSynchronousImport);
+      Texture2D tex=AssetDatabase.LoadAssetAtPath<Texture2D>(imagePath);
+      if(tex==null)throw new InvalidDataException("Could not load exported texture: "+imagePath);
+      mat.mainTexture=tex;
+      float tile=Mathf.Clamp(p.textureTile<=0?1f:p.textureTile,.1f,20f);
+      mat.mainTextureScale=new Vector2(tile,tile);
+     }else{
+      mat.mainTexture=null;
+      mat.mainTextureScale=Vector2.one;
+     }
      EditorUtility.SetDirty(mat);
      palette[materialKey]=mat;
     }
