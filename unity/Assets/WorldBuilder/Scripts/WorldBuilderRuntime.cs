@@ -395,6 +395,7 @@ namespace WorldBuilder {
    objects.Clear();
    project=restored;
    foreach(var part in project.pieces)objects.Add(Create(part));
+   ApplyEnvironment();
    anchor=null;
    restoringHistory=false;
   }
@@ -537,6 +538,7 @@ namespace WorldBuilder {
     foreach(var obj in objects)if(obj!=null)Destroy(obj);
     objects.Clear();SelectObject(-1);project=restored;
     foreach(var piece in project.pieces)objects.Add(Create(piece));
+    ApplyEnvironment();
     Notice("Recovery restored. Save your project to keep it.");
    }catch(Exception ex){Diagnostics.Add("ERROR","Recovery restore: "+ex.Message);Notice("Could not restore recovery");}
   }
@@ -1279,7 +1281,7 @@ namespace WorldBuilder {
     if(loaded==null||loaded.schema!=2||loaded.pieces==null)throw new InvalidDataException("Unsupported project schema");
     foreach(var obj in objects)if(obj!=null)Destroy(obj);
     objects.Clear();SelectObject(-1);project=loaded;
-    foreach(var piece in project.pieces)objects.Add(Create(piece));Notice("Loaded: "+Path.GetFileName(filePath));
+    foreach(var piece in project.pieces)objects.Add(Create(piece));ApplyEnvironment();Notice("Loaded: "+Path.GetFileName(filePath));
    }catch(Exception e){Debug.LogError("Load failed: "+e.Message);Notice("Load failed: "+e.Message);}
   }
   // Premium rounded glass UI generated at runtime; no external font or art packages required.
