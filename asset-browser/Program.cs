@@ -42,9 +42,10 @@ internal sealed class BrowserWindow : Form {
  public BrowserWindow(IntPtr unityWindow,string root){
   unity=unityWindow;assetsRoot=root;
   Text="WorldBuilder Assets Browser";
-  FormBorderStyle=FormBorderStyle.Sizable;
-  ShowInTaskbar=true;
-  StartPosition=FormStartPosition.CenterScreen;
+  // Embed as a closable panel inside Unity instead of a second desktop window.
+  FormBorderStyle=FormBorderStyle.None;
+  ShowInTaskbar=false;
+  StartPosition=FormStartPosition.Manual;
   MinimumSize=new Size(800,520);
   Size=new Size(1220,750);
   BackColor=Color.FromArgb(246,244,251);
@@ -102,9 +103,10 @@ internal sealed class BrowserWindow : Form {
     };
     view.CoreWebView2.NavigationCompleted+=(_,a)=>{if(!a.IsSuccess)status.Text="Page error: "+a.WebErrorStatus;};
     SelectSite(0);
+    Attach();
+    layoutTimer.Tick+=(_,_)=>Position();
+    layoutTimer.Start();
    }catch(Exception e){status.Text="Browser unavailable: "+e.Message;}
-   // A normal resizable, closable browser window is used rather than a borderless
-   // Win32 child which could cover Unity controls and conceal provider tabs.
    Activate();
   };
   FormClosed+=(_,_)=>layoutTimer.Stop();
@@ -152,8 +154,8 @@ internal sealed class BrowserWindow : Form {
  void Position(){
   if(!IsWindow(unity)){Close();return;}
   if(!GetClientRect(unity,out var rect))return;
-  int width=Math.Max(480,rect.Right-rect.Left-218);
-  int height=Math.Max(280,rect.Bottom-rect.Top-128);
-  MoveWindow(Handle,207,68,width,height,true);
+  int width=Math.Max(480,rect.Right-rect.Left-149);
+  int height=Math.Max(280,rect.Bottom-rect.Top-106);
+  MoveWindow(Handle,134,91,width,height,true);
  }
 }
