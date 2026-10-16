@@ -945,6 +945,10 @@ namespace WorldBuilder {
     if(showConfirmExit){showConfirmExit=false;showPause=true;}
     else if(showImport||showExport||showProjects||showSettings||showHelp){
      showImport=false;showExport=false;showProjects=false;showSettings=false;showHelp=false;
+    }else if(currentTool!=Tool.Select||anchor.HasValue){
+     SelectTool(Tool.Select);
+     Notice("Placement cancelled · Select tool active");
+     return;
     }else{showPause=!showPause;anchor=null;}
    }
    if(Input.GetKeyDown(KeyCode.F1)){showHelp=!showHelp;showPause=false;showConfirmExit=false;}
