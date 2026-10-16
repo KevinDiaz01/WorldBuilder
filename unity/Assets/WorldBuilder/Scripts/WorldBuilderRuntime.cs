@@ -1270,17 +1270,37 @@ namespace WorldBuilder {
      GUI.EndScrollView();
     }
    }else if(catalogCategory==8){
-    Label(new Rect(154,top+64,800,29),"Choose a finish, then click a wall, floor or roof to apply it.");
+    Label(new Rect(154,top+59,430,25),"Pick a material, then click a wall, floor or roof.");
+    float tiling=GUI.HorizontalSlider(new Rect(w-385,top+69,215,18),selectedTextureTile,.25f,8f);
+    selectedTextureTile=Mathf.Round(tiling*4f)/4f;
+    Label(new Rect(w-166,top+58,135,30),"Tile: "+selectedTextureTile.ToString("F2")+"x");
+    var materials=MaterialLibrary.Catalog();
+    float tileWidth=158f;
+    int count=FinishNames.Length+materials.Count;
+    catalogScroll=GUI.BeginScrollView(new Rect(140,top+100,w-167,140),catalogScroll,
+      new Rect(0,0,Mathf.Max(w-175,count*tileWidth),128));
     for(int i=0;i<FinishNames.Length;i++){
-     int ix=i;
-     float swatchX=149+i*181f;
-     if(swatchX+176>w-25)break;
-     GUI.DrawTexture(new Rect(swatchX,top+108,169,58),ThumbnailTexture(FinishColors[i]),ScaleMode.StretchToFill);
-     if(Button(new Rect(swatchX,top+174,169,43),FinishNames[i],selectedFinish==i)){
-      selectedFinish=ix;
-      SelectTool(Tool.Paint);
+     int index=i;float tx=i*tileWidth;
+     if(GUI.Button(new Rect(tx,0,150,124),"",GUIStyle.none)){
+      selectedTextureId="";selectedFinish=index;SelectTool(Tool.Paint);
      }
+     GUI.DrawTexture(new Rect(tx+4,4,142,76),ThumbnailTexture(FinishColors[i]));
+     GUI.Label(new Rect(tx+7,84,142,29),FinishNames[i],smallStyle);
+     if(string.IsNullOrEmpty(selectedTextureId)&&selectedFinish==i)
+      GUI.Box(new Rect(tx+3,115,143,5),"",activeStyle);
     }
+    for(int i=0;i<materials.Count;i++){
+     var mat=materials[i];float tx=(i+FinishNames.Length)*tileWidth;
+     if(GUI.Button(new Rect(tx,0,150,124),"",GUIStyle.none)){
+      selectedTextureId=mat.id;SelectTool(Tool.Paint);
+     }
+     Texture2D pic=GetMaterialImage(mat.id);
+     if(pic!=null)GUI.DrawTexture(new Rect(tx+4,4,142,76),pic,ScaleMode.ScaleAndCrop);
+     GUI.Label(new Rect(tx+7,84,140,25),mat.name.Length>18?mat.name.Substring(0,15)+"...":mat.name,smallStyle);
+     GUI.Label(new Rect(tx+7,105,140,18),mat.provider,smallStyle);
+     if(selectedTextureId==mat.id)GUI.Box(new Rect(tx+3,119,143,5),"",activeStyle);
+    }
+    GUI.EndScrollView();
    }
   }
   void ExitApplication(bool saveFirst){
