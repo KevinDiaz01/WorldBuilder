@@ -75,6 +75,7 @@ namespace WorldBuilder {
   private int creativeMode=0;
   private int catalogCategory=0;
   private int furnitureRoom=0;
+  private bool textureOnly=false;
   private int landscapeCategory=0;
   private int selectedFinish=0;
   private string selectedTextureId="";
@@ -2069,6 +2070,7 @@ namespace WorldBuilder {
      if(creativeMode==1&&k>=1&&k<=5){
       showCatalog=true;catalogOpenForMode[1]=true;
       catalogCategory=k==1?0:k==2?1:k==5?2:8;
+      textureOnly=k==4;
       if(k==3||k==4)SelectTool(Tool.Paint);
       else SelectTool(Tool.Select);
       Notice("Browsing "+labels[k].ToLowerInvariant());
@@ -2464,7 +2466,7 @@ namespace WorldBuilder {
    SoftPanel(new Rect(left,top,width,shelfHeight),trayStyle);
    bool building=creativeMode==0,landscaping=creativeMode==2;
    string heading=building?"BUILD COLLECTION":landscaping?(landscapeCategory==5?"SKYBOXES":landscapeObjects?"OUTDOOR OBJECTS":"LANDSCAPE COLLECTION"):
-     catalogCategory==0?"MY ASSETS":catalogCategory==8?"SURFACE MATERIALS":
+     catalogCategory==0?"MY ASSETS":catalogCategory==8?(textureOnly?"TEXTURES":"SURFACE MATERIALS"):
      catalogCategory==12?"SKYBOXES & HDRI":"OBJECT COLLECTION";
    GUI.Label(new Rect(left+19,top+13,290,30),heading,sectionStyle);
    GUI.Label(new Rect(left+23,top+46,300,20),
@@ -2597,14 +2599,15 @@ namespace WorldBuilder {
    }else if(catalogCategory==8){
     var materials=MaterialLibrary.Catalog();
     float tileW=145f;
-    int n=FinishNames.Length+materials.Count;
+    int prefix=textureOnly?0:FinishNames.Length;
+    int n=prefix+materials.Count;
     float sliderX=w-510f;
     GUI.Label(new Rect(sliderX,top+44,245,20),"Texture repeat: "+selectedTextureTile.ToString("F2")+"x",mutedStyle);
     float next=GUI.HorizontalSlider(new Rect(sliderX+237,top+49,155,17),selectedTextureTile,.25f,8f);
     selectedTextureTile=Mathf.Round(next*4f)/4f;
     catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewportWidth,cardH+15),catalogScroll,
       new Rect(0,0,Mathf.Max(viewportWidth-15,n*tileW+10),cardH),true,false);
-    for(int i=0;i<FinishNames.Length;i++){
+    for(int i=0;i<prefix;i++){
      int index=i;
      Rect tile=new Rect(i*tileW+2,0,tileW-8,cardH-7);
      bool selected=string.IsNullOrEmpty(selectedTextureId)&&selectedFinish==i;
@@ -2618,7 +2621,7 @@ namespace WorldBuilder {
     }
     for(int i=0;i<materials.Count;i++){
      var material=materials[i];
-     Rect tile=new Rect((i+FinishNames.Length)*tileW+2,0,tileW-8,cardH-7);
+     Rect tile=new Rect((i+prefix)*tileW+2,0,tileW-8,cardH-7);
      bool selected=selectedTextureId==material.id;
      GUI.Box(tile,"",selected?selectedCardStyle:cardStyle);
      Texture2D image=GetMaterialImage(material.id);
