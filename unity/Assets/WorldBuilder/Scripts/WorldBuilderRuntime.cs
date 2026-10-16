@@ -28,9 +28,12 @@ namespace WorldBuilder {
   public float gridSize=1f;
   public float wallHeight=2.7f;
   public float wallThickness=.16f;
-  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select }
+  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
+  private readonly Stack<string> undoHistory=new Stack<string>();
+  private readonly Stack<string> redoHistory=new Stack<string>();
+  private bool restoringHistory=false;
   private Project project=new Project();
   private readonly List<GameObject> objects=new List<GameObject>();
   private string filePath;
@@ -169,13 +172,39 @@ namespace WorldBuilder {
    SelectObject(-1);
    Notice("Object deleted");
   }
-  void UndoLast(){
+  void RememberChange(){
+   if(restoringHistory)return;
+   undoHistory.Push(JsonUtility.ToJson(project));
+   if(undoHistory.Count>80){
+    var snapshots=undoHistory.ToArray();
+    undoHistory.Clear();
+    for(int i=Mathf.Min(79,snapshots.Length-1);i>=0;i--)undoHistory.Push(snapshots[i]);
+   }
+   redoHistory.Clear();
+  }
+  void RestoreSnapshot(string json){
+   var restored=JsonUtility.FromJson<Project>(json);
+   if(restored==null||restored.pieces==null)return;
+   restoringHistory=true;
    SelectObject(-1);
-   int i=objects.Count-1;
-   if(i<0){Notice("Nothing to undo");return;}
-   if(objects[i]!=null)Destroy(objects[i]);
-   objects.RemoveAt(i);project.pieces.RemoveAt(i);anchor=null;
-   Notice("Last object removed");
+   for(int k=0;k<objects.Count;k++)if(objects[k]!=null)Destroy(objects[k]);
+   objects.Clear();
+   project=restored;
+   foreach(var part in project.pieces)objects.Add(Create(part));
+   anchor=null;
+   restoringHistory=false;
+  }
+  void UndoLast(){
+   if(undoHistory.Count==0){Notice("Nothing to undo");return;}
+   redoHistory.Push(JsonUtility.ToJson(project));
+   RestoreSnapshot(undoHistory.Pop());
+   Notice("Undone");
+  }
+  void RedoLast(){
+   if(redoHistory.Count==0){Notice("Nothing to redo");return;}
+   undoHistory.Push(JsonUtility.ToJson(project));
+   RestoreSnapshot(redoHistory.Pop());
+   Notice("Redone");
   }
   void ToggleGrid(){
    showGrid=!showGrid;
@@ -446,7 +475,78 @@ namespace WorldBuilder {
     Add(new Piece("floor",(start+p)*.5f+Vector3.up*FloorCenter,new Vector3(Mathf.Max(Mathf.Abs(delta.x),gridSize),FloorThickness,Mathf.Max(Mathf.Abs(delta.z),gridSize)),Quaternion.identity));
    }
   }
-  void Add(Piece piece){SelectObject(-1);project.pieces.Add(piece);objects.Add(Create(piece));}
+  void Add(Piece piece){RememberChange();AddWithoutHistory(piece);}
+  void AddWithoutHistory(Piece piece){SelectObject(-1);project.pieces.Add(piece);objects.Add(Create(piece));}
+  Vector3 SnapToExistingEnd(Vector3 input){
+   float radius=Mathf.Max(.25f,gridSize*.55f);
+   Vector3 snapped=input;float best=radius;
+   foreach(var wall in project.pieces){
+    if(wall.kind!="wall")continue;
+    Vector3 dir=wall.rotation*Vector3.right*wall.scale.x*.5f;
+    Vector3 a=wall.position-dir,b=wall.position+dir;
+    a.y=0;b.y=0;
+    float da=Vector3.Distance(input,a),db=Vector3.Distance(input,b);
+    if(da<best){best=da;snapped=a;}
+    if(db<best){best=db;snapped=b;}
+   }
+   return snapped;
+  }
+  Piece WallBetween(Vector3 a,Vector3 b){
+   Vector3 d=b-a;
+   return new Piece("wall",(a+b)*.5f+Vector3.up*wallHeight*.5f,
+     new Vector3(d.magnitude,wallHeight,wallThickness),
+     Quaternion.Euler(0,-Mathf.Atan2(d.z,d.x)*Mathf.Rad2Deg,0));
+  }
+  void MakeRoom(Vector3 a,Vector3 b){
+   float x1=Mathf.Min(a.x,b.x),x2=Mathf.Max(a.x,b.x);
+   float z1=Mathf.Min(a.z,b.z),z2=Mathf.Max(a.z,b.z);
+   if(x2-x1<gridSize*.5f||z2-z1<gridSize*.5f){Notice("Room must have width and depth");return;}
+   RememberChange();
+   var p1=new Vector3(x1,0,z1);var p2=new Vector3(x2,0,z1);
+   var p3=new Vector3(x2,0,z2);var p4=new Vector3(x1,0,z2);
+   AddWithoutHistory(WallBetween(p1,p2));
+   AddWithoutHistory(WallBetween(p2,p3));
+   AddWithoutHistory(WallBetween(p3,p4));
+   AddWithoutHistory(WallBetween(p4,p1));
+   AddWithoutHistory(new Piece("floor",new Vector3((x1+x2)*.5f,FloorCenter,(z1+z2)*.5f),
+     new Vector3(x2-x1,FloorThickness,z2-z1),Quaternion.identity));
+   Notice("Room created: "+(x2-x1).ToString("F1")+" × "+(z2-z1).ToString("F1")+" m");
+  }
+  void AddOpening(bool window){
+   if(sceneCamera==null)return;
+   Ray ray=sceneCamera.ScreenPointToRay(Input.mousePosition);
+   if(!Physics.Raycast(ray,out RaycastHit hit,300f)){Notice("Click an existing wall");return;}
+   int idx=-1;
+   for(int i=0;i<objects.Count;i++){
+    if(project.pieces[i].kind=="wall"&&objects[i]!=null&&
+       (hit.collider.gameObject==objects[i]||hit.collider.transform.IsChildOf(objects[i].transform))){idx=i;break;}
+   }
+   if(idx<0){Notice("Click an existing wall to add an opening");return;}
+   Piece original=project.pieces[idx];
+   float length=original.scale.x,height=original.scale.y;
+   float width=window?1.2f:.9f;
+   if(length<width+.3f||height<1.6f){Notice("Wall is too small for this opening");return;}
+   Vector3 local=Quaternion.Inverse(original.rotation)*(hit.point-original.position);
+   float center=Mathf.Clamp(local.x,-length*.5f+width*.5f+.08f,length*.5f-width*.5f-.08f);
+   float left=center-width*.5f,right=center+width*.5f;
+   float bottom=window?.85f:0f,openingHeight=window?Mathf.Min(1.15f,height-1.1f):Mathf.Min(2.1f,height-.15f);
+   RememberChange();
+   if(objects[idx]!=null)Destroy(objects[idx]);
+   objects.RemoveAt(idx);project.pieces.RemoveAt(idx);
+   float t=original.scale.z;
+   Action<float,float,float,float,string> part=(xStart,xEnd,yStart,yEnd,kind)=>{
+    if(xEnd-xStart<.025f||yEnd-yStart<.025f)return;
+    Vector3 localPos=new Vector3((xStart+xEnd)*.5f,(yStart+yEnd)*.5f-height*.5f,0);
+    AddWithoutHistory(new Piece(kind,original.position+original.rotation*localPos,
+      new Vector3(xEnd-xStart,yEnd-yStart,t),original.rotation));
+   };
+   part(-length*.5f,left,0,height,"wall");
+   part(right,length*.5f,0,height,"wall");
+   part(left,right,bottom+openingHeight,height,"wall");
+   if(window)part(left,right,0,bottom,"wall");
+   // The gap remains an actual opening with colliders on surrounding pieces.
+   Notice(window?"Window opening created":"Door opening created");
+  }
   GameObject Create(Piece piece){
    if(piece.kind=="imported"){
     try{
