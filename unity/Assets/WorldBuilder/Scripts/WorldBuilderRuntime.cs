@@ -44,7 +44,7 @@ namespace WorldBuilder {
   const float LevelHeight=2.85f;
   const float DefaultWallHeight=2.7f;
   const float DefaultWallThickness=.16f;
-  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs, Paint, Garage, Light, Terrain, Water, Mirror, Seat, Spawn }
+  public enum Tool { Wall, Floor, Couch, Table, Erase, Imported, Select, Room, Door, Window, Roof, Stairs, Paint, Garage, Light, Terrain, Water, Mirror, Seat, Spawn, Tree, Path }
   public Tool currentTool=Tool.Wall;
   private Vector3? anchor;
   private readonly Stack<string> undoHistory=new Stack<string>();
@@ -554,6 +554,9 @@ namespace WorldBuilder {
     float size=currentTool==Tool.Mirror?1.4f:.3f;
     preview.transform.position=p+Vector3.up*(currentTool==Tool.Light?2.35f:currentTool==Tool.Mirror?1.4f:.5f);
     preview.transform.localScale=Vector3.one*size;
+   }else if(currentTool==Tool.Tree){
+    preview.transform.position=p+Vector3.up*2f;
+    preview.transform.localScale=new Vector3(1.3f,4f,1.3f);
    }else if(currentTool==Tool.Couch||currentTool==Tool.Table){
     bool sofa=currentTool==Tool.Couch;
     preview.transform.position=p+Vector3.up*.4f;
@@ -868,6 +871,7 @@ namespace WorldBuilder {
    if(currentTool==Tool.Door||currentTool==Tool.Window||currentTool==Tool.Garage){AddOpening(currentTool==Tool.Window);return;}
    if(currentTool==Tool.Room&&polygonMode){polygonCorners.Add(p);Notice("Corner "+polygonCorners.Count+" · Enter to close room");return;}
    if(currentTool==Tool.Light){var piece=new Piece(lightMode==0?"light-point":"light-spot",p+Vector3.up*2.35f,Vector3.one,Quaternion.Euler(90,0,0));piece.lightIntensity=lightBrightness;piece.lightRange=lightRadius;Add(piece);return;}
+   if(currentTool==Tool.Tree){Add(new Piece("tree",p,new Vector3(1f,4f,1f),Quaternion.identity));return;}
    if(currentTool==Tool.Mirror){Add(new Piece("vrc-mirror",p+Vector3.up*1.4f,new Vector3(1.5f,2f,.05f),Quaternion.identity));return;}
    if(currentTool==Tool.Seat){Add(new Piece("vrc-seat",p+Vector3.up*.5f,new Vector3(.55f,.2f,.55f),Quaternion.identity));return;}
    if(currentTool==Tool.Spawn){Add(new Piece("vrc-spawn",p+Vector3.up*1f,new Vector3(.3f,.3f,.3f),Quaternion.identity));return;}
@@ -884,6 +888,7 @@ namespace WorldBuilder {
    if(Vector3.Distance(start,p)<.01f)return;
    if(currentTool==Tool.Room){MakeRoom(start,p);return;}
    if(currentTool==Tool.Terrain){Add(new Piece("terrain",(start+p)*.5f,new Vector3(Mathf.Max(2f,Mathf.Abs(start.x-p.x)),terrainAmplitude,Mathf.Max(2f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
+   if(currentTool==Tool.Path){Add(new Piece("path",(start+p)*.5f+Vector3.up*.04f,new Vector3(Mathf.Max(.5f,Mathf.Abs(start.x-p.x)),.08f,Mathf.Max(.5f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
    if(currentTool==Tool.Water){Add(new Piece("water",(start+p)*.5f,new Vector3(Mathf.Max(1f,Mathf.Abs(start.x-p.x)),.08f,Mathf.Max(1f,Mathf.Abs(start.z-p.z))),Quaternion.identity));return;}
    if(currentTool==Tool.Roof){MakeRoof(start,p);return;}
    if(currentTool==Tool.Stairs){MakeStairs(start,p);return;}
@@ -1109,6 +1114,23 @@ namespace WorldBuilder {
    }catch(Exception ex){Diagnostics.Add("ERROR","Material image unreadable: "+ex.Message);return null;}
   }
   GameObject Create(Piece piece){
+   if(piece.kind=="tree"){
+    GameObject root=new GameObject("WB_Tree");
+    root.transform.SetPositionAndRotation(piece.position,piece.rotation);
+    GameObject trunk=GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+    trunk.name="Tree Trunk";trunk.transform.SetParent(root.transform,false);
+    trunk.transform.localPosition=new Vector3(0,1.05f,0);
+    trunk.transform.localScale=new Vector3(.38f,1.05f,.38f);
+    trunk.GetComponent<Renderer>().material.color=new Color(.34f,.21f,.13f);
+    GameObject crown=GameObject.CreatePrimitive(PrimitiveType.Sphere);
+    crown.name="Tree Canopy";crown.transform.SetParent(root.transform,false);
+    crown.transform.localPosition=new Vector3(0,2.9f,0);
+    crown.transform.localScale=new Vector3(2.6f,2.5f,2.6f);
+    crown.GetComponent<Renderer>().material.color=new Color(.20f,.43f,.22f);
+    root.transform.localScale=new Vector3(piece.scale.x,piece.scale.y/4f,piece.scale.z);
+    return root;
+   }
+
    if(piece.kind=="polygon-floor"||piece.kind=="terrain"){
     GameObject meshObj=new GameObject("WB_"+piece.kind);
     Mesh mesh=piece.kind=="polygon-floor"?PolygonGeometry.Create(piece.vertices,FloorThickness):
@@ -1188,7 +1210,7 @@ namespace WorldBuilder {
    }else if(piece.kind=="opening-frame"){
     obj.GetComponent<Renderer>().material.color=new Color(.15f,.75f,.94f);
    }else if(material!=null)obj.GetComponent<Renderer>().sharedMaterial=material;
-   else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.89f,.91f,.94f):piece.kind=="floor"?new Color(.47f,.52f,.58f):piece.kind=="water"?new Color(.18f,.47f,.75f):piece.kind=="vrc-mirror"?new Color(.55f,.72f,.82f):piece.kind=="vrc-spawn"?new Color(.22f,.86f,.40f):new Color(.25f,.6f,.7f);
+   else obj.GetComponent<Renderer>().material.color=piece.kind=="wall"?new Color(.89f,.91f,.94f):piece.kind=="floor"?new Color(.47f,.52f,.58f):piece.kind=="water"?new Color(.18f,.47f,.75f):piece.kind=="path"?new Color(.47f,.43f,.38f):piece.kind=="vrc-mirror"?new Color(.55f,.72f,.82f):piece.kind=="vrc-spawn"?new Color(.22f,.86f,.40f):new Color(.25f,.6f,.7f);
    return obj;
   }
   void Erase(Vector3 point){
@@ -1364,10 +1386,12 @@ namespace WorldBuilder {
     if(Button(new Rect(x+406,line,188,42),"Fog: "+(project.fog?"On":"Off"))){project.fog=!project.fog;ApplyEnvironment();}
     string[] names={"Day","Sunset","Night","Overcast"};
     for(int i=0;i<4;i++){int k=i;if(Button(new Rect(x+18+i*146,line+53,138,36),names[i],project.skyPreset==i)){project.skyPreset=k;ApplyEnvironment();}}
-    Label(new Rect(x+19,line+106,300,24),"Terrain elevation: "+terrainAmplitude.ToString("F1")+" m");
-    terrainAmplitude=GUI.HorizontalSlider(new Rect(x+22,line+132,285,19),terrainAmplitude,.25f,12f);
-    Label(new Rect(x+330,line+106,265,24),"Sun angle: "+project.sunPitch.ToString("F0")+"°");
-    float angle=GUI.HorizontalSlider(new Rect(x+334,line+132,255,19),project.sunPitch,5f,85f);
+    if(Button(new Rect(x+18,line+95,140,32),"Plant Tree"))SelectTool(Tool.Tree);
+    if(Button(new Rect(x+168,line+95,140,32),"Path / Driveway"))SelectTool(Tool.Path);
+    Label(new Rect(x+19,line+133,300,24),"Terrain elevation: "+terrainAmplitude.ToString("F1")+" m");
+    terrainAmplitude=GUI.HorizontalSlider(new Rect(x+22,line+160,285,19),terrainAmplitude,.25f,12f);
+    Label(new Rect(x+330,line+133,265,24),"Sun angle: "+project.sunPitch.ToString("F0")+"°");
+    float angle=GUI.HorizontalSlider(new Rect(x+334,line+160,255,19),project.sunPitch,5f,85f);
     if(Mathf.Abs(angle-project.sunPitch)>.01f){project.sunPitch=angle;ApplyEnvironment();}
    }else{
     if(Button(new Rect(x+18,line,190,42),"Mirror"))SelectTool(Tool.Mirror);
