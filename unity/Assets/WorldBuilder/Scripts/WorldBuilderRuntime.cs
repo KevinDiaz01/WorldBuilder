@@ -839,7 +839,7 @@ namespace WorldBuilder {
     if(preview!=null)preview.SetActive(false);
     return;
    }
-   if(Input.GetKeyDown(KeyCode.G))ToggleGrid();
+   if(Input.GetKeyDown(KeyCode.G)&&!Input.GetKey(KeyCode.LeftControl)&&!Input.GetKey(KeyCode.RightControl))ToggleGrid();
    if(currentTool==Tool.Room&&Input.GetKeyDown(KeyCode.C)){polygonMode=!polygonMode;polygonCorners.Clear();anchor=null;Notice(polygonMode?"Custom room: click corners, Enter to finish":"Rectangular room mode");}
    if(currentTool==Tool.Room&&polygonMode){
     if(Input.GetKeyDown(KeyCode.Return)||Input.GetKeyDown(KeyCode.KeypadEnter))CompletePolygonRoom();
