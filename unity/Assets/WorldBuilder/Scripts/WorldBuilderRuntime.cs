@@ -441,9 +441,21 @@ namespace WorldBuilder {
      var piece=project.pieces[selectedIndex];
      Vector3 target=dragPoint+selectionDragOffset;
      target.y=piece.position.y;
-     piece.position=target;
-     objects[selectedIndex].transform.position=target;
-     RefreshSelectionOutline();
+     Vector3 movement=target-piece.position;
+     if(movement.sqrMagnitude>.000001f){
+      if(IsRoomFloor(selectedIndex)){
+       string group=piece.roomId;
+       for(int j=0;j<project.pieces.Count;j++){
+        if(project.pieces[j].roomId!=group||objects[j]==null)continue;
+        project.pieces[j].position+=movement;
+        objects[j].transform.position=project.pieces[j].position;
+       }
+      }else{
+       piece.position=target;
+       objects[selectedIndex].transform.position=target;
+      }
+      RefreshSelectionOutline();
+     }
     }
    }
    if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Z))UndoLast();
