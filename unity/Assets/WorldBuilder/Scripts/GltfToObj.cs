@@ -122,6 +122,7 @@ namespace WorldBuilder {
     }
     if(string.IsNullOrEmpty(json))throw new InvalidDataException("Missing GLB JSON chunk");
    }else json=File.ReadAllText(input);
+   if(new FileInfo(input).Length>512L*1024*1024)throw new InvalidDataException("3D model exceeds 512 MB import limit");
    Document doc=JsonUtility.FromJson<Document>(json);
    if(doc==null||doc.buffers==null||doc.bufferViews==null||doc.accessors==null||doc.meshes==null)
     throw new InvalidDataException("glTF has no supported mesh data");
@@ -198,8 +199,14 @@ namespace WorldBuilder {
       var p=transform.MultiplyPoint3x4(new Vector3(v[0],v[1],v[2]));
       lines.Append("v ").Append(N(p.x)).Append(' ').Append(N(p.y)).Append(' ').Append(N(p.z)).Append('\n');
      }
-     foreach(var v in verts){int k=Array.IndexOf(verts,v);var t=uv==null?new float[]{0,0}:uv[k];lines.Append("vt ").Append(N(t[0])).Append(' ').Append(N(t[1])).Append('\n');}
-     foreach(var v in verts){int k=Array.IndexOf(verts,v);Vector3 n=normals==null?Vector3.up:normMatrix.MultiplyVector(new Vector3(normals[k][0],normals[k][1],normals[k][2])).normalized;lines.Append("vn ").Append(N(n.x)).Append(' ').Append(N(n.y)).Append(' ').Append(N(n.z)).Append('\n');}
+     for(int k=0;k<verts.Length;k++){
+      float[] t=uv==null?null:uv[k];
+      lines.Append("vt ").Append(N(t==null?0f:t[0])).Append(' ').Append(N(t==null?0f:t[1])).Append('\n');
+     }
+     for(int k=0;k<verts.Length;k++){
+      Vector3 n=normals==null?Vector3.up:normMatrix.MultiplyVector(new Vector3(normals[k][0],normals[k][1],normals[k][2])).normalized;
+      lines.Append("vn ").Append(N(n.x)).Append(' ').Append(N(n.y)).Append(' ').Append(N(n.z)).Append('\n');
+     }
      int nIndices=indices==null?verts.Length:indices.Length;
      for(int t=0;t+2<nIndices;t+=3){
       int[] ids=new int[3];bool valid=true;
