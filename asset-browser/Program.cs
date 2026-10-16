@@ -14,7 +14,7 @@ internal static class Program {
   if (args.Length<2 || !long.TryParse(args[0],out long hwnd) || hwnd==0) return;
   Application.EnableVisualStyles();
   Application.SetCompatibleTextRenderingDefault(false);
-  Application.Run(new BrowserWindow(new IntPtr(hwnd),args[1]));
+  Application.Run(new BrowserWindow(new IntPtr(hwnd),args[1],args.Length>2?args[2]:"Models"));
  }
 }
 
@@ -30,6 +30,7 @@ internal sealed class BrowserWindow : Form {
  [StructLayout(LayoutKind.Sequential)] struct RECT {public int Left,Top,Right,Bottom;}
  readonly IntPtr unity;
  readonly string assetsRoot;
+ readonly string category;
  readonly WebView2 view=new(){Dock=DockStyle.Fill};
  readonly ToolStrip strip=new(){
   GripStyle=ToolStripGripStyle.Hidden,RenderMode=ToolStripRenderMode.Professional,
@@ -39,16 +40,44 @@ internal sealed class BrowserWindow : Form {
  readonly System.Windows.Forms.Timer layoutTimer=new(){Interval=250};
  string provider="Poly Haven";
  readonly string[] names={"Poly Haven","Sketchfab","ambientCG"};
- readonly string[] sites={"https://polyhaven.com/models","https://sketchfab.com/search?features=downloadable&type=models","https://ambientcg.com/list?type=Material"};
- public BrowserWindow(IntPtr unityWindow,string root){
-  unity=unityWindow;assetsRoot=root;
-  Text="WorldBuilder Assets Browser";
-  // Embed as a closable panel inside Unity instead of a second desktop window.
-  FormBorderStyle=FormBorderStyle.None;
-  ShowInTaskbar=false;
-  StartPosition=FormStartPosition.Manual;
-  MinimumSize=new Size(800,520);
+ string[] sites=Array.Empty<string>();
+ int initialTab=0;
+ static string Search(string value)=>Uri.EscapeDataString(value);
+ static string ModelSearch(string term)=>"https://polyhaven.com/models?q="+Search(term);
+ static string SketchSearch(string term)=>"https://sketchfab.com/search?features=downloadable&type=models&q="+Search(term);
+ static string AmbientSearch(string term,bool materials)=>"https://ambientcg.com/list?type="+(materials?"Material":"3DModel")+"&search="+Search(term);
+ static string NormalizedCategory(string value){
+  switch((value??"").Trim().ToLowerInvariant()){
+   case "materials":case "material":case "surface materials":return "Materials";
+   case "trees":case "tree":return "Trees";
+   case "terrain":case "landscape":return "Terrain";
+   case "water":return "Water";
+   case "plants":case "nature":return "Plants";
+   case "furniture":case "lighting":case "decor":case "kitchen":case "bathroom":
+   case "outdoor":case "architecture":case "models":case "other":return System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(value.Trim().ToLowerInvariant());
+   default:return "Models";
+  }
+ }
+ public BrowserWindow(IntPtr unityWindow,string root,string requestedCategory){
+  unity=unityWindow;assetsRoot=root;category=NormalizedCategory(requestedCategory);
+  string term=category=="Models"?"":category=="Trees"?"tree":category=="Plants"?"plant":category=="Terrain"?"ground":category=="Water"?"water":category=="Materials"?"texture":category.ToLowerInvariant();
+  sites=new[]{term.Length==0?"https://polyhaven.com/models":ModelSearch(term),
+   term.Length==0?"https://sketchfab.com/search?features=downloadable&type=models":SketchSearch(term),
+   AmbientSearch(category=="Materials"?"":term,true)};
+  if(category=="Trees")sites[0]="https://polyhaven.com/models/nature/trees";
+  if(category=="Plants")sites[0]="https://polyhaven.com/models/nature/plants";
+  if(category=="Materials"){sites[0]="https://polyhaven.com/textures";initialTab=2;}
+
+  Text="WorldBuilder · Find "+category+"  (Close with X or Esc)";
+  // Win32 SetParent hid/clipped our toolbar on some Windows DPI arrangements.
+  // Prefer a dependable titled, resizable window with visible close controls.
+  FormBorderStyle=FormBorderStyle.Sizable;
+  ShowInTaskbar=true;
+  StartPosition=FormStartPosition.CenterScreen;
+  MinimumSize=new Size(850,560);
   Size=new Size(1220,750);
+  KeyPreview=true;
+  KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Escape){Close();e.Handled=true;}};
   BackColor=Color.FromArgb(246,244,251);
   var back=new ToolStripButton("‹"){ToolTipText="Back"};
   var forward=new ToolStripButton("›"){ToolTipText="Forward"};
@@ -71,7 +100,7 @@ internal sealed class BrowserWindow : Form {
    strip.Items.Add(btn);
   }
   strip.Items.Add(new ToolStripSeparator());
-  strip.Items.Add(new ToolStripLabel("  ·  Models import automatically when compatible"){
+  strip.Items.Add(new ToolStripLabel("  ·  Browsing: "+category+" · compatible downloads import automatically"){
    ForeColor=Color.FromArgb(102,112,137)});
   strip.Items.Add(new ToolStripSeparator());
   var folder=new ToolStripButton("My Downloads");
@@ -103,10 +132,9 @@ internal sealed class BrowserWindow : Form {
      if(!string.IsNullOrWhiteSpace(args.Uri))view.CoreWebView2.Navigate(args.Uri);
     };
     view.CoreWebView2.NavigationCompleted+=(_,a)=>{if(!a.IsSuccess)status.Text="Page error: "+a.WebErrorStatus;};
-    SelectSite(0);
-    Attach();
-    layoutTimer.Tick+=(_,_)=>Position();
-    layoutTimer.Start();
+    SelectSite(initialTab);
+    // Keep the standard Windows titlebar so controls cannot be hidden.
+    // Unity does not provide a reliable WinForms child client area here.
    }catch(Exception e){status.Text="Browser unavailable: "+e.Message;}
    Activate();
   };
@@ -120,7 +148,7 @@ internal sealed class BrowserWindow : Form {
    sourceButtons[j].ForeColor=current?Color.FromArgb(34,64,146):Color.FromArgb(45,60,91);
   }
   provider=names[i];
-  Text="WorldBuilder Assets - "+provider;
+  Text="WorldBuilder · "+category+" · "+provider+" (Esc to close)";
   if(view.CoreWebView2!=null)view.CoreWebView2.Navigate(sites[i]);
   status.Text=provider;
  }
