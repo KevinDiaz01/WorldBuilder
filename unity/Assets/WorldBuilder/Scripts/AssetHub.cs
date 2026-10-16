@@ -7,7 +7,7 @@ using UnityEngine;
 namespace WorldBuilder {
  // First-stage offline asset hub. A future embedded browser will direct its downloads here.
  public static class AssetHub {
-  public static readonly string[] Providers={"Poly Haven","Kenney","ambientCG","Other"};
+  public static readonly string[] Providers={"Poly Haven","Unity Asset Store","ambientCG","Other"};
   public static string Root {
    get {
     string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"WorldBuilder Assets");
@@ -114,7 +114,7 @@ namespace WorldBuilder {
      bool model=ext==".obj"||ext==".gltf"||ext==".glb"||ext==".zip";
      if(!model){
       if((ext==".fbx"||ext==".blend"||ext==".unitypackage"||ext==".7z"||ext==".rar")&&reportedUnsupported.Add(source))
-       Diagnostics.Add("WARN","Unsupported 3D format: "+Path.GetFileName(source)+" ("+provider+"). Use OBJ, GLB, glTF or ZIP.");
+       Diagnostics.Add("WARN",ext==".unitypackage"?"Unity Asset Store package requires import in Unity: "+Path.GetFileName(source)+". WorldBuilder cannot place .unitypackage directly.":"Unsupported 3D format: "+Path.GetFileName(source)+" ("+provider+"). Use OBJ, GLB, glTF or ZIP.");
       continue;
      }
      try{
