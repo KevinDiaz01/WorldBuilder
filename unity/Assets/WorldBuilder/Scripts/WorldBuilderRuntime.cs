@@ -76,6 +76,8 @@ namespace WorldBuilder {
   private string importedId;
   private float importedScale=1f;
   private float importedRotation=0f;
+  private Bounds importedBounds;
+  private bool importedBoundsReady=false;
   private string importPath="";
   private string importError="";
   private string targetVrcProject="";
@@ -305,6 +307,41 @@ namespace WorldBuilder {
   const float FloorTop=0.18f;
   const float FloorThickness=0.15f;
   const float FloorCenter=FloorTop-FloorThickness*.5f;
+  void SelectImportedAsset(string id){
+   importedId=id;importedBoundsReady=false;
+   try{
+    GameObject sample=ImportedObj.Load(Path.Combine(AssetLibrary(),id,"model.obj"));
+    var renderers=sample.GetComponentsInChildren<Renderer>();
+    if(renderers.Length>0){
+     importedBounds=renderers[0].bounds;
+     foreach(var renderer in renderers)importedBounds.Encapsulate(renderer.bounds);
+     importedBoundsReady=true;
+    }
+    Destroy(sample);
+   }catch(Exception error){Diagnostics.Add("ERROR","Unable to read asset bounds: "+error.Message);}
+   SelectTool(Tool.Imported);
+   Notice("Placing "+AssetHub.Name(id)+" · R/E rotate · click to place");
+  }
+  float PlacementHeight(){
+   if(sceneCamera==null)return 0;
+   Ray ray=sceneCamera.ScreenPointToRay(Input.mousePosition);
+   RaycastHit[] hits=Physics.RaycastAll(ray,500f);
+   Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
+   foreach(var hit in hits){
+    for(int i=0;i<objects.Count;i++){
+     if(objects[i]==null||project.pieces[i].kind!="floor")continue;
+     if(hit.collider.gameObject==objects[i]||hit.collider.transform.IsChildOf(objects[i].transform))
+      return hit.point.y;
+    }
+   }
+   return 0f;
+  }
+  Vector3 ImportedPlacement(Vector3 ground){
+   float lower=importedBoundsReady?importedBounds.min.y*importedScale:0f;
+   float targetY=PlacementHeight()-lower;
+   Vector3 result=new Vector3(ground.x,targetY,ground.z);
+   return result;
+  }
   void UpdatePreview(){
    bool aimedAtWall=(currentTool==Tool.Door||currentTool==Tool.Window)&&FindOpeningWall(out int ignoredWall,out Vector3 ignoredHit);
    bool onGround=MouseOnGround(out Vector3 p);
@@ -323,8 +360,8 @@ namespace WorldBuilder {
    preview.SetActive(true);
    preview.transform.rotation=Quaternion.identity;
    if(currentTool==Tool.Imported){
-    preview.transform.position=p+Vector3.up*.5f;
-    preview.transform.localScale=Vector3.one*importedScale;
+    preview.transform.position=ImportedPlacement(p);
+    preview.transform.localScale=importedBoundsReady?Vector3.Scale(importedBounds.size,Vector3.one*importedScale):Vector3.one*importedScale;
     preview.transform.rotation=Quaternion.Euler(0,importedRotation,0);
    }else if(currentTool==Tool.Door||currentTool==Tool.Window){
     if(!FindOpeningWall(out int wallIndex,out Vector3 hitPoint)){preview.SetActive(false);return;}
@@ -386,8 +423,7 @@ namespace WorldBuilder {
     string path=importPath.Trim().Trim('"');
     if(!File.Exists(path))throw new FileNotFoundException("Choose an existing model file.");
     string id=AssetHub.Import(path,"Other");
-    importedId=id;
-    currentTool=Tool.Imported;
+    SelectImportedAsset(id);
     showImport=false;
     importError="";
     catalogCategory=0;showCatalog=true;
@@ -521,6 +557,8 @@ namespace WorldBuilder {
    if(!showPause&&!showConfirmExit&&!showSettings&&!showExport&&!showImport&&!showProjects){
     if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.D))DuplicateSelection();
     if(Input.GetKeyDown(KeyCode.R)&&currentTool==Tool.Select)RotateSelection();
+    else if(currentTool==Tool.Imported&&(Input.GetKeyDown(KeyCode.R)||Input.GetKeyDown(KeyCode.E))){importedRotation=(importedRotation+45f)%360f;Notice("Asset rotation: "+importedRotation.ToString("F0")+"°");}
+    if(currentTool==Tool.Imported&&Input.GetKeyDown(KeyCode.Q)){importedRotation=(importedRotation+315f)%360f;Notice("Asset rotation: "+importedRotation.ToString("F0")+"°");}
     if(Input.GetKeyDown(KeyCode.Delete)&&currentTool==Tool.Select)DeleteSelection();
     if(Input.GetKey(KeyCode.LeftControl)&&Input.GetKeyDown(KeyCode.Y))RedoLast();
    }
@@ -575,8 +613,8 @@ namespace WorldBuilder {
    if(currentTool==Tool.Paint){PaintSurface();return;}
    if(currentTool==Tool.Door||currentTool==Tool.Window){AddOpening(currentTool==Tool.Window);return;}
    if(currentTool==Tool.Imported){
-    if(string.IsNullOrEmpty(importedId)){Notice("Import an OBJ first");return;}
-    var item=new Piece("imported",p,Vector3.one*importedScale,Quaternion.Euler(0,importedRotation,0));
+    if(string.IsNullOrEmpty(importedId)){Notice("Choose an imported model first");return;}
+    var item=new Piece("imported",ImportedPlacement(p),Vector3.one*importedScale,Quaternion.Euler(0,importedRotation,0));
     item.assetId=importedId;Add(item);return;
    }
    if(currentTool==Tool.Couch||currentTool==Tool.Table) {
@@ -1172,8 +1210,7 @@ namespace WorldBuilder {
       string modelName=AssetHub.Name(id);
       if(modelName==id)modelName="Imported Asset "+(k+1);
       DrawAssetTile(new Rect(k*180,0,170,151),modelName,"Imported model",k,()=>{
-       importedId=id;SelectTool(Tool.Imported);
-       Notice("Click the ground to place "+AssetHub.Name(id));
+       SelectImportedAsset(id);
       },AssetThumbnail(id));
      }
      GUI.EndScrollView();
