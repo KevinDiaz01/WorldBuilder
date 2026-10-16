@@ -1494,12 +1494,16 @@ namespace WorldBuilder {
     Rect spot=new Rect(middle+k*cell,20f,cell-7f,46f);
     if(Button(spot,titles[k],creativeMode==k))SwitchMode(chosen);
    }
-   float actions=w-428f;
-   if(Button(new Rect(actions,22,62,42),"↶"))UndoLast();
-   if(Button(new Rect(actions+67,22,62,42),"↷"))RedoLast();
-   if(Button(new Rect(actions+134,22,84,42),"SAVE",true))Save();
-   if(Button(new Rect(actions+224,22,91,42),"DETAILS"))showInspector=!showInspector;
-   if(Button(new Rect(actions+321,22,91,42),"MENU"))showPause=!showPause;
+   float actions=w-447f;
+   if(Button(new Rect(actions,22,47,42),"↶"))UndoLast();
+   if(Button(new Rect(actions+52,22,47,42),"↷"))RedoLast();
+   if(Button(new Rect(actions+104,22,67,42),"SAVE",true))Save();
+   if(Button(new Rect(actions+177,22,82,42),"STUDIO")){
+    showStudio=!showStudio;
+    studioTab=creativeMode==2?2:creativeMode==1?1:0;
+   }
+   if(Button(new Rect(actions+265,22,86,42),"DETAILS"))showInspector=!showInspector;
+   if(Button(new Rect(actions+357,22,80,42),"MENU"))showPause=!showPause;
   }
   void SetCameraView(bool overhead){
    var orbit=sceneCamera!=null?sceneCamera.GetComponent<OrbitCamera>():null;
@@ -1511,8 +1515,8 @@ namespace WorldBuilder {
   }
   void DrawStudio(float w,float h){
    float x=Mathf.Clamp((w-650f)*.5f,520f,Mathf.Max(520f,w-665f)),y=163f;
-   GUI.Box(new Rect(x,y,630,285),"",panelStyle);
-   Label(new Rect(x+19,y+9,380,30),"WorldBuilder 1.0 · Studios",true);
+   SoftPanel(new Rect(x,y,630,285),trayStyle);
+   GUI.Label(new Rect(x+19,y+9,380,30),"DESIGN STUDIO",sectionStyle);
    if(Button(new Rect(x+568,y+6,45,32),"X")){showStudio=false;return;}
    string[] tabs={"Architecture","Lighting","Landscape","VRChat"};
    for(int i=0;i<tabs.Length;i++){int k=i;if(Button(new Rect(x+15+i*153,y+42,145,35),tabs[i],studioTab==i))studioTab=k;}
@@ -2023,44 +2027,54 @@ namespace WorldBuilder {
    if(browserProcess!=null&&!browserProcess.HasExited)browserProcess.Kill();
    Application.Quit();
   }
+  void DrawModalShade(float w,float h){
+   Color previous=GUI.color;
+   GUI.color=new Color(.10f,.14f,.23f,.55f);
+   GUI.DrawTexture(new Rect(0,0,w,h),Texture2D.whiteTexture);
+   GUI.color=previous;
+  }
   void DrawPause(float w,float h){
-   GUI.Box(new Rect(0,0,w,h),"",panelStyle);
-   float x=w*.5f-182,y=h*.5f-285;
+   DrawModalShade(w,h);
+   float x=w*.5f-211,y=Mathf.Max(32f,h*.5f-297f);
    if(showConfirmExit){
-    GUI.Box(new Rect(x-30,y+155,424,274),"",panelStyle);
-    Label(new Rect(x+3,y+178,355,35),"Exit WorldBuilder?",true);
-    Label(new Rect(x+3,y+213,362,43),"Save your work before leaving.");
-    if(Button(new Rect(x+5,y+259,350,38),"Save and Exit"))ExitApplication(true);
-    if(Button(new Rect(x+5,y+304,350,38),"Exit Without Saving"))ExitApplication(false);
-    if(Button(new Rect(x+5,y+349,350,38),"Cancel"))showConfirmExit=false;
+    SoftPanel(new Rect(x,y+136,422,317),trayStyle);
+    GUI.Label(new Rect(x+29,y+167,365,37),"LEAVE WORLDBUILDER?",sectionStyle);
+    GUI.Label(new Rect(x+29,y+210,368,45),
+     "Your latest automatic recovery is kept separately from the project file.",captionStyle);
+    if(Button(new Rect(x+28,y+270,366,48),"SAVE & EXIT",true))ExitApplication(true);
+    if(GUI.Button(new Rect(x+28,y+325,366,43),"EXIT WITHOUT SAVING",destructiveStyle))ExitApplication(false);
+    if(Button(new Rect(x+28,y+375,366,43),"KEEP BUILDING"))showConfirmExit=false;
     return;
    }
-   GUI.Box(new Rect(x,y,364,570),"",panelStyle);
-   Label(new Rect(x+37,y+23,295,36),"WorldBuilder",true);
-   if(Button(new Rect(x+30,y+73,304,43),"Resume Building"))showPause=false;
-   if(Button(new Rect(x+30,y+122,304,43),"Save Project"))Save();
-   if(Button(new Rect(x+30,y+171,304,43),"Walk Preview"))EnterWalk();
-   if(Button(new Rect(x+30,y+220,304,43),"Export to VRChat")){showPause=false;showExport=true;}
-   if(Button(new Rect(x+30,y+269,304,43),"Projects")){showPause=false;showProjects=true;}
-   if(Button(new Rect(x+30,y+318,304,43),"Settings & Help")){showPause=false;showSettings=true;}
-   if(Button(new Rect(x+30,y+367,304,43),"New Project")){showPause=false;NewProject();}
-   if(Button(new Rect(x+30,y+433,304,49),"Exit WorldBuilder")){showConfirmExit=true;}
-   Label(new Rect(x+30,y+507,304,29),"Esc to return to your world");
+   SoftPanel(new Rect(x,y,422,568),trayStyle);
+   GUI.Label(new Rect(x+30,y+24,360,34),"WORLD BUILDER",headingStyle);
+   GUI.Label(new Rect(x+32,y+60,356,27),"Your creative world is waiting",captionStyle);
+   if(Button(new Rect(x+28,y+104,366,48),"CONTINUE BUILDING",true))showPause=false;
+   if(Button(new Rect(x+28,y+158,366,43),"SAVE PROJECT"))Save();
+   if(Button(new Rect(x+28,y+208,366,43),"WALK THROUGH WORLD"))EnterWalk();
+   if(Button(new Rect(x+28,y+258,366,43),"EXPORT FOR VRCHAT")){showPause=false;showExport=true;}
+   if(Button(new Rect(x+28,y+308,366,43),"MY PROJECTS & RECOVERY")){showPause=false;showProjects=true;}
+   if(Button(new Rect(x+28,y+358,366,43),"SETTINGS & CONTROLS")){showPause=false;showSettings=true;}
+   if(Button(new Rect(x+28,y+408,366,43),"START NEW WORLD")){showPause=false;NewProject();}
+   if(GUI.Button(new Rect(x+28,y+466,366,43),"EXIT APPLICATION",destructiveStyle))showConfirmExit=true;
+   GUI.Label(new Rect(x+33,y+523,350,24),"ESC  ·  Return to building",mutedStyle);
   }
   void DrawSettings(float w,float h){
-   float x=w*.5f-250,y=h*.5f-238;
-   GUI.Box(new Rect(x,y,500,476),"",panelStyle);
-   Label(new Rect(x+25,y+18,455,35),"Settings & Help",true);
-   Label(new Rect(x+25,y+64,455,28),"BUILD CONTROLS");
-   Label(new Rect(x+25,y+100,455,27),"1 Walls   2 Floors   3 Sofa   4 Table   5 Erase");
-   Label(new Rect(x+25,y+133,455,27),"0 Select   6 Rooms   M Materials   G Grid");
-   Label(new Rect(x+25,y+185,455,27),"Drag object   R Rotate   Ctrl+D Duplicate   Del Remove");
-   Label(new Rect(x+25,y+167,455,27),"Ctrl+S Save   Ctrl+O Reload   Esc Menu   T/P Views");
-   Label(new Rect(x+25,y+206,455,26),"CAMERA");
-   Label(new Rect(x+25,y+239,455,28),"Right mouse: orbit    Scroll: zoom");
-   Label(new Rect(x+25,y+271,455,28),"Walk Preview: WASD, mouse look, Esc to return");
-   Label(new Rect(x+25,y+322,455,27),"WorldBuilder is currently in development.");
-   if(Button(new Rect(x+24,y+397,452,42),"Back to Building"))showSettings=false;
+   DrawModalShade(w,h);
+   float x=w*.5f-300,y=Mathf.Max(26f,h*.5f-263f);
+   SoftPanel(new Rect(x,y,600,524),trayStyle);
+   GUI.Label(new Rect(x+26,y+20,540,33),"SETTINGS & SHORTCUTS",headingStyle);
+   GUI.Label(new Rect(x+28,y+62,540,26),"Design faster with a few simple controls",captionStyle);
+   GUI.Label(new Rect(x+30,y+105,540,28),"BUILD & DECORATE",sectionStyle);
+   GUI.Label(new Rect(x+32,y+144,526,25),"Click or drag to place objects · Shift-click to select several",captionStyle);
+   GUI.Label(new Rect(x+32,y+176,526,25),"C: custom rooms · Enter: finish · R: rotate · N: furniture snap",captionStyle);
+   GUI.Label(new Rect(x+32,y+208,526,25),"Ctrl+D: duplicate · Ctrl+G: group · G: grid",captionStyle);
+   GUI.Label(new Rect(x+30,y+255,540,27),"PROJECT & CAMERA",sectionStyle);
+   GUI.Label(new Rect(x+32,y+292,526,25),"Ctrl+S: save · Ctrl+Z/Y: undo/redo · F2: diagnostics",captionStyle);
+   GUI.Label(new Rect(x+32,y+324,526,25),"Right mouse: orbit · Scroll: zoom · T/P: camera views",captionStyle);
+   GUI.Label(new Rect(x+30,y+369,540,28),"PEACE OF MIND",sectionStyle);
+   GUI.Label(new Rect(x+32,y+405,527,27),"Automatic recovery snapshots protect work between manual saves.",smallStyle);
+   if(Button(new Rect(x+28,y+459,544,43),"BACK TO BUILDING",true))showSettings=false;
   }
   void DrawDiagnostics(float w,float h){
    GUI.Box(new Rect(0,0,w,h),"",panelStyle);
@@ -2095,10 +2109,10 @@ namespace WorldBuilder {
      "Supported 3D: OBJ, GLB, glTF, ZIP   ·   Textures-only packages do not appear under My Assets.");
   }
   void DrawRecoveryPrompt(float w,float h){
-   GUI.Box(new Rect(0,0,w,h),"",panelStyle);
+   DrawModalShade(w,h);
    float width=Mathf.Min(660f,w-48f);
    float x=(w-width)*.5f,y=Mathf.Max(30f,(h-390f)*.5f);
-   GUI.Box(new Rect(x,y,width,390f),"",panelStyle);
+   SoftPanel(new Rect(x,y,width,390f),trayStyle);
    Label(new Rect(x+30,y+23,width-60,40),"Recover your last build?",true);
    Label(new Rect(x+30,y+78,width-60,54),
       "WorldBuilder didn't close normally. A recovery copy of your work is available.");
