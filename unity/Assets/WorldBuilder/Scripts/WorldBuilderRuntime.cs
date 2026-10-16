@@ -2062,15 +2062,15 @@ namespace WorldBuilder {
       string id=piece.assetId;
       if(!string.IsNullOrEmpty(id)){
        GUI.Label(new Rect(ox,y,282,24),"ORGANIZE IN MY ASSETS",miniStyle);y+=29;
-       string[] groups={"Furniture","Lighting","Decor","Kitchen","Bathroom",
-        "Trees","Plants","Outdoor","Architecture","Other"};
+       string[] groups={"Furniture","Living Room","Bedroom","Kitchen","Bathroom",
+        "Dining Room","Office","Outdoor","Lighting","Decor","Other","Trees"};
        int current=Array.IndexOf(groups,AssetHub.Category(id));
-       int next=GUI.SelectionGrid(new Rect(ox,y,286,104),current,groups,3,railStyle);
+       int next=GUI.SelectionGrid(new Rect(ox,y,286,142),current,groups,3,railStyle);
        if(next>=0&&next!=current){
         try{AssetHub.SetCategory(id,groups[next]);Notice("Moved to "+groups[next]);}
         catch(Exception ex){Notice("Could not sort model: "+ex.Message);}
        }
-       y+=118;
+       y+=156;
       }
      }
     }
@@ -2423,7 +2423,8 @@ namespace WorldBuilder {
     return;
    }
 
-   // Decorate: browse with readable, horizontally scrollable category tabs.
+   // The active left-hand collection owns the tray. Furniture is organized by
+   // room, not by a second redundant master list of unrelated item types.
    string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor",
     "Materials","Architecture","Other","Trees","Skyboxes"};
    float searchX=w-555f;
@@ -2435,19 +2436,23 @@ namespace WorldBuilder {
     else if(catalogCategory==8)ImportMaterialFile();
     else{showImport=true;showExport=false;}
    }
-   string browseCategory=catalogCategory==0?"Models":categories[catalogCategory];
-   if(Button(new Rect(w-239,top+13,165,36),"FIND "+(catalogCategory==8?"MATERIALS":catalogCategory==12?"SKYBOXES":catalogCategory==0?"ASSETS":"MORE")))
+   string[] rooms={"Living Room","Bedroom","Kitchen","Bathroom","Dining Room","Office","Outdoor","Other"};
+   string browseCategory=catalogCategory==1?rooms[Mathf.Clamp(furnitureRoom,0,rooms.Length-1)]:
+    catalogCategory==0?"Models":categories[catalogCategory];
+   if(Button(new Rect(w-239,top+13,165,36),"FIND "+(catalogCategory==0?"ASSETS":browseCategory.ToUpperInvariant())))
     ToggleAssetBrowser(browseCategory);
    float categoryLeft=left+16,categoryWidth=width-44;
+   string[] tabs=catalogCategory==1?rooms:new string[0];
    float total=0f;
-   for(int i=0;i<categories.Length;i++)total+=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f)+7f;
+   for(int i=0;i<tabs.Length;i++)total+=Mathf.Clamp(tabs[i].Length*9f+28f,92f,138f)+7f;
    catalogTabScroll=GUI.BeginScrollView(new Rect(categoryLeft,top+65,categoryWidth,37),
     catalogTabScroll,new Rect(0,0,Mathf.Max(categoryWidth-14,total+4f),34),true,false);
    float tabX=0f;
-   for(int i=0;i<categories.Length;i++){
-    int which=i;float tabWidth=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f);
-    if(Button(new Rect(tabX,0,tabWidth,31f),categories[i],catalogCategory==i))
-     ChooseCatalogCategory(which);
+   for(int i=0;i<tabs.Length;i++){
+    int which=i;float tabWidth=Mathf.Clamp(tabs[i].Length*9f+28f,92f,138f);
+    if(Button(new Rect(tabX,0,tabWidth,31f),tabs[i],furnitureRoom==i)){
+     furnitureRoom=which;catalogScroll=Vector2.zero;
+    }
     tabX+=tabWidth+7f;
    }
    GUI.EndScrollView();
@@ -2496,17 +2501,20 @@ namespace WorldBuilder {
     var ids=AssetHub.Catalog();
     var visible=new List<string>();
     foreach(string id in ids){
-     string category=catalogCategory==0?"All":categories[catalogCategory];
-     if(category!="All"&&AssetHub.Category(id)!=category)continue;
+     string category=catalogCategory==1?rooms[Mathf.Clamp(furnitureRoom,0,rooms.Length-1)]:
+      catalogCategory==0?"All":categories[catalogCategory];
+     string assetCategory=AssetHub.Category(id);
+     if(category!="All"&&assetCategory!=category&&
+      !(catalogCategory==1&&category=="Living Room"&&assetCategory=="Furniture"))continue;
      string keywords=AssetHub.Name(id)+" "+AssetHub.Category(id)+" "+AssetHub.Provider(id);
      if(catalogSearch.Length>0&&keywords.IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)<0)continue;
      visible.Add(id);
     }
     if(visible.Count==0){
      GUI.Label(new Rect(left+31,cardY+15,600,37),
-      "No "+categories[catalogCategory].ToLowerInvariant()+" models in your library yet",sectionStyle);
-     if(Button(new Rect(left+31,cardY+62,174,39),"FIND "+categories[catalogCategory].ToUpperInvariant()))
-      ToggleAssetBrowser(categories[catalogCategory]);
+      "No "+browseCategory.ToLowerInvariant()+" models in your library yet",sectionStyle);
+     if(Button(new Rect(left+31,cardY+62,215,39),"FIND "+browseCategory.ToUpperInvariant()))
+      ToggleAssetBrowser(browseCategory);
     }else{
      const float cell=170f;
      catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewportWidth,cardH+15),catalogScroll,
