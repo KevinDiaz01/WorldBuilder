@@ -118,6 +118,7 @@ namespace WorldBuilder {
   private float openingHeight=2.1f;
   private float openingBottom=0f;
   private bool showStudio=false;
+  private int studioTab=0;
   private int lightMode=0;
   private float lightBrightness=1.6f;
   private float lightRadius=11f;
@@ -138,7 +139,7 @@ namespace WorldBuilder {
      showPause||showConfirmExit||showSettings||showHelp||
      (showProjects&&p.x>w*.5f-200f&&p.x<w*.5f+210f&&p.y<505f)||
      ((showImport||showExport)&&p.x>w*.5f-275f&&p.x<w*.5f+275f&&p.y<335f)||
-     showAssets;
+     showAssets||(showStudio&&p.x>515f&&p.x<1165f&&p.y>90f&&p.y<420f);
   }
   void ToggleAssetBrowser(){
    try{
@@ -786,6 +787,8 @@ namespace WorldBuilder {
    if(Input.GetKeyDown(KeyCode.Alpha6)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Room);
    if(Input.GetKeyDown(KeyCode.M)&&!showPause&&!showSettings&&!showHelp){catalogCategory=8;showCatalog=true;SelectTool(Tool.Paint);}
    if(Input.GetKeyDown(KeyCode.Escape)){
+    if(currentTool==Tool.Room&&polygonMode&&polygonCorners.Count>0){polygonCorners.Clear();Notice("Custom room outline cancelled");return;}
+    if(showStudio){showStudio=false;return;}
     if(showDiagnostics){showDiagnostics=false;return;}
     if(showConfirmExit){showConfirmExit=false;showPause=true;}
     else if(showImport||showExport||showProjects||showSettings||showHelp){
@@ -1306,13 +1309,13 @@ namespace WorldBuilder {
     int n=k;
     if(Button(new Rect(middle+k*145,22,137,46),modes[k],creativeMode==k)){
      if(k==3)EnterWalk();
-     else {creativeMode=n;if(n>0)ComingSoon(modes[n]+" tools");}
+     else {creativeMode=n;if(n==2){showStudio=true;studioTab=2;}else if(n==1){showStudio=true;studioTab=1;}}
     }
    }
    if(Button(new Rect(w-403,22,64,46),"Undo"))UndoLast();
    if(Button(new Rect(w-333,22,67,46),"Redo"))RedoLast();
    if(Button(new Rect(w-260,22,70,46),"Save"))Save();
-   if(Button(new Rect(w-183,22,80,46),"Panels"))showInspector=!showInspector;
+   if(Button(new Rect(w-183,22,80,46),"Studio"))showStudio=!showStudio;
    if(Button(new Rect(w-95,22,71,46),"Menu"))showPause=!showPause;
   }
   void SetCameraView(bool overhead){
@@ -1322,6 +1325,57 @@ namespace WorldBuilder {
    if(overhead)orbit.yaw=0f;
    orbit.distance=Mathf.Clamp(orbit.distance,8f,40f);
    Notice(overhead?"Top-down camera":"Perspective camera");
+  }
+  void DrawStudio(float w,float h){
+   float x=Mathf.Clamp((w-650f)*.5f,520f,Mathf.Max(520f,w-665f)),y=163f;
+   GUI.Box(new Rect(x,y,630,243),"",panelStyle);
+   Label(new Rect(x+19,y+9,380,30),"WorldBuilder 1.0 · Studios",true);
+   if(Button(new Rect(x+568,y+6,45,32),"X")){showStudio=false;return;}
+   string[] tabs={"Architecture","Lighting","Landscape","VRChat"};
+   for(int i=0;i<tabs.Length;i++){int k=i;if(Button(new Rect(x+15+i*153,y+42,145,35),tabs[i],studioTab==i))studioTab=k;}
+   float line=y+89;
+   if(studioTab==0){
+    if(Button(new Rect(x+15,line,188,40),polygonMode?"Room: Custom":"Room: Rectangle")){
+     polygonMode=!polygonMode;polygonCorners.Clear();SelectTool(Tool.Room);
+     Notice(polygonMode?"Click corners, press Enter to finish":"Rectangular room tool selected");
+    }
+    if(Button(new Rect(x+215,line,185,40),"Garage Opening")){
+     SelectTool(Tool.Garage);openingWidth=3f;openingHeight=2.35f;openingBottom=0f;
+    }
+    if(Button(new Rect(x+413,line,195,40),"Custom Opening")){SelectTool(Tool.Door);}
+    Label(new Rect(x+22,line+48,580,25),"Opening width: "+openingWidth.ToString("F2")+" m");
+    openingWidth=GUI.HorizontalSlider(new Rect(x+28,line+75,555,21),openingWidth,.6f,5.5f);
+    Label(new Rect(x+22,line+101,275,26),"Height: "+openingHeight.ToString("F2")+" m");
+    openingHeight=GUI.HorizontalSlider(new Rect(x+24,line+130,257,19),openingHeight,.5f,4.2f);
+    Label(new Rect(x+313,line+101,280,26),"Bottom: "+openingBottom.ToString("F2")+" m");
+    openingBottom=GUI.HorizontalSlider(new Rect(x+315,line+130,270,19),openingBottom,0f,2f);
+   }else if(studioTab==1){
+    if(Button(new Rect(x+20,line,180,39),"Point Light")){lightMode=0;SelectTool(Tool.Light);}
+    if(Button(new Rect(x+212,line,180,39),"Spot Light")){lightMode=1;SelectTool(Tool.Light);}
+    if(Button(new Rect(x+405,line,190,39),"Night Sky")){project.skyPreset=2;ApplyEnvironment();}
+    Label(new Rect(x+20,line+49,280,24),"Light intensity: "+lightBrightness.ToString("F1"));
+    lightBrightness=GUI.HorizontalSlider(new Rect(x+24,line+76,268,22),lightBrightness,0f,8f);
+    Label(new Rect(x+323,line+49,280,24),"Light range: "+lightRadius.ToString("F1")+" m");
+    lightRadius=GUI.HorizontalSlider(new Rect(x+327,line+76,265,22),lightRadius,2f,30f);
+    Label(new Rect(x+23,line+116,580,26),"Click the ground to place a light. Select it to adjust position and rotation.");
+   }else if(studioTab==2){
+    if(Button(new Rect(x+18,line,186,42),"Terrain Hill"))SelectTool(Tool.Terrain);
+    if(Button(new Rect(x+212,line,186,42),"Water"))SelectTool(Tool.Water);
+    if(Button(new Rect(x+406,line,188,42),"Fog: "+(project.fog?"On":"Off"))){project.fog=!project.fog;ApplyEnvironment();}
+    string[] names={"Day","Sunset","Night","Overcast"};
+    for(int i=0;i<4;i++){int k=i;if(Button(new Rect(x+18+i*146,line+53,138,36),names[i],project.skyPreset==i)){project.skyPreset=k;ApplyEnvironment();}}
+    Label(new Rect(x+19,line+106,300,24),"Terrain elevation: "+terrainAmplitude.ToString("F1")+" m");
+    terrainAmplitude=GUI.HorizontalSlider(new Rect(x+22,line+132,285,19),terrainAmplitude,.25f,12f);
+    Label(new Rect(x+330,line+106,265,24),"Sun angle: "+project.sunPitch.ToString("F0")+"°");
+    float angle=GUI.HorizontalSlider(new Rect(x+334,line+132,255,19),project.sunPitch,5f,85f);
+    if(Mathf.Abs(angle-project.sunPitch)>.01f){project.sunPitch=angle;ApplyEnvironment();}
+   }else{
+    if(Button(new Rect(x+18,line,190,42),"Mirror"))SelectTool(Tool.Mirror);
+    if(Button(new Rect(x+218,line,190,42),"Seat / Station"))SelectTool(Tool.Seat);
+    if(Button(new Rect(x+418,line,190,42),"Spawn Point"))SelectTool(Tool.Spawn);
+    Label(new Rect(x+22,line+58,570,56),"Place VRChat object markers in the scene. Mirrors and seats need the VRChat Worlds SDK when exported to Unity.");
+    Label(new Rect(x+22,line+117,570,35),"Use VRChat Creator Companion to validate and publish the export.");
+   }
   }
   void DrawViewportControls(float h){
    float x=132f,y=99f;
@@ -1343,7 +1397,7 @@ namespace WorldBuilder {
       (k==2&&currentTool==Tool.Floor)||(k==3&&currentTool==Tool.Room)||
       (k==4&&currentTool==Tool.Door)||(k==5&&currentTool==Tool.Window)||
       (k==6&&currentTool==Tool.Stairs)||(k==7&&currentTool==Tool.Roof)||
-      (k==8&&currentTool==Tool.Imported)||(k==9&&currentTool==Tool.Paint)||(k==12&&currentTool==Tool.Erase);
+      (k==8&&currentTool==Tool.Imported)||(k==9&&currentTool==Tool.Paint)||(k==10&&currentTool==Tool.Light)||(k==11&&currentTool==Tool.Terrain)||(k==12&&currentTool==Tool.Erase);
     float yy=y+47+k*step;
     if(Button(new Rect(19,yy,90,step-5),names[k],active)){
      if(k==0)SelectTool(Tool.Select);
@@ -1357,6 +1411,8 @@ namespace WorldBuilder {
      else if(k==12)SelectTool(Tool.Erase);
      else if(k==9){catalogCategory=8;showCatalog=true;SelectTool(Tool.Paint);}
      else if(k==8){creativeMode=1;catalogCategory=0;showCatalog=true;Notice("Choose a model from My Assets");}
+     else if(k==10){SelectTool(Tool.Light);showStudio=true;studioTab=1;}
+     else if(k==11){SelectTool(Tool.Terrain);showStudio=true;studioTab=2;}
      else ComingSoon(names[k]);
     }
    }
@@ -1680,6 +1736,7 @@ namespace WorldBuilder {
    DrawViewportControls(h);
    DrawObjectHandles();
    if(showInspector)DrawProperties(w,h);
+   if(showStudio)DrawStudio(w,h);
    if(showCatalog)DrawCatalog(w,h);
    else {
     GUI.Box(new Rect(127,h-62,344,54),"",panelStyle);
