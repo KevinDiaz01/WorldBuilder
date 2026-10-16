@@ -50,7 +50,7 @@ namespace WorldBuilder {
     if(Directory.Exists(older))folders.Add(older);
     foreach(string folder in folders)foreach(string source in Directory.GetFiles(folder)){
      string ext=Path.GetExtension(source).ToLowerInvariant();
-     if(ext!=".zip"&&ext!=".obj")continue;
+     if(ext!=".zip"&&ext!=".obj"&&ext!=".gltf"&&ext!=".glb")continue;
      string marker=source+".worldbuilder-imported";
      if(File.Exists(marker)&&File.ReadAllText(marker)==new FileInfo(source).Length.ToString())continue;
      // Never import a download while its writer still holds it.
@@ -73,7 +73,7 @@ namespace WorldBuilder {
   public static string Import(string source,string provider){
    if(!File.Exists(source))throw new FileNotFoundException("Asset file not found",source);
    string ext=Path.GetExtension(source).ToLowerInvariant();
-   if(ext!=".obj"&&ext!=".zip")throw new InvalidDataException("Only OBJ and ZIP containing OBJ supported currently");
+   if(ext!=".obj"&&ext!=".zip"&&ext!=".gltf"&&ext!=".glb")throw new InvalidDataException("Supported files: OBJ, GLB, glTF and ZIP archives");
    string id=Guid.NewGuid().ToString("N");
    string destination=Path.Combine(Library,id);
    Directory.CreateDirectory(destination);
@@ -85,12 +85,21 @@ namespace WorldBuilder {
      File.Copy(source,Path.Combine(temp,Path.GetFileName(source)),true);
      foreach(string file in Directory.GetFiles(Path.GetDirectoryName(source))){
       string extension=Path.GetExtension(file).ToLowerInvariant();
-      if(extension==".mtl"||extension==".png"||extension==".jpg"||extension==".jpeg")
+      if(extension==".mtl"||extension==".png"||extension==".jpg"||extension==".jpeg"||extension==".bin"||extension==".webp")
        File.Copy(file,Path.Combine(temp,Path.GetFileName(file)),true);
      }
     }
     string[] models=Directory.GetFiles(temp,"*.obj",SearchOption.AllDirectories);
-    if(models.Length==0)throw new InvalidDataException("Archive contains no OBJ model");
+    if(models.Length==0){
+     string[] glb=Directory.GetFiles(temp,"*.glb",SearchOption.AllDirectories);
+     string[] gltf=Directory.GetFiles(temp,"*.gltf",SearchOption.AllDirectories);
+     string[] candidates=glb.Length>0?glb:gltf;
+     if(candidates.Length==0)throw new InvalidDataException("Archive contains no OBJ, GLB or glTF model");
+     Array.Sort(candidates,StringComparer.OrdinalIgnoreCase);
+     string converted=Path.Combine(temp,"model-converted.obj");
+     GltfToObj.ConvertModel(candidates[0],converted);
+     models=new[]{converted};
+    }
     // First OBJ is a conservative first version. Multi-model packaging follows later.
     Array.Sort(models,StringComparer.OrdinalIgnoreCase);
     string selected=models[0];
@@ -107,6 +116,7 @@ namespace WorldBuilder {
     File.WriteAllText(Path.Combine(destination,"asset-name.txt"),Path.GetFileNameWithoutExtension(source));
     File.WriteAllText(Path.Combine(destination,"asset-source.txt"),provider);
     GameObject check=ImportedObj.Load(Path.Combine(destination,"model.obj"));
+    ThumbnailUtility.Save(check,Path.Combine(destination,"thumbnail.png"));
     UnityEngine.Object.Destroy(check);
     Directory.Delete(temp,true);
     return id;
