@@ -540,7 +540,7 @@ namespace WorldBuilder {
    Piece floor=project.pieces[index];
    string id=floor.roomId;
    float level=(floor.position.y-FloorCenter)/LevelHeight;
-   float oldLevel=buildingLevel;
+   int oldLevel=buildingLevel;
    // Reconstruct grouped walls at the same elevation; openings must be
    // placed again because resizing a wall changes their offset/size.
    buildingLevel=Mathf.Clamp(Mathf.RoundToInt(level),0,8);
@@ -561,7 +561,7 @@ namespace WorldBuilder {
    floor.position=new Vector3(newCenter.x,FloorCenter+buildingLevel*LevelHeight,newCenter.z);
    floor.scale=new Vector3(newWidth,FloorThickness,newDepth);
    AddWithoutHistory(floor);
-   buildingLevel=(int)oldLevel;
+   buildingLevel=oldLevel;
    Notice("Room resized to "+newWidth.ToString("F2")+" × "+newDepth.ToString("F2")+" m");
   }
   void MakeRoof(Vector3 a,Vector3 b){
@@ -852,7 +852,16 @@ namespace WorldBuilder {
     float sy=FloatField(new Rect(x+120,y,88,40),4,p.scale.y);
     float sz=FloatField(new Rect(x+217,y,88,40),5,p.scale.z);
     y+=51;
+    if(IsRoomFloor(selectedIndex)){
+     Label(new Rect(x+23,y,283,27),"ROOM  -  width / depth");
+     y+=29;
+     if(Button(new Rect(x+23,y,283,42),"Resize Entire Room")){
+      ResizeRoom(selectedIndex,new Vector3(nextX,nextY,nextZ),sx,sz);
+     }
+     y+=50;
+    }
     if(Button(new Rect(x+23,y,283,45),"Apply Dimensions")){
+     if(IsRoomFloor(selectedIndex)){ResizeRoom(selectedIndex,new Vector3(nextX,nextY,nextZ),sx,sz);return;}
      RememberChange();
      p.position=new Vector3(nextX,nextY,nextZ);
      p.scale=new Vector3(Mathf.Max(.02f,sx),Mathf.Max(.02f,sy),Mathf.Max(.02f,sz));
