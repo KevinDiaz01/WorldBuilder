@@ -41,3 +41,15 @@ The software is complete when a user can create, save, reopen, furnish and lands
 - Studio top-bar button — Architecture, Lighting, Landscape, VRChat
 
 Publishing still uses VRChat Creator Companion and the VRChat Worlds SDK.
+
+
+## Crash recovery and save safety (implementation pending Windows verification)
+
+- Recovery snapshots are stored under Unity's persistent-data folder, within `Recovery`. Each project gets its own validated snapshot and a previous backup.
+- The editor snapshots every 30 seconds while running, aims for another snapshot within about five seconds of recorded editing actions, and snapshots when focus is lost or the app is suspended.
+- A session marker detects when the previous WorldBuilder process did not shut down normally. If the snapshot differs from a newer manual save, launch offers **Restore My Build** or **Open My Last Saved Project**.
+- **Projects** contains **Restore Current Project Autosave** and **Recover Previous Crash**, so dismissing the prompt doesn't erase the recovery.
+- Normal project saves use a temporary file and replace the previous file with a `.bak` backup rather than writing directly over the only copy.
+- Restoring does not overwrite a normal save until the user explicitly chooses **Save**.
+- Force-closing or crashing before the first snapshot can still lose those few seconds of changes. Snapshots are not a substitute for manual versioned backups.
+- Test: open a world, build a wall, wait at least 10 seconds, force-kill WorldBuilder, reopen, restore the work, verify the original save was not overwritten, save, and reopen again.
