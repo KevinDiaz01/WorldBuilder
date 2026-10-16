@@ -76,6 +76,10 @@ namespace WorldBuilder {
   private static readonly string[] FinishNames={"Default","Warm White","Stone","Charcoal","Sand","Terracotta","Sage","Ocean"};
   private static readonly Color[] FinishColors={Color.white,new Color(.91f,.88f,.80f),new Color(.58f,.62f,.63f),new Color(.19f,.23f,.28f),new Color(.77f,.67f,.51f),new Color(.67f,.34f,.26f),new Color(.38f,.52f,.43f),new Color(.22f,.47f,.62f)};
   private Vector2 catalogScroll;
+  private Vector2 catalogTabScroll;
+  private Vector2 inspectorScroll;
+  private bool inspectorAdvanced=false;
+  private float inspectorHeight=0f;
   private string catalogSearch="";
   private int editingPiece=-1;
   private Vector3? copiedWallSize;
@@ -84,7 +88,7 @@ namespace WorldBuilder {
   private string status="Ready to build";
   private float statusUntil;
   private bool showLibrary=true;
-  private bool showCatalog=false;
+  private bool showCatalog=true;
   private bool showInspector=false;
   private bool showProjects=false;
   private GameObject preview;
@@ -1333,7 +1337,9 @@ namespace WorldBuilder {
   }
   // Premium rounded glass UI generated at runtime; no external font or art packages required.
   private GUIStyle panelStyle, headingStyle, captionStyle, menuStyle, activeStyle, regularStyle, sectionStyle, smallStyle;
+  private GUIStyle trayStyle,cardStyle,selectedCardStyle,softStyle,subtleStyle,mutedStyle,miniStyle,shadowStyle,destructiveStyle;
   private Texture2D darkTexture, sideTexture, blueTexture, fieldTexture, hoverTexture, strokeTexture;
+  private Texture2D trayTexture,cardTexture,selectedCardTexture,softTexture,shadowTexture,destructiveTexture;
   private Font interfaceFont;
   private string selectedCatalogId="";
   private const float DesignWidth=1600f;
@@ -1353,14 +1359,19 @@ namespace WorldBuilder {
    }
    tex.Apply();return tex;
   }
-  GUIStyle RoundedStyle(Texture2D texture,int fontSize=17){
-   var style=new GUIStyle(GUI.skin.button);
-   style.normal.background=texture;style.hover.background=hoverTexture;
-   style.active.background=blueTexture;style.focused.background=texture;
+  GUIStyle RoundedStyle(Texture2D background,int fontSize=15){
+   GUIStyle style=new GUIStyle(GUI.skin.button);
+   style.normal.background=background;
+   style.hover.background=hoverTexture;
+   style.active.background=blueTexture;
+   style.focused.background=background;
    style.border=new RectOffset(20,20,20,20);
-   style.padding=new RectOffset(10,10,8,8);
-   style.normal.textColor=Color.white;style.hover.textColor=Color.white;
-   style.active.textColor=Color.white;style.focused.textColor=Color.white;
+   style.margin=new RectOffset(0,0,0,0);
+   style.padding=new RectOffset(10,10,6,6);
+   style.normal.textColor=new Color(.20f,.25f,.33f);
+   style.hover.textColor=new Color(.12f,.19f,.28f);
+   style.active.textColor=Color.white;
+   style.focused.textColor=new Color(.20f,.25f,.33f);
    style.fontSize=fontSize;style.font=interfaceFont;
    style.alignment=TextAnchor.MiddleCenter;
    return style;
@@ -1368,44 +1379,69 @@ namespace WorldBuilder {
   void InitStyles(){
    if(panelStyle!=null)return;
    interfaceFont=Font.CreateDynamicFontFromOSFont(new[]{"Segoe UI","Arial"},18);
-   darkTexture=Rounded(new Color(.052f,.079f,.115f,.87f),new Color(.40f,.55f,.68f,.52f));
-   sideTexture=Rounded(new Color(.068f,.105f,.15f,.82f),new Color(.37f,.5f,.63f,.42f));
-   blueTexture=Rounded(new Color(.08f,.34f,.70f,.94f),new Color(.35f,.73f,1f,.96f));
-   hoverTexture=Rounded(new Color(.17f,.28f,.41f,.96f),new Color(.5f,.72f,.89f,.7f));
-   fieldTexture=Rounded(new Color(.10f,.15f,.21f,.85f),new Color(.28f,.4f,.51f,.68f));
-   strokeTexture=Rounded(new Color(.095f,.13f,.18f,.95f),new Color(.4f,.54f,.66f,.63f));
+   // Original WorldBuilder pearl / mist-lavender palette, inspired by lifestyle building games.
+   darkTexture=Rounded(new Color(.952f,.956f,.979f,.94f),new Color(.77f,.81f,.89f,.83f),19);
+   trayTexture=Rounded(new Color(.961f,.948f,.980f,.95f),new Color(.78f,.75f,.86f,.85f),20);
+   sideTexture=Rounded(new Color(.975f,.978f,.989f,.92f),new Color(.76f,.81f,.88f,.79f),17);
+   fieldTexture=Rounded(new Color(.993f,.994f,1f,.95f),new Color(.77f,.80f,.89f,.87f),16);
+   cardTexture=Rounded(new Color(.997f,.997f,1f,.98f),new Color(.78f,.80f,.87f,.85f),17);
+   selectedCardTexture=Rounded(new Color(.904f,.918f,1f,.97f),new Color(.39f,.53f,.88f,1f),17);
+   softTexture=Rounded(new Color(.893f,.92f,.95f,.91f),new Color(.77f,.83f,.89f,.85f),16);
+   shadowTexture=Rounded(new Color(.17f,.22f,.34f,.15f),new Color(.19f,.25f,.34f,.03f),20);
+   blueTexture=Rounded(new Color(.32f,.43f,.80f,.99f),new Color(.54f,.66f,1f,.99f),17);
+   hoverTexture=Rounded(new Color(.88f,.915f,1f,.98f),new Color(.54f,.65f,.92f,.98f),17);
+   strokeTexture=Rounded(new Color(1f,1f,1f,.99f),new Color(.41f,.59f,.88f,.99f),16);
+   destructiveTexture=Rounded(new Color(.98f,.91f,.91f,.98f),new Color(.92f,.66f,.67f,.93f),16);
    GUI.skin.font=interfaceFont;
    panelStyle=new GUIStyle(GUI.skin.box);
    panelStyle.normal.background=darkTexture;
    panelStyle.border=new RectOffset(20,20,20,20);
-   panelStyle.normal.textColor=Color.white;
+   panelStyle.normal.textColor=new Color(.16f,.22f,.30f);
    panelStyle.alignment=TextAnchor.UpperCenter;
-   panelStyle.font=interfaceFont;panelStyle.fontSize=16;
+   panelStyle.font=interfaceFont;panelStyle.fontSize=15;
+   trayStyle=new GUIStyle(panelStyle);trayStyle.normal.background=trayTexture;
+   cardStyle=new GUIStyle(panelStyle);cardStyle.normal.background=cardTexture;
+   selectedCardStyle=new GUIStyle(panelStyle);selectedCardStyle.normal.background=selectedCardTexture;
+   shadowStyle=new GUIStyle(panelStyle);shadowStyle.normal.background=shadowTexture;
    headingStyle=new GUIStyle(GUI.skin.label);
-   headingStyle.font=interfaceFont;
-   headingStyle.normal.textColor=new Color(.97f,.985f,1f);
-   headingStyle.fontSize=23;headingStyle.fontStyle=FontStyle.Bold;
+   headingStyle.font=interfaceFont;headingStyle.fontStyle=FontStyle.Bold;
+   headingStyle.fontSize=22;headingStyle.normal.textColor=new Color(.14f,.21f,.33f);
    captionStyle=new GUIStyle(GUI.skin.label);
-   captionStyle.font=interfaceFont;
-   captionStyle.normal.textColor=new Color(.75f,.83f,.91f);
-   captionStyle.fontSize=16;
+   captionStyle.font=interfaceFont;captionStyle.fontSize=15;
+   captionStyle.normal.textColor=new Color(.39f,.45f,.56f);
    sectionStyle=new GUIStyle(captionStyle);
-   sectionStyle.normal.textColor=new Color(.94f,.97f,1f);
+   sectionStyle.normal.textColor=new Color(.21f,.28f,.42f);
    sectionStyle.fontSize=17;sectionStyle.fontStyle=FontStyle.Bold;
-   smallStyle=new GUIStyle(captionStyle);smallStyle.fontSize=14;
-   menuStyle=RoundedStyle(sideTexture,17);
-   activeStyle=RoundedStyle(blueTexture,17);
+   smallStyle=new GUIStyle(captionStyle);smallStyle.fontSize=13;
+   mutedStyle=new GUIStyle(captionStyle);mutedStyle.fontSize=12;
+   miniStyle=new GUIStyle(captionStyle);miniStyle.fontSize=14;miniStyle.fontStyle=FontStyle.Bold;
+   menuStyle=RoundedStyle(sideTexture,15);
+   softStyle=RoundedStyle(softTexture,15);
+   activeStyle=RoundedStyle(blueTexture,15);
+   activeStyle.normal.textColor=Color.white;
+   activeStyle.hover.textColor=Color.white;
+   activeStyle.focused.textColor=Color.white;
+   subtleStyle=RoundedStyle(fieldTexture,14);
+   destructiveStyle=RoundedStyle(destructiveTexture,15);
    regularStyle=new GUIStyle(GUI.skin.textField);
    regularStyle.normal.background=fieldTexture;
    regularStyle.focused.background=strokeTexture;
-   regularStyle.border=new RectOffset(20,20,20,20);
-   regularStyle.padding=new RectOffset(14,10,7,7);
-   regularStyle.normal.textColor=Color.white;
-   regularStyle.focused.textColor=Color.white;
-   regularStyle.font=interfaceFont;regularStyle.fontSize=16;
+   regularStyle.border=new RectOffset(18,18,18,18);
+   regularStyle.padding=new RectOffset(14,12,7,7);
+   regularStyle.normal.textColor=new Color(.15f,.23f,.36f);
+   regularStyle.focused.textColor=new Color(.15f,.23f,.36f);
+   regularStyle.font=interfaceFont;regularStyle.fontSize=15;
   }
-  bool Button(Rect rect,string label,bool selected=false){return GUI.Button(rect,label,selected?activeStyle:menuStyle);}
-  void Label(Rect rect,string content,bool heading=false){GUI.Label(rect,content,heading?headingStyle:captionStyle);}
+  void SoftPanel(Rect rect,GUIStyle style=null){
+   GUI.Box(new Rect(rect.x,rect.y+4f,rect.width,rect.height),"",shadowStyle);
+   GUI.Box(rect,"",style??panelStyle);
+  }
+  bool Button(Rect rect,string label,bool selected=false){
+   return GUI.Button(rect,label,selected?activeStyle:menuStyle);
+  }
+  void Label(Rect rect,string content,bool heading=false){
+   GUI.Label(rect,content,heading?headingStyle:captionStyle);
+  }
   void ComingSoon(string what){Notice(what+" - coming soon");}
   void EnterWalk(){
    if(walkthrough!=null){
@@ -1414,25 +1450,45 @@ namespace WorldBuilder {
     walkthrough.SetHeight(avatarHeight);walkthrough.Enter();
    }else Notice("Walkthrough camera unavailable");
   }
-  void DrawToolbar(float w){
-   GUI.Box(new Rect(10,9,w-20,73),"",panelStyle);
-   if(Button(new Rect(21,19,55,53),"⌂"))showPause=true;
-   Label(new Rect(92,16,235,31),"WorldBuilder",true);
-   Label(new Rect(92,47,310,25),Path.GetFileNameWithoutExtension(filePath)+"  ·  VRChat world");
-   float middle=w*.5f-285f;
-   string[] modes={"Build","Decorate","Landscape","Live"};
-   for(int k=0;k<modes.Length;k++){
-    int n=k;
-    if(Button(new Rect(middle+k*145,22,137,46),modes[k],creativeMode==k)){
-     if(k==3)EnterWalk();
-     else {creativeMode=n;if(n==2){showStudio=true;studioTab=2;}else if(n==1){showStudio=true;studioTab=1;}}
-    }
+  void SwitchMode(int mode){
+   if(mode==3){EnterWalk();return;}
+   creativeMode=mode;
+   showStudio=false;
+   showCatalog=true;
+   showInspector=selectedIndex>=0;
+   if(mode==0){
+    SelectTool(Tool.Select);
+    Notice("Build mode · shape your world");
+   }else if(mode==1){
+    catalogCategory=0;
+    SelectTool(Tool.Select);
+    Notice("Decorate mode · browse furniture and materials");
+   }else{
+    SelectTool(Tool.Terrain);
+    Notice("Landscape mode · sculpt the outdoors");
    }
-   if(Button(new Rect(w-403,22,64,46),"Undo"))UndoLast();
-   if(Button(new Rect(w-333,22,67,46),"Redo"))RedoLast();
-   if(Button(new Rect(w-260,22,70,46),"Save"))Save();
-   if(Button(new Rect(w-183,22,80,46),"Studio"))showStudio=!showStudio;
-   if(Button(new Rect(w-95,22,71,46),"Menu"))showPause=!showPause;
+  }
+  void DrawToolbar(float w){
+   SoftPanel(new Rect(9,8,w-18,75),panelStyle);
+   if(Button(new Rect(20,19,51,49),"⌂"))showPause=true;
+   GUI.Label(new Rect(87,15,222,31),"WorldBuilder",headingStyle);
+   GUI.Label(new Rect(88,47,272,25),"YOUR CREATIVE STUDIO  /  VRCHAT",mutedStyle);
+   float controlWidth=418f;
+   float groupWidth=Mathf.Min(568f,Mathf.Max(350f,w-controlWidth-412f));
+   float middle=Mathf.Max(344f,(w-groupWidth)*.5f-35f);
+   string[] titles={"BUILD","DECORATE","LANDSCAPE","LIVE"};
+   for(int k=0;k<titles.Length;k++){
+    int chosen=k;
+    float cell=(groupWidth-20f)/4f;
+    Rect spot=new Rect(middle+k*cell,20f,cell-7f,46f);
+    if(Button(spot,titles[k],creativeMode==k))SwitchMode(chosen);
+   }
+   float actions=w-428f;
+   if(Button(new Rect(actions,22,62,42),"↶"))UndoLast();
+   if(Button(new Rect(actions+67,22,62,42),"↷"))RedoLast();
+   if(Button(new Rect(actions+134,22,84,42),"SAVE",true))Save();
+   if(Button(new Rect(actions+224,22,91,42),"DETAILS"))showInspector=!showInspector;
+   if(Button(new Rect(actions+321,22,91,42),"MENU"))showPause=!showPause;
   }
   void SetCameraView(bool overhead){
    var orbit=sceneCamera!=null?sceneCamera.GetComponent<OrbitCamera>():null;
@@ -1502,36 +1558,50 @@ namespace WorldBuilder {
    if(Button(new Rect(x+127,y,106,46),"Top View"))SetCameraView(true);
    if(Button(new Rect(x+241,y,115,46),showGrid?"Grid On":"Grid Off"))ToggleGrid();
   }
+  void ChoosePaletteTool(Tool tool){
+   SelectTool(tool);
+   if(tool==Tool.Imported||tool==Tool.Paint){creativeMode=1;showCatalog=true;}
+  }
   void DrawLeft(float h){
-   float y=96f;
-   if(!showLibrary){if(Button(new Rect(12,y,104,42),"Tools >"))showLibrary=true;return;}
-   GUI.Box(new Rect(12,y,104,635),"",panelStyle);
-   if(Button(new Rect(19,y+7,90,35),"< Tools")){showLibrary=false;return;}
-   string[] names={"Select","Walls","Floors","Rooms","Doors","Windows","Stairs","Roofs","Furniture","Materials","Lighting","Terrain","Erase"};
-   string[] symbols={"◈","▥","▦","⬡","▯","⊞","≋","⌂","▣","▤","☼","△"};
-   float step=45f;
-   for(int k=0;k<names.Length;k++){
-    bool active=(k==0&&currentTool==Tool.Select)||(k==1&&currentTool==Tool.Wall)||
-      (k==2&&currentTool==Tool.Floor)||(k==3&&currentTool==Tool.Room)||
-      (k==4&&currentTool==Tool.Door)||(k==5&&currentTool==Tool.Window)||
-      (k==6&&currentTool==Tool.Stairs)||(k==7&&currentTool==Tool.Roof)||
-      (k==8&&currentTool==Tool.Imported)||(k==9&&currentTool==Tool.Paint)||(k==10&&currentTool==Tool.Light)||(k==11&&currentTool==Tool.Terrain)||(k==12&&currentTool==Tool.Erase);
-    float yy=y+47+k*step;
-    if(Button(new Rect(19,yy,90,step-5),names[k],active)){
-     if(k==0)SelectTool(Tool.Select);
-     else if(k==1)SelectTool(Tool.Wall);
-     else if(k==2)SelectTool(Tool.Floor);
-     else if(k==3)SelectTool(Tool.Room);
-     else if(k==4)SelectTool(Tool.Door);
-     else if(k==5)SelectTool(Tool.Window);
-     else if(k==6)SelectTool(Tool.Stairs);
-     else if(k==7)SelectTool(Tool.Roof);
-     else if(k==12)SelectTool(Tool.Erase);
-     else if(k==9){catalogCategory=8;showCatalog=true;SelectTool(Tool.Paint);}
-     else if(k==8){creativeMode=1;catalogCategory=0;showCatalog=true;Notice("Choose a model from My Assets");}
-     else if(k==10){SelectTool(Tool.Light);showStudio=true;studioTab=1;}
-     else if(k==11){SelectTool(Tool.Terrain);showStudio=true;studioTab=2;}
-     else ComingSoon(names[k]);
+   const float x=13f;
+   float y=98f;
+   if(!showLibrary){
+    if(Button(new Rect(x,y,104,46),"TOOLS >"))showLibrary=true;
+    return;
+   }
+   Tool[] tools;
+   string[] labels;
+   if(creativeMode==1){
+    tools=new[]{Tool.Select,Tool.Imported,Tool.Paint,Tool.Light,Tool.Couch,Tool.Table,Tool.Erase};
+    labels=new[]{"SELECT","FURNITURE","MATERIALS","LIGHTING","SOFA","TABLE","ERASE"};
+   }else if(creativeMode==2){
+    tools=new[]{Tool.Select,Tool.Terrain,Tool.Tree,Tool.Path,Tool.Water,Tool.Erase};
+    labels=new[]{"SELECT","TERRAIN","TREES","PATHS","WATER","ERASE"};
+   }else{
+    tools=new[]{Tool.Select,Tool.Wall,Tool.Floor,Tool.Room,Tool.Door,Tool.Window,Tool.Garage,Tool.Stairs,Tool.Roof,Tool.Erase};
+    labels=new[]{"SELECT","WALLS","FLOORS","ROOMS","DOORS","WINDOWS","GARAGE","STAIRS","ROOFS","ERASE"};
+   }
+   float railHeight=Mathf.Min(h-196f,Mathf.Max(170f,tools.Length*49f+91f));
+   SoftPanel(new Rect(x,y,109,railHeight),trayStyle);
+   GUI.Label(new Rect(x+10,y+14,89,21),creativeMode==0?"BUILD":creativeMode==1?"DECOR":"GARDEN",miniStyle);
+   if(Button(new Rect(x+10,y+41,89,29),"HIDE  <")){showLibrary=false;return;}
+   float row=y+78f,space=46f;
+   int maxCount=Mathf.Min(tools.Length,Mathf.Max(0,Mathf.FloorToInt((railHeight-88f)/space)));
+   for(int k=0;k<maxCount;k++){
+    Tool choice=tools[k];
+    bool isActive=currentTool==choice||(choice==Tool.Imported&&currentTool==Tool.Imported);
+    GUIStyle choiceStyle=isActive?activeStyle:choice==Tool.Erase?destructiveStyle:softStyle;
+    if(GUI.Button(new Rect(x+9,row+k*space,91,39),labels[k],choiceStyle)){
+     if(choice==Tool.Imported){
+      showCatalog=true;catalogCategory=0;creativeMode=1;
+      Notice("Choose an object from your furniture library");
+     }else if(choice==Tool.Paint){
+      showCatalog=true;catalogCategory=8;SelectTool(Tool.Paint);
+     }else{
+      SelectTool(choice);
+      if(choice==Tool.Garage){openingWidth=3f;openingHeight=2.35f;openingBottom=0f;}
+      if(choice==Tool.Light){showStudio=true;studioTab=1;}
+     }
     }
    }
   }
