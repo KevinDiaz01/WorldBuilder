@@ -10,6 +10,7 @@ namespace WorldBuilder {
   public Vector3 scale;
   public Quaternion rotation;
   public string assetId;
+  public string roomId;
   public Piece(string kind, Vector3 position, Vector3 scale, Quaternion rotation) {
    this.kind=kind;this.position=position;this.scale=scale;this.rotation=rotation;
   }
@@ -154,6 +155,8 @@ namespace WorldBuilder {
    Piece original=project.pieces[selectedIndex];
    var copy=new Piece(original.kind,original.position+new Vector3(gridSize,0,gridSize),original.scale,original.rotation);
    copy.assetId=original.assetId;
+   // Duplicate a piece as an independent object rather than joining its former room.
+   copy.roomId=null;
    Add(copy);
    SelectObject(project.pieces.Count-1);
    Notice("Object duplicated. Drag to reposition.");
@@ -516,15 +519,50 @@ namespace WorldBuilder {
    float z1=Mathf.Min(a.z,b.z),z2=Mathf.Max(a.z,b.z);
    if(x2-x1<gridSize*.5f||z2-z1<gridSize*.5f){Notice("Room must have width and depth");return;}
    RememberChange();
+   string id=Guid.NewGuid().ToString("N");
    var p1=new Vector3(x1,0,z1);var p2=new Vector3(x2,0,z1);
    var p3=new Vector3(x2,0,z2);var p4=new Vector3(x1,0,z2);
-   AddWithoutHistory(WallBetween(p1,p2));
-   AddWithoutHistory(WallBetween(p2,p3));
-   AddWithoutHistory(WallBetween(p3,p4));
-   AddWithoutHistory(WallBetween(p4,p1));
-   AddWithoutHistory(new Piece("floor",new Vector3((x1+x2)*.5f,FloorCenter+buildingLevel*LevelHeight,(z1+z2)*.5f),
-     new Vector3(x2-x1,FloorThickness,z2-z1),Quaternion.identity));
+   Piece[] walls={WallBetween(p1,p2),WallBetween(p2,p3),WallBetween(p3,p4),WallBetween(p4,p1)};
+   foreach(var wall in walls){wall.roomId=id;AddWithoutHistory(wall);}
+   var floor=new Piece("floor",new Vector3((x1+x2)*.5f,FloorCenter+buildingLevel*LevelHeight,(z1+z2)*.5f),
+     new Vector3(x2-x1,FloorThickness,z2-z1),Quaternion.identity);
+   floor.roomId=id;
+   AddWithoutHistory(floor);
    Notice("Room created: "+(x2-x1).ToString("F1")+" × "+(z2-z1).ToString("F1")+" m");
+  }
+  bool IsRoomFloor(int index){
+   return index>=0&&index<project.pieces.Count&&project.pieces[index].kind=="floor"&&
+    !string.IsNullOrEmpty(project.pieces[index].roomId);
+  }
+  void ResizeRoom(int index,Vector3 newCenter,float newWidth,float newDepth){
+   if(!IsRoomFloor(index))return;
+   newWidth=Mathf.Max(.5f,newWidth);newDepth=Mathf.Max(.5f,newDepth);
+   Piece floor=project.pieces[index];
+   string id=floor.roomId;
+   float level=(floor.position.y-FloorCenter)/LevelHeight;
+   float oldLevel=buildingLevel;
+   // Reconstruct grouped walls at the same elevation; openings must be
+   // placed again because resizing a wall changes their offset/size.
+   buildingLevel=Mathf.Clamp(Mathf.RoundToInt(level),0,8);
+   RememberChange();
+   for(int k=project.pieces.Count-1;k>=0;k--){
+    if(project.pieces[k].roomId!=id)continue;
+    if(objects[k]!=null)Destroy(objects[k]);
+    objects.RemoveAt(k);project.pieces.RemoveAt(k);
+   }
+   SelectObject(-1);
+   Vector3 p1=new Vector3(newCenter.x-newWidth*.5f,0,newCenter.z-newDepth*.5f);
+   Vector3 p2=p1+Vector3.right*newWidth;
+   Vector3 p3=p2+Vector3.forward*newDepth;
+   Vector3 p4=p1+Vector3.forward*newDepth;
+   foreach(var wall in new[]{WallBetween(p1,p2),WallBetween(p2,p3),WallBetween(p3,p4),WallBetween(p4,p1)}){
+    wall.roomId=id;AddWithoutHistory(wall);
+   }
+   floor.position=new Vector3(newCenter.x,FloorCenter+buildingLevel*LevelHeight,newCenter.z);
+   floor.scale=new Vector3(newWidth,FloorThickness,newDepth);
+   AddWithoutHistory(floor);
+   buildingLevel=(int)oldLevel;
+   Notice("Room resized to "+newWidth.ToString("F2")+" × "+newDepth.ToString("F2")+" m");
   }
   void MakeRoof(Vector3 a,Vector3 b){
    float width=Mathf.Abs(b.x-a.x),depth=Mathf.Abs(b.z-a.z);
@@ -575,8 +613,10 @@ namespace WorldBuilder {
    Action<float,float,float,float,string> part=(xStart,xEnd,yStart,yEnd,kind)=>{
     if(xEnd-xStart<.025f||yEnd-yStart<.025f)return;
     Vector3 localPos=new Vector3((xStart+xEnd)*.5f,(yStart+yEnd)*.5f-height*.5f,0);
-    AddWithoutHistory(new Piece(kind,original.position+original.rotation*localPos,
-      new Vector3(xEnd-xStart,yEnd-yStart,t),original.rotation));
+    Piece section=new Piece(kind,original.position+original.rotation*localPos,
+      new Vector3(xEnd-xStart,yEnd-yStart,t),original.rotation);
+    section.roomId=original.roomId;
+    AddWithoutHistory(section);
    };
    part(-length*.5f,left,0,height,"wall");
    part(right,length*.5f,0,height,"wall");
