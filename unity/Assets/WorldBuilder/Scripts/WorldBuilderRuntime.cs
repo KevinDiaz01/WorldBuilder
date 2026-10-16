@@ -168,8 +168,10 @@ namespace WorldBuilder {
   void ToggleAssetBrowser(string category){
    try{
     if(browserProcess!=null&&!browserProcess.HasExited){
+     // Changing asset categories should reopen the browser for the new search,
+     // rather than silently closing it.
      browserProcess.Kill();browserProcess.Dispose();browserProcess=null;
-     showAssets=false;Notice("Assets browser closed");return;
+     showAssets=false;
     }
     string exe=Path.Combine(Application.dataPath,"AssetBrowser","WorldBuilderAssetBrowser.exe");
     if(!File.Exists(exe)){Notice("Asset browser component is missing. Reinstall the complete update.");return;}
