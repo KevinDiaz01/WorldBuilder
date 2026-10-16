@@ -7,13 +7,19 @@ namespace WorldBuilder {
   public float pitch=48f;
   public float orbitSpeed=3f;
   public float moveSpeed=8f;
-  void Start(){UpdateTransform();}
+  private WorldBuilderRuntime editor;
+  void Start(){
+   editor=FindFirstObjectByType<WorldBuilderRuntime>();
+   UpdateTransform();
+  }
   void Update(){
-   if(Input.GetMouseButton(1)){
+   if(editor==null)editor=FindFirstObjectByType<WorldBuilderRuntime>();
+   bool overControls=editor!=null&&editor.BlocksCameraPointer();
+   if(Input.GetMouseButton(1)&&!overControls){
     yaw+=Input.GetAxis("Mouse X")*orbitSpeed;
     pitch=Mathf.Clamp(pitch-Input.GetAxis("Mouse Y")*orbitSpeed,12f,85f);
    }
-   float scroll=Input.mouseScrollDelta.y;
+   float scroll=overControls?0f:Input.mouseScrollDelta.y;
    distance=Mathf.Clamp(distance-scroll*2f,3f,100f);
    Vector3 forward=Quaternion.Euler(0,yaw,0)*Vector3.forward;
    Vector3 right=Quaternion.Euler(0,yaw,0)*Vector3.right;
