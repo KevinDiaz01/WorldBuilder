@@ -206,9 +206,23 @@ namespace WorldBuilder {
     File.WriteAllText(Path.Combine(destination,"asset-name.txt"),displayName);
     File.WriteAllText(Path.Combine(destination,"asset-source.txt"),provider);
     File.WriteAllText(Path.Combine(destination,"asset-category.txt"),GuessCategory(displayName));
-    GameObject check=ImportedObj.Load(Path.Combine(destination,"model.obj"));
-    ThumbnailUtility.Save(check,Path.Combine(destination,"thumbnail.png"));
-    UnityEngine.Object.Destroy(check);
+    GameObject check=null;
+    try{
+     check=ImportedObj.Load(Path.Combine(destination,"model.obj"));
+     var renderers=check.GetComponentsInChildren<Renderer>();
+     if(renderers.Length==0)throw new InvalidDataException("Model contains no visible mesh");
+     Bounds bounds=renderers[0].bounds;
+     for(int i=1;i<renderers.Length;i++)bounds.Encapsulate(renderers[i].bounds);
+     float largest=Mathf.Max(bounds.size.x,Mathf.Max(bounds.size.y,bounds.size.z));
+     if(float.IsNaN(largest)||float.IsInfinity(largest)||largest<.0001f)
+      throw new InvalidDataException("Model contains unusable geometry. Try a different OBJ/GLB export.");
+     File.WriteAllText(Path.Combine(destination,"model-size.txt"),
+      bounds.size.x.ToString("F3")+" x "+bounds.size.y.ToString("F3")+" x "+bounds.size.z.ToString("F3")+" m");
+     try{ThumbnailUtility.Save(check,Path.Combine(destination,"thumbnail.png"));}
+     catch(Exception thumbError){
+      Diagnostics.Add("WARN","Model imported but preview thumbnail failed: "+thumbError.Message);
+     }
+    }finally{if(check!=null)UnityEngine.Object.Destroy(check);}
     Directory.Delete(temp,true);
     return id;
    }catch{
