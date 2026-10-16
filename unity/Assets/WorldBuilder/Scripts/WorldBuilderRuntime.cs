@@ -1362,9 +1362,12 @@ namespace WorldBuilder {
     if(objects[i]==null)continue;
     if(hit.collider.gameObject==objects[i]||hit.collider.transform.IsChildOf(objects[i].transform)){index=i;break;}
    }
-   if(index<0){Notice("Choose a WorldBuilder surface to paint");return;}
+   if(index<0){Notice("Choose a WorldBuilder object or surface to paint");return;}
    Piece p=project.pieces[index];
-   if(p.kind!="wall"&&p.kind!="floor"&&p.kind!="roof"){Notice("Paint currently supports walls, floors and roofs");return;}
+   if(p.kind!="wall"&&p.kind!="floor"&&p.kind!="roof"&&p.kind!="imported"&&
+      p.kind!="water"&&p.kind!="terrain"&&p.kind!="path"){
+    Notice("Select a model, wall, floor, roof or landscape surface to paint");return;
+   }
    string desired=string.IsNullOrEmpty(selectedTextureId)?FinishNames[selectedFinish]:"texture:"+selectedTextureId;
    if(p.finish==desired&&Mathf.Abs(p.textureTile-selectedTextureTile)<.001f)return;
    RememberChange();
@@ -1440,6 +1443,34 @@ namespace WorldBuilder {
     return tex;
    }catch(Exception ex){Diagnostics.Add("ERROR","Material image unreadable: "+ex.Message);return null;}
   }
+  // Imported OBJ/GLB materials live on child mesh renderers, not on the
+  // parent GameObject. Preserve each material by default and replace it only
+  // when the user explicitly paints the asset.
+  void ApplyImportedFinish(GameObject root,Piece piece){
+   if(string.IsNullOrEmpty(piece.finish)||piece.finish=="Default")return;
+   Texture2D image=null;Color color=Color.white;
+   if(piece.finish.StartsWith("texture:",StringComparison.Ordinal)){
+    image=GetMaterialImage(piece.finish.Substring(8));
+    if(image==null){Diagnostics.Add("WARN","Missing paint texture on imported model: "+piece.finish);return;}
+   }else{
+    int index=Array.IndexOf(FinishNames,piece.finish);
+    if(index<0)return;
+    color=FinishColors[index];
+   }
+   foreach(Renderer renderer in root.GetComponentsInChildren<Renderer>(true)){
+    var original=renderer.sharedMaterials;
+    for(int i=0;i<original.Length;i++){
+     var finish=WorldBuilderShaders.NewLit(color);
+     if(image!=null){
+      finish.mainTexture=image;
+      float repeat=Mathf.Clamp(piece.textureTile<=0?1f:piece.textureTile,.1f,20f);
+      finish.mainTextureScale=new Vector2(repeat,repeat);
+     }
+     original[i]=finish;
+    }
+    renderer.sharedMaterials=original;
+   }
+  }
   GameObject Create(Piece piece){
    if(piece.kind=="tree"){
     GameObject root=new GameObject("WB_Tree");
@@ -1489,6 +1520,15 @@ namespace WorldBuilder {
     water.transform.localScale=piece.scale;
     water.GetComponent<Renderer>().sharedMaterial=
      WorldBuilderShaders.NewOverlay(new Color(.24f,.58f,.74f,.67f));
+    if(!string.IsNullOrEmpty(piece.finish)){
+     Texture2D image=piece.finish.StartsWith("texture:",StringComparison.Ordinal)?
+      GetMaterialImage(piece.finish.Substring(8)):null;
+     if(image!=null){
+      var mat=WorldBuilderShaders.NewLit(new Color(.74f,.91f,1f,.84f));
+      mat.mainTexture=image;
+      water.GetComponent<Renderer>().sharedMaterial=mat;
+     }
+    }
     return water;
    }
    if(piece.kind=="light-point"||piece.kind=="light-spot"){
@@ -1511,6 +1551,7 @@ namespace WorldBuilder {
     try{
      string file=Path.Combine(AssetLibrary(),piece.assetId??"","model.obj");
      var objImported=ImportedObj.Load(file);
+     ApplyImportedFinish(objImported,piece);
      if(piece.fitToSurface){
       var pivot=new GameObject("WB_Imported_"+piece.assetId);
       AnchorImportedModel(pivot,objImported,ModelBounds(objImported));
