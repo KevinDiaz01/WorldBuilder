@@ -1060,9 +1060,9 @@ namespace WorldBuilder {
     if(anchor.HasValue&&!OverUI()&&
       (new Vector2(Input.mousePosition.x,Input.mousePosition.y)-dragAnchorMouse).sqrMagnitude>=196f&&
       MouseOnGround(out Vector3 drop)&&Vector3.Distance(anchor.Value,drop)>.01f){
-     Vector3 start=anchor.Value;
+     Vector3 dragStart=anchor.Value;
      anchor=null;
-     CompleteSpan(start,drop);
+     CompleteSpan(dragStart,drop);
     }
    }
    UpdatePreview();
