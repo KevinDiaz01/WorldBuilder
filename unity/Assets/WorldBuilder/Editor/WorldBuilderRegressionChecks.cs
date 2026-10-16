@@ -25,14 +25,17 @@ namespace WorldBuilder {
   static void RuntimeShaders(){
    Shader lit=Resources.Load<Shader>("WorldBuilderLit");
    Shader overlay=Resources.Load<Shader>("WorldBuilderOverlay");
-   Expect(lit!=null&&overlay!=null,"standalone runtime shader resources are missing");
+   Shader sky=Resources.Load<Shader>("WorldBuilderSky");
+   Expect(lit!=null&&overlay!=null&&sky!=null,"standalone runtime shader resources are missing");
    Material a=WorldBuilderShaders.NewLit(Color.white);
    Material b=WorldBuilderShaders.NewOverlay(new Color(.2f,.4f,.6f,.5f));
+   Material c=new Material(sky);
    try{
-    Expect(a.shader==lit&&b.shader==overlay,"runtime shaders are not used");
+    Expect(a.shader==lit&&b.shader==overlay&&c.shader==sky,"runtime shaders are not used");
    }finally{
     UnityEngine.Object.DestroyImmediate(a);
     UnityEngine.Object.DestroyImmediate(b);
+    UnityEngine.Object.DestroyImmediate(c);
    }
   }
   static void WorkspaceLayout(WorldBuilderRuntime runtime){
