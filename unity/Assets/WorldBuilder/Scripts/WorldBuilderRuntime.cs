@@ -1066,6 +1066,15 @@ namespace WorldBuilder {
   void DrawPause(float w,float h){
    GUI.Box(new Rect(0,0,w,h),"",panelStyle);
    float x=w*.5f-182,y=h*.5f-285;
+   if(showConfirmExit){
+    GUI.Box(new Rect(x-30,y+155,424,274),"",panelStyle);
+    Label(new Rect(x+3,y+178,355,35),"Exit WorldBuilder?",true);
+    Label(new Rect(x+3,y+213,362,43),"Save your work before leaving.");
+    if(Button(new Rect(x+5,y+259,350,38),"Save and Exit"))ExitApplication(true);
+    if(Button(new Rect(x+5,y+304,350,38),"Exit Without Saving"))ExitApplication(false);
+    if(Button(new Rect(x+5,y+349,350,38),"Cancel"))showConfirmExit=false;
+    return;
+   }
    GUI.Box(new Rect(x,y,364,570),"",panelStyle);
    Label(new Rect(x+37,y+23,295,36),"WorldBuilder",true);
    if(Button(new Rect(x+30,y+73,304,43),"Resume Building"))showPause=false;
@@ -1077,15 +1086,6 @@ namespace WorldBuilder {
    if(Button(new Rect(x+30,y+367,304,43),"New Project")){showPause=false;NewProject();}
    if(Button(new Rect(x+30,y+433,304,49),"Exit WorldBuilder")){showConfirmExit=true;}
    Label(new Rect(x+30,y+507,304,29),"Esc to return to your world");
-   if(showConfirmExit){
-    // The confirmation is the sole interactive layer while exit is pending.
-    GUI.Box(new Rect(x-30,y+155,424,274),"",panelStyle);
-    Label(new Rect(x+3,y+178,355,35),"Exit WorldBuilder?",true);
-    Label(new Rect(x+3,y+213,362,43),"Save your work before leaving.");
-    if(Button(new Rect(x+5,y+259,350,38),"Save and Exit"))ExitApplication(true);
-    if(Button(new Rect(x+5,y+304,350,38),"Exit Without Saving"))ExitApplication(false);
-    if(Button(new Rect(x+5,y+349,350,38),"Cancel"))showConfirmExit=false;
-   }
   }
   void DrawSettings(float w,float h){
    float x=w*.5f-250,y=h*.5f-238;
