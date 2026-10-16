@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Diagnostics;
 using UnityEngine;
 
 namespace WorldBuilder {
@@ -49,7 +48,7 @@ namespace WorldBuilder {
   private string targetVrcProject="";
   private bool showImport=false;
   private bool showAssets=false;
-  private Process browserProcess;
+  private System.Diagnostics.Process browserProcess;
   private PolyHavenCatalog polyHaven;
   private string assetSearch="";
   private int sourceTab=0;
@@ -77,9 +76,9 @@ namespace WorldBuilder {
     }
     string exe=Path.Combine(Path.GetDirectoryName(Application.dataPath),"WorldBuilderAssetBrowser.exe");
     if(!File.Exists(exe)){Notice("Asset browser component is missing. Reinstall the complete update.");return;}
-    IntPtr hwnd=Process.GetCurrentProcess().MainWindowHandle;
+    IntPtr hwnd=System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
     if(hwnd==IntPtr.Zero){Notice("Unable to locate WorldBuilder window");return;}
-    browserProcess=Process.Start(new ProcessStartInfo(exe,
+    browserProcess=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe,
       hwnd.ToInt64().ToString()+" "+QuoteArg(AssetHub.Root)){UseShellExecute=false});
     showAssets=true;
     Notice("Assets browser opening...");
