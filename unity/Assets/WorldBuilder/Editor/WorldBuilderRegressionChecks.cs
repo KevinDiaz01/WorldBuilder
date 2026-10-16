@@ -18,6 +18,7 @@ namespace WorldBuilder {
    SpanGestureEligibility();
    CatalogToolConsistency(runtime);
    ImportedModelPaint();
+   AssociatedMaterials();
    AssetCategories();
    SkyboxImports();
    ToolSwitching(runtime);
@@ -95,6 +96,19 @@ namespace WorldBuilder {
    var saved=JsonUtility.ToJson(a);
    Expect(JsonUtility.FromJson<Piece>(saved).finish==a.finish,
     "imported finish lost after saving");
+  }
+  static void AssociatedMaterials(){
+   // Filename validation is important: model textures may be user-downloaded.
+   Expect(AssetHub.ModelTexturePath("not-an-id","../../../secret.png")==null,
+    "model texture path must reject untrusted ids and path traversal");
+   MethodInfo finish=typeof(WorldBuilderRuntime).GetMethod("SetImportedFinish",
+    BindingFlags.Instance|BindingFlags.NonPublic);
+   Expect(finish!=null,"selected model must expose original and packaged finishes");
+   var piece=new Piece("imported",Vector3.zero,Vector3.one,Quaternion.identity);
+   piece.assetId=Guid.NewGuid().ToString("N");
+   piece.finish="assettexture:albedo.png";
+   Expect(JsonUtility.FromJson<Piece>(JsonUtility.ToJson(piece)).finish==piece.finish,
+    "model-specific texture selection is not saved");
   }
   static void AssetCategories(){
    string folder=Path.Combine(Application.temporaryCachePath,"WB-categories-"+Guid.NewGuid().ToString("N"));
