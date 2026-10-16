@@ -39,8 +39,11 @@ internal sealed class BrowserWindow : Form {
  public BrowserWindow(IntPtr unityWindow,string root){
   unity=unityWindow;assetsRoot=root;
   Text="WorldBuilder Assets Browser";
-  FormBorderStyle=FormBorderStyle.None;
-  ShowInTaskbar=false;
+  FormBorderStyle=FormBorderStyle.Sizable;
+  ShowInTaskbar=true;
+  StartPosition=FormStartPosition.CenterScreen;
+  MinimumSize=new Size(800,520);
+  Size=new Size(1220,750);
   BackColor=Color.FromArgb(26,32,40);
   var back=new ToolStripButton("←");
   var forward=new ToolStripButton("→");
@@ -61,9 +64,18 @@ internal sealed class BrowserWindow : Form {
   var folder=new ToolStripButton("Asset folder");
   folder.Click+=(_,_)=>Process.Start(new ProcessStartInfo("explorer.exe",$"\"{assetsRoot}\""){UseShellExecute=true});
   strip.Items.Add(folder);
+  strip.Items.Add(new ToolStripSeparator());
+  var close=new ToolStripButton("✕  Close Assets");
+  close.ForeColor=Color.DarkRed;
+  close.Click+=(_,_)=>Close();
+  strip.Items.Add(close);
   strip.Items.Add(status);
   Controls.Add(view);Controls.Add(strip);
   strip.Dock=DockStyle.Top;
+  strip.AutoSize=false;strip.Height=52;
+  strip.Font=new Font("Segoe UI",11f,FontStyle.Regular);
+  strip.BackColor=Color.FromArgb(235,241,248);
+  strip.BringToFront();
   Load+=async (_,_)=>{
    try{
     Directory.CreateDirectory(assetsRoot);
@@ -80,14 +92,15 @@ internal sealed class BrowserWindow : Form {
     view.CoreWebView2.NavigationCompleted+=(_,a)=>{if(!a.IsSuccess)status.Text="Page error: "+a.WebErrorStatus;};
     SelectSite(0);
    }catch(Exception e){status.Text="Browser unavailable: "+e.Message;}
-   Attach();
-   layoutTimer.Tick+=(_,_)=>Position();
-   layoutTimer.Start();
+   // A normal resizable, closable browser window is used rather than a borderless
+   // Win32 child which could cover Unity controls and conceal provider tabs.
+   Activate();
   };
   FormClosed+=(_,_)=>layoutTimer.Stop();
  }
  void SelectSite(int i){
   provider=names[i];
+  Text="WorldBuilder Assets - "+provider;
   if(view.CoreWebView2!=null)view.CoreWebView2.Navigate(sites[i]);
   status.Text=provider;
  }
