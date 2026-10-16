@@ -24,6 +24,12 @@ namespace WorldBuilder {
    }
   }
   static string SessionMarker { get { return Path.Combine(Root,"active-session.txt"); } }
+  static string PreviousCrash { get { return Path.Combine(Root,"last-interrupted.json"); } }
+  public static RecoverySnapshot ReadPreviousCrash(){
+   if(!File.Exists(PreviousCrash))return null;
+   try{return Validate(File.ReadAllText(PreviousCrash));}
+   catch(Exception ex){Debug.LogWarning("Previous crash recovery unreadable: "+ex.Message);return null;}
+  }
   static string Hash(string value){
    using(var sha=SHA256.Create()){
     byte[] bytes=sha.ComputeHash(Encoding.UTF8.GetBytes(value??""));
@@ -71,6 +77,8 @@ namespace WorldBuilder {
      // A normal manual save newer than this recovery is the safer source.
      if(File.GetLastWriteTimeUtc(projectPath)>=DateTime.Parse(candidate.savedUtc).ToUniversalTime())return null;
     }
+    // Keep a discoverable copy even when the user chooses not to restore now.
+    WriteAtomic(PreviousCrash,JsonUtility.ToJson(candidate));
     return candidate;
    }catch(Exception ex){
     Debug.LogWarning("WorldBuilder recovery check: "+ex.Message);
@@ -107,7 +115,8 @@ namespace WorldBuilder {
    }
    // Compatibility with snapshots written by earlier WorldBuilder versions.
    string legacy=Path.Combine(Root,"autosave.json");
-   if(File.Exists(legacy)){
+   if(File.Exists(legacy)&&string.Equals(Path.GetFileName(projectPath),
+      "WorldBuilder-project.json",StringComparison.OrdinalIgnoreCase)){
     try{
      string json=File.ReadAllText(legacy);
      Project project=JsonUtility.FromJson<Project>(json);
