@@ -1337,7 +1337,7 @@ namespace WorldBuilder {
   }
   // Premium rounded glass UI generated at runtime; no external font or art packages required.
   private GUIStyle panelStyle, headingStyle, captionStyle, menuStyle, activeStyle, regularStyle, sectionStyle, smallStyle;
-  private GUIStyle trayStyle,cardStyle,selectedCardStyle,softStyle,subtleStyle,mutedStyle,miniStyle,shadowStyle,destructiveStyle;
+  private GUIStyle trayStyle,cardStyle,selectedCardStyle,softStyle,subtleStyle,mutedStyle,miniStyle,shadowStyle,destructiveStyle,paletteSymbolStyle,cardTitleStyle;
   private Texture2D darkTexture, sideTexture, blueTexture, fieldTexture, hoverTexture, strokeTexture;
   private Texture2D trayTexture,cardTexture,selectedCardTexture,softTexture,shadowTexture,destructiveTexture;
   private Font interfaceFont;
@@ -1413,6 +1413,9 @@ namespace WorldBuilder {
    sectionStyle.normal.textColor=new Color(.21f,.28f,.42f);
    sectionStyle.fontSize=17;sectionStyle.fontStyle=FontStyle.Bold;
    smallStyle=new GUIStyle(captionStyle);smallStyle.fontSize=13;
+   paletteSymbolStyle=new GUIStyle(headingStyle);paletteSymbolStyle.fontSize=36;paletteSymbolStyle.alignment=TextAnchor.MiddleCenter;
+   paletteSymbolStyle.normal.textColor=new Color(.31f,.43f,.69f);
+   cardTitleStyle=new GUIStyle(headingStyle);cardTitleStyle.fontSize=14;
    mutedStyle=new GUIStyle(captionStyle);mutedStyle.fontSize=12;
    miniStyle=new GUIStyle(captionStyle);miniStyle.fontSize=14;miniStyle.fontStyle=FontStyle.Bold;
    menuStyle=RoundedStyle(sideTexture,15);
@@ -1735,16 +1738,30 @@ namespace WorldBuilder {
    if(float.TryParse(dimensionDraft[index],out float number))return number;
    return value;
   }
-  void DrawAssetTile(Rect card,string title,string subtitle,int colorIndex,Action callback,Texture2D previewImage=null){
-   GUI.Box(card,"",panelStyle);
-   Color[] colors={new Color(.17f,.29f,.36f,.92f),new Color(.28f,.25f,.24f,.95f),
-                   new Color(.21f,.30f,.27f,.95f),new Color(.26f,.27f,.34f,.94f)};
-   GUI.DrawTexture(new Rect(card.x+6,card.y+6,card.width-12,card.height-65),
-     previewImage!=null?previewImage:ThumbnailTexture(colors[colorIndex%colors.Length]),ScaleMode.ScaleToFit);
-   string display=title.Length>19?title.Substring(0,16)+"...":title;
-   GUI.Label(new Rect(card.x+12,card.y+card.height-54,card.width-22,27),display,smallStyle);
-   GUI.Label(new Rect(card.x+12,card.y+card.height-30,card.width-22,25),subtitle,smallStyle);
-   if(GUI.Button(card,GUIContent.none,GUIStyle.none))callback();
+  void DrawAssetTile(Rect tile,string title,string subtitle,int colorIndex,Action callback,Texture2D previewImage=null,bool selected=false){
+   GUI.Box(tile,"",selected?selectedCardStyle:cardStyle);
+   Color[] fallback={
+    new Color(.86f,.90f,.97f,.98f),new Color(.91f,.87f,.93f,.98f),
+    new Color(.86f,.93f,.89f,.98f),new Color(.94f,.90f,.84f,.98f)};
+   Rect imageBox=new Rect(tile.x+7,tile.y+7,tile.width-14,tile.height-56);
+   GUI.DrawTexture(imageBox,previewImage!=null?previewImage:ThumbnailTexture(fallback[colorIndex%fallback.Length]),
+    ScaleMode.ScaleToFit);
+   if(previewImage==null)GUI.Label(new Rect(imageBox.x,imageBox.y+imageBox.height*.5f-20,imageBox.width,40),
+    "3D MODEL",paletteSymbolStyle);
+   string display=title.Length>22?title.Substring(0,19)+"...":title;
+   GUI.Label(new Rect(tile.x+11,tile.y+tile.height-48,tile.width-19,24),display,cardTitleStyle);
+   string provider=subtitle.Length>28?subtitle.Substring(0,25)+"...":subtitle;
+   GUI.Label(new Rect(tile.x+11,tile.y+tile.height-24,tile.width-17,18),provider,mutedStyle);
+   if(GUI.Button(tile,GUIContent.none,GUIStyle.none))callback();
+  }
+  void DrawPaletteTile(Rect tile,string glyph,string name,string subtitle,bool selected,Color tint,Action callback){
+   GUI.Box(tile,"",selected?selectedCardStyle:cardStyle);
+   GUI.DrawTexture(new Rect(tile.x+7,tile.y+7,tile.width-14,tile.height-63),
+    ThumbnailTexture(tint),ScaleMode.StretchToFill);
+   GUI.Label(new Rect(tile.x+12,tile.y+12,tile.width-24,tile.height-75),glyph,paletteSymbolStyle);
+   GUI.Label(new Rect(tile.x+11,tile.y+tile.height-53,tile.width-17,25),name,cardTitleStyle);
+   GUI.Label(new Rect(tile.x+11,tile.y+tile.height-27,tile.width-17,20),subtitle,mutedStyle);
+   if(GUI.Button(tile,GUIContent.none,GUIStyle.none))callback();
   }
   private readonly Dictionary<int,Texture2D> catalogBackgrounds=new Dictionary<int,Texture2D>();
   private readonly Dictionary<string,Texture2D> modelThumbnails=new Dictionary<string,Texture2D>();
@@ -1767,84 +1784,160 @@ namespace WorldBuilder {
    return result;
   }
   void DrawCatalog(float w,float h){
-   // Give thumbnail labels their own room, including on shorter screens.
-   float shelfHeight=252f;
-   float top=h-shelfHeight-10f;
-   GUI.Box(new Rect(125,top,w-140,shelfHeight),"",panelStyle);
-   if(Button(new Rect(w-72,top+63,48,42),"X")){showCatalog=false;return;}
-   string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor","Materials","Architecture","Other"};
-   float x=139f;
-   float availableForTabs=Mathf.Max(500f,w-570f);
-   float desiredWidths=0f;
-   for(int k=0;k<categories.Length;k++)desiredWidths+=(k==0?122f:Mathf.Clamp(categories[k].Length*11f+22f,86f,126f))+7f;
-   float tabRatio=Mathf.Min(1f,availableForTabs/desiredWidths);
-   for(int k=0;k<categories.Length;k++){
-    float width=(k==0?122f:Mathf.Clamp(categories[k].Length*11f+22f,86f,126f))*tabRatio;
-    if(Button(new Rect(x,top+13,width,40),categories[k],catalogCategory==k))catalogCategory=k;
-    x+=width+7f*tabRatio;
+   float shelfHeight=Mathf.Min(270f,h*.34f);
+   float top=h-shelfHeight-9f;
+   float left=130f;
+   float width=w-left-13f;
+   SoftPanel(new Rect(left,top,width,shelfHeight),trayStyle);
+   bool building=creativeMode==0,landscaping=creativeMode==2;
+   string heading=building?"BUILD COLLECTION":landscaping?"LANDSCAPE COLLECTION":
+     catalogCategory==8?"SURFACE MATERIALS":"FURNITURE & OBJECTS";
+   GUI.Label(new Rect(left+19,top+13,290,30),heading,sectionStyle);
+   GUI.Label(new Rect(left+23,top+46,300,20),
+    building?"Shapes, walls and openings":landscaping?"Create the world around your home":"Browse models, decor and finishes",mutedStyle);
+   if(Button(new Rect(w-63,top+13,38,38),"−")){showCatalog=false;return;}
+   float cardY=top+103f;
+   float cardH=Mathf.Max(123f,shelfHeight-118f);
+   if(building||landscaping){
+    if(Button(new Rect(w-178,top+16,106,36),"STUDIO")){
+     showStudio=!showStudio;studioTab=building?0:2;
+    }
+    Tool[] available=building?
+      new[]{Tool.Wall,Tool.Floor,Tool.Room,Tool.Room,Tool.Door,Tool.Window,Tool.Garage,Tool.Stairs,Tool.Roof,Tool.Select}:
+      new[]{Tool.Terrain,Tool.Tree,Tool.Path,Tool.Water,Tool.Select};
+    string[] names=building?
+      new[]{"Wall","Floor","Room","Freeform","Doorway","Window","Garage","Stairs","Roof","Select"}:
+      new[]{"Terrain","Trees","Path","Water","Select"};
+    string[] glyphs=building?
+      new[]{"▥","▤","▣","⬡","▯","⊞","▱","≋","⌂","◈"}:
+      new[]{"▲","♣","▰","≈","◈"};
+    string[] hints=building?
+      new[]{"Draw walls","Draw flooring","Rectangle","Any shape","Wall opening","Place windows","Wide opening","Connect levels","Add roof","Edit objects"}:
+      new[]{"Rolling hills","Place plants","Driveway","Pond or pool","Edit outdoors"};
+    Color[] tint=building?
+      new[]{new Color(.86f,.91f,.98f),new Color(.92f,.88f,.96f),new Color(.86f,.94f,.93f),
+       new Color(.92f,.91f,.98f),new Color(.96f,.88f,.85f),new Color(.83f,.91f,.97f),
+       new Color(.94f,.86f,.90f),new Color(.91f,.92f,.83f),new Color(.95f,.91f,.84f),new Color(.88f,.92f,.98f)}:
+      new[]{new Color(.80f,.91f,.79f),new Color(.78f,.90f,.82f),new Color(.94f,.87f,.80f),
+       new Color(.78f,.87f,.96f),new Color(.91f,.92f,.98f)};
+    float cell=153f;
+    float viewport=width-35f;
+    catalogScroll=GUI.BeginScrollView(new Rect(left+16,cardY,viewport,cardH+17f),catalogScroll,
+      new Rect(0,0,Mathf.Max(viewport-18,available.Length*cell+8f),cardH),true,false);
+    for(int i=0;i<available.Length;i++){
+     int index=i;
+     Tool tool=available[i];
+     bool selected=currentTool==tool&&(tool!=Tool.Room||polygonMode==(building&&i==3));
+     DrawPaletteTile(new Rect(i*cell,1,146,cardH-8f),glyphs[i],names[i],hints[i],selected,tint[i],()=>{
+      if(tool==Tool.Room){
+       SelectTool(Tool.Room);
+       polygonMode=building&&index==3;
+      }else if(tool==Tool.Garage){
+       SelectTool(Tool.Garage);openingWidth=3f;openingHeight=2.35f;openingBottom=0f;
+      }else SelectTool(tool);
+      Notice(tool==Tool.Room&&polygonMode?"Click room corners, press Enter to finish":
+        names[index]+" selected");
+     });
+    }
+    GUI.EndScrollView();
+    return;
    }
-   float right=w-395;
-   catalogSearch=GUI.TextField(new Rect(right,top+13,195,40),catalogSearch,regularStyle);
-   if(Button(new Rect(w-188,top+13,172,40),"Browse Assets"))ToggleAssetBrowser();
-   if(catalogCategory!=8){
-    var entries=AssetHub.Catalog();
+
+   // Decorate: browse with readable, horizontally scrollable category tabs.
+   string[] categories={"My Assets","Furniture","Lighting","Decor","Kitchen","Bathroom","Plants","Outdoor",
+    "Materials","Architecture","Other"};
+   float searchX=w-555f;
+   if(searchX<left+410f)searchX=left+410f;
+   if(GUI.Button(new Rect(searchX,top+13,163,35),"",subtleStyle)){} // searchable field surface
+   catalogSearch=GUI.TextField(new Rect(searchX+8f,top+13f,150f,35f),catalogSearch,regularStyle);
+   if(Button(new Rect(w-384,top+13,138,36),"IMPORT")){
+    showImport=true;showExport=false;
+   }
+   if(Button(new Rect(w-239,top+13,165,36),"FIND ASSETS"))ToggleAssetBrowser();
+   float categoryLeft=left+16,categoryWidth=width-44;
+   float total=0f;
+   for(int i=0;i<categories.Length;i++)total+=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f)+7f;
+   catalogTabScroll=GUI.BeginScrollView(new Rect(categoryLeft,top+65,categoryWidth,37),
+    catalogTabScroll,new Rect(0,0,Mathf.Max(categoryWidth-14,total+4f),34),true,false);
+   float tabX=0f;
+   for(int i=0;i<categories.Length;i++){
+    int which=i;float tabWidth=Mathf.Clamp(categories[i].Length*9f+28f,92f,126f);
+    if(Button(new Rect(tabX,0,tabWidth,31f),categories[i],catalogCategory==i)){
+     catalogCategory=which;
+     catalogScroll=Vector2.zero;
+     if(which==8)SelectTool(Tool.Paint);
+    }
+    tabX+=tabWidth+7f;
+   }
+   GUI.EndScrollView();
+   float viewportWidth=width-36f;
+   if(catalogCategory==8){
+    var materials=MaterialLibrary.Catalog();
+    float tileW=145f;
+    int n=FinishNames.Length+materials.Count;
+    float sliderX=w-510f;
+    GUI.Label(new Rect(sliderX,top+44,245,20),"Texture repeat: "+selectedTextureTile.ToString("F2")+"x",mutedStyle);
+    float next=GUI.HorizontalSlider(new Rect(sliderX+237,top+49,155,17),selectedTextureTile,.25f,8f);
+    selectedTextureTile=Mathf.Round(next*4f)/4f;
+    catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewportWidth,cardH+15),catalogScroll,
+      new Rect(0,0,Mathf.Max(viewportWidth-15,n*tileW+10),cardH),true,false);
+    for(int i=0;i<FinishNames.Length;i++){
+     int index=i;
+     Rect tile=new Rect(i*tileW+2,0,tileW-8,cardH-7);
+     bool selected=string.IsNullOrEmpty(selectedTextureId)&&selectedFinish==i;
+     GUI.Box(tile,"",selected?selectedCardStyle:cardStyle);
+     GUI.DrawTexture(new Rect(tile.x+7,tile.y+7,tile.width-14,tile.height-50),
+      ThumbnailTexture(FinishColors[i]),ScaleMode.StretchToFill);
+     GUI.Label(new Rect(tile.x+9,tile.y+tile.height-33,tile.width-15,27),FinishNames[i],cardTitleStyle);
+     if(GUI.Button(tile,GUIContent.none,GUIStyle.none)){
+      selectedTextureId="";selectedFinish=index;SelectTool(Tool.Paint);
+     }
+    }
+    for(int i=0;i<materials.Count;i++){
+     var material=materials[i];
+     Rect tile=new Rect((i+FinishNames.Length)*tileW+2,0,tileW-8,cardH-7);
+     bool selected=selectedTextureId==material.id;
+     GUI.Box(tile,"",selected?selectedCardStyle:cardStyle);
+     Texture2D image=GetMaterialImage(material.id);
+     if(image!=null)GUI.DrawTexture(new Rect(tile.x+7,tile.y+7,tile.width-14,tile.height-50),
+       image,ScaleMode.ScaleAndCrop);
+     GUI.Label(new Rect(tile.x+8,tile.y+tile.height-35,tile.width-15,22),
+       material.name.Length>17?material.name.Substring(0,14)+"...":material.name,cardTitleStyle);
+     GUI.Label(new Rect(tile.x+8,tile.y+tile.height-17,tile.width-15,16),material.provider,mutedStyle);
+     if(GUI.Button(tile,GUIContent.none,GUIStyle.none)){selectedTextureId=material.id;SelectTool(Tool.Paint);}
+    }
+    GUI.EndScrollView();
+   }else{
+    var ids=AssetHub.Catalog();
     var visible=new List<string>();
-    foreach(string id in entries){
+    foreach(string id in ids){
      string category=catalogCategory==0?"All":categories[catalogCategory];
      if(category!="All"&&AssetHub.Category(id)!=category)continue;
      string keywords=AssetHub.Name(id)+" "+AssetHub.Category(id)+" "+AssetHub.Provider(id);
-     if(catalogSearch.Length==0||keywords.IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)>=0)visible.Add(id);
+     if(catalogSearch.Length>0&&keywords.IndexOf(catalogSearch,StringComparison.OrdinalIgnoreCase)<0)continue;
+     visible.Add(id);
     }
     if(visible.Count==0){
-     Label(new Rect(160,top+93,w-480,33),"No models found for this category.",true);
-     Label(new Rect(160,top+134,w-480,29),"Supported models appear automatically after download.");
-     if(Button(new Rect(w-370,top+101,183,49),"Import Model")){showImport=true;showExport=false;}
+     GUI.Label(new Rect(left+31,cardY+15,500,37),
+       catalogSearch.Length>0?"No matching models yet":"Your collection is waiting for its first objects",sectionStyle);
+     GUI.Label(new Rect(left+31,cardY+52,660,29),
+       "Download a compatible 3D model, or choose Import. New assets appear automatically.",captionStyle);
+     if(Button(new Rect(left+33,cardY+93,160,38),"IMPORT MODEL")){showImport=true;showExport=false;}
     }else{
-     float viewport=w-166;
-     catalogScroll=GUI.BeginScrollView(new Rect(139,top+68,viewport,166),catalogScroll,
-      new Rect(0,0,Mathf.Max(viewport,visible.Count*180),154),false,false);
+     const float cell=170f;
+     catalogScroll=GUI.BeginScrollView(new Rect(left+17,cardY,viewportWidth,cardH+15),catalogScroll,
+       new Rect(0,0,Mathf.Max(viewportWidth-15,visible.Count*cell+4),cardH),true,false);
      for(int k=0;k<visible.Count;k++){
       string id=visible[k];
       string modelName=AssetHub.Name(id);
       if(modelName==id)modelName="Imported Asset "+(k+1);
-      DrawAssetTile(new Rect(k*180,0,170,151),modelName,AssetHub.Category(id)+" · "+AssetHub.Provider(id),k,()=>{
-       SelectImportedAsset(id);
-      },AssetThumbnail(id));
+      DrawAssetTile(new Rect(k*cell+1,0,162,cardH-7f),modelName,
+       AssetHub.Category(id)+" · "+AssetHub.Provider(id),k,()=>{
+        selectedCatalogId=id;SelectImportedAsset(id);
+       },AssetThumbnail(id),selectedCatalogId==id);
      }
      GUI.EndScrollView();
     }
-   }else if(catalogCategory==8){
-    Label(new Rect(154,top+59,430,25),"Pick a material, then click a wall, floor or roof.");
-    float tiling=GUI.HorizontalSlider(new Rect(w-385,top+69,215,18),selectedTextureTile,.25f,8f);
-    selectedTextureTile=Mathf.Round(tiling*4f)/4f;
-    Label(new Rect(w-166,top+58,135,30),"Tile: "+selectedTextureTile.ToString("F2")+"x");
-    var materials=MaterialLibrary.Catalog();
-    float tileWidth=158f;
-    int count=FinishNames.Length+materials.Count;
-    catalogScroll=GUI.BeginScrollView(new Rect(140,top+100,w-167,140),catalogScroll,
-      new Rect(0,0,Mathf.Max(w-175,count*tileWidth),128));
-    for(int i=0;i<FinishNames.Length;i++){
-     int index=i;float tx=i*tileWidth;
-     if(GUI.Button(new Rect(tx,0,150,124),"",GUIStyle.none)){
-      selectedTextureId="";selectedFinish=index;SelectTool(Tool.Paint);
-     }
-     GUI.DrawTexture(new Rect(tx+4,4,142,76),ThumbnailTexture(FinishColors[i]));
-     GUI.Label(new Rect(tx+7,84,142,29),FinishNames[i],smallStyle);
-     if(string.IsNullOrEmpty(selectedTextureId)&&selectedFinish==i)
-      GUI.Box(new Rect(tx+3,115,143,5),"",activeStyle);
-    }
-    for(int i=0;i<materials.Count;i++){
-     var mat=materials[i];float tx=(i+FinishNames.Length)*tileWidth;
-     if(GUI.Button(new Rect(tx,0,150,124),"",GUIStyle.none)){
-      selectedTextureId=mat.id;SelectTool(Tool.Paint);
-     }
-     Texture2D pic=GetMaterialImage(mat.id);
-     if(pic!=null)GUI.DrawTexture(new Rect(tx+4,4,142,76),pic,ScaleMode.ScaleAndCrop);
-     GUI.Label(new Rect(tx+7,84,140,25),mat.name.Length>18?mat.name.Substring(0,15)+"...":mat.name,smallStyle);
-     GUI.Label(new Rect(tx+7,105,140,18),mat.provider,smallStyle);
-     if(selectedTextureId==mat.id)GUI.Box(new Rect(tx+3,119,143,5),"",activeStyle);
-    }
-    GUI.EndScrollView();
    }
   }
   void ExitApplication(bool saveFirst){
