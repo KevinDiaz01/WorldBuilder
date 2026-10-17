@@ -80,7 +80,13 @@ namespace WorldBuilder {
    if(view.buffer<0||view.buffer>=buffers.Length)throw new InvalidDataException("Invalid glTF buffer");
    int count=Components(a.type),unit=ComponentSize(a.componentType),size=count*unit;
    int stride=view.byteStride>0?view.byteStride:size;
-   if(stride<size||a.count<0||a.count>2000000)throw new InvalidDataException("Unsupported accessor stride or size");
+   if(stride<size)throw new InvalidDataException("glTF accessor "+index+" has invalid stride "+stride+" for "+a.type+
+    " ("+size+" bytes required). Download the OBJ format if available.");
+   // Large foliage models can exceed 2 million vertices or indices per accessor.
+   // Keep a reasonable ceiling while allowing detailed 4K trees.
+   if(a.count<0||a.count>8000000)throw new InvalidDataException(
+    "glTF accessor "+index+" contains "+a.count+" elements; limit is 8 million. Try a 1K/2K model.");
+   if(stride>4096)throw new InvalidDataException("glTF accessor "+index+" stride exceeds 4096 bytes");
    int offset=checked(view.byteOffset+a.byteOffset);
    byte[] source=buffers[view.buffer];
    long final= (long)offset+(long)Math.Max(0,a.count-1)*stride+size;

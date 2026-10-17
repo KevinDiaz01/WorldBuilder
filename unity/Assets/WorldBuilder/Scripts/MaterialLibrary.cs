@@ -128,14 +128,16 @@ namespace WorldBuilder {
     using(var zip=ZipFile.OpenRead(archive)){
      foreach(var entry in zip.Entries){
       string ext=Path.GetExtension(entry.Name).ToLowerInvariant();
-      if(ext==".obj"||ext==".glb"||ext==".gltf"||ext==".fbx")return true;
+      if(ext==".obj"||ext==".glb"||ext==".gltf"||ext==".fbx"||ext==".blend")return true;
      }
     }
    }catch(IOException){return true;}
    return false;
   }
   static void ScanZip(string file,string provider){
-   if(AssetHub.RequestedCategory(file)=="Skyboxes"||IsModelArchive(file))return;
+   // Blender tree archives are 3D source packages, not paintable materials.
+   if(file.EndsWith(".blend.zip",StringComparison.OrdinalIgnoreCase)||
+      AssetHub.RequestedCategory(file)=="Skyboxes"||IsModelArchive(file))return;
    FileInfo info=new FileInfo(file);
    string signature=info.Length+"|"+info.LastWriteTimeUtc.Ticks;
    if(!observed.TryGetValue(file,out string before)||before!=signature){observed[file]=signature;return;}
