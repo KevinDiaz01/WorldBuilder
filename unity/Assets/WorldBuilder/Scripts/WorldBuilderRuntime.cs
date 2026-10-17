@@ -1054,25 +1054,10 @@ namespace WorldBuilder {
    if(walkthrough!=null&&walkthrough.IsWalking)return;
    if(Input.GetKeyDown(KeyCode.F2)){showDiagnostics=!showDiagnostics;showPause=false;showHelp=false;showSettings=false;}
    if(showAssets&&(browserProcess==null||browserProcess.HasExited)){showAssets=false;if(browserProcess!=null){browserProcess.Dispose();browserProcess=null;}}
-   if(Time.unscaledTime>=nextAssetScan){
-    nextAssetScan=Time.unscaledTime+6f;
-    string msg;
-    int count=AssetHub.Scan(out msg);
-    MaterialLibrary.Scan();
-    SkyboxLibrary.Scan();
-    if(msg.Length>0){assetStatus=msg;if(count>0)Notice(msg);}
-    // Upgrade pre-existing imports with thumbnails, one model at a time.
-    foreach(string id in AssetHub.Catalog()){
-     string previewPath=Path.Combine(AssetLibrary(),id,"thumbnail.png");
-     if(File.Exists(previewPath))continue;
-     try{
-      GameObject thumbnailModel=ImportedObj.Load(Path.Combine(AssetLibrary(),id,"model.obj"));
-      ThumbnailUtility.Save(thumbnailModel,previewPath);
-      Destroy(thumbnailModel);
-     }catch(Exception ex){Debug.LogWarning("Could not preview "+id+": "+ex.Message);}
-     break;
-    }
-   }
+   // No filesystem scans, ZIP extraction, mesh imports, or thumbnail
+   // generation in Update. Large asset downloads previously blocked the
+   // Unity main thread and Windows reported "Stopped responding".
+   // Users explicitly start a limited import from My Assets instead.
    if(Input.GetKeyDown(KeyCode.Alpha0)&&!showPause&&!showSettings&&!showHelp)SelectTool(Tool.Select);
    if(Input.GetKeyDown(KeyCode.T)&&!showPause&&!showSettings&&!showHelp)SetCameraView(true);
    if(Input.GetKeyDown(KeyCode.P)&&!showPause&&!showSettings&&!showHelp)SetCameraView(false);
@@ -2446,7 +2431,22 @@ namespace WorldBuilder {
    }
    GUI.EndScrollView();
   }
+  void ImportDownloadedAssetsSafely(){
+   try{
+    string result;
+    int imported=AssetHub.Scan(out result);
+    // Material and sky processing also have size limits; do not scan both
+    // libraries immediately after large geometry imports in the same frame.
+    if(imported==0){MaterialLibrary.Scan();SkyboxLibrary.Scan();}
+    Notice(imported>0?"Imported "+imported+" model. Refresh again for the next.":"Library checked. "+result);
+   }catch(Exception ex){
+    Diagnostics.Add("ERROR","Manual asset discovery: "+ex.Message);
+    Notice("Could not scan downloads: "+ex.Message);
+   }
+  }
   void DrawMyAssetCollection(float left,float y,float viewport,float cardH){
+   if(Button(new Rect(left+19,y+4,210,34),"IMPORT DOWNLOADED ASSETS"))
+    ImportDownloadedAssetsSafely();
    var models=AssetHub.Catalog();
    var materials=MaterialLibrary.Catalog();
    var skies=SkyboxLibrary.Catalog();
