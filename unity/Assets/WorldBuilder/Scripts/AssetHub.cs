@@ -243,11 +243,31 @@ namespace WorldBuilder {
     if(models.Length==0){
      string[] glb=Directory.GetFiles(temp,"*.glb",SearchOption.AllDirectories);
      string[] gltf=Directory.GetFiles(temp,"*.gltf",SearchOption.AllDirectories);
-     string[] candidates=glb.Length>0?glb:gltf;
-     if(candidates.Length==0)throw new InvalidDataException("Archive contains no OBJ, GLB or glTF model");
-     Array.Sort(candidates,StringComparer.OrdinalIgnoreCase);
+     var candidates=new List<string>();
+     candidates.AddRange(glb);candidates.AddRange(gltf);
+     if(candidates.Count==0)throw new InvalidDataException("Archive contains no OBJ, GLB or glTF model");
+     candidates.Sort(StringComparer.OrdinalIgnoreCase);
      string converted=Path.Combine(temp,"model-converted.obj");
-     GltfToObj.ConvertModel(candidates[0],converted);
+     var failures=new List<string>();
+     bool convertedOk=false;
+     // Providers sometimes bundle multiple resolutions or LODs in one ZIP.
+     // An unsupported variant should not block all supported alternatives.
+     foreach(string candidate in candidates){
+      try{
+       if(File.Exists(converted))File.Delete(converted);
+       string staleMtl=Path.Combine(temp,"model.mtl");
+       if(File.Exists(staleMtl))File.Delete(staleMtl);
+       GltfToObj.ConvertModel(candidate,converted);
+       convertedOk=true;break;
+      }catch(Exception ex)when(ex is InvalidDataException||ex is NotSupportedException||
+        ex is OverflowException||ex is EndOfStreamException){
+       failures.Add(Path.GetFileName(candidate)+": "+ex.Message);
+      }
+     }
+     if(!convertedOk)throw new InvalidDataException(
+      "No compatible glTF found ("+candidates.Count+" attempted). "+
+      string.Join(" | ",failures.ToArray())+
+      ". Try a smaller resolution or the OBJ download.");
      models=new[]{converted};
     }
     // First OBJ is a conservative first version. Multi-model packaging follows later.

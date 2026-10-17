@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection;
 using UnityEngine;
 
@@ -24,6 +25,7 @@ namespace WorldBuilder {
    ToolSwitching(runtime);
    MeshImports();
    GltfMaterialRoundTrip();
+   ModelArchiveFallback();
    Geometry();
    WaterBasins();
    Debug.Log("WorldBuilder regression checks passed: bundled shaders, tool switching, OBJ/glTF materials, polygon and terrain");
@@ -192,6 +194,40 @@ namespace WorldBuilder {
      "OBJ material colors not preserved");
    }finally{
     if(obj!=null)UnityEngine.Object.DestroyImmediate(obj);
+    if(Directory.Exists(folder))Directory.Delete(folder,true);
+   }
+  }
+  static void ModelArchiveFallback(){
+   string folder=Path.Combine(Application.temporaryCachePath,"WB-model-fallback-"+Guid.NewGuid().ToString("N"));
+   Directory.CreateDirectory(folder);
+   string imported=null;
+   try{
+    byte[] positions=new byte[36];
+    float[] xyz={0f,0f,0f,1f,0f,0f,0f,1f,0f};
+    for(int i=0;i<xyz.Length;i++)
+     Buffer.BlockCopy(BitConverter.GetBytes(xyz[i]),0,positions,i*4,4);
+    string encoded=Convert.ToBase64String(positions);
+    string valid="{"+
+     "\"buffers\":[{\"byteLength\":36,\"uri\":\"data:application/octet-stream;base64,"+encoded+"\"}],"+
+     "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":0,\"byteLength\":36}],"+
+     "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"+
+     "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}],"+
+     "\"nodes\":[{\"mesh\":0}],\"scenes\":[{\"nodes\":[0]}],\"scene\":0}";
+    string zip=Path.Combine(folder,"fallback-model.zip");
+    using(var archive=ZipFile.Open(zip,ZipArchiveMode.Create)){
+     using(var writer=new StreamWriter(archive.CreateEntry("a-unsupported.gltf").Open()))
+      writer.Write("{\"buffers\":[],\"bufferViews\":[],\"accessors\":[],\"meshes\":[]}");
+     using(var writer=new StreamWriter(archive.CreateEntry("b-compatible.gltf").Open()))
+      writer.Write(valid);
+    }
+    imported=AssetHub.Import(zip,"Other");
+    Expect(File.Exists(Path.Combine(AssetHub.Library,imported,"model.obj")),
+     "fallback glTF archive did not import after first incompatible model");
+   }finally{
+    if(imported!=null){
+     string destination=Path.Combine(AssetHub.Library,imported);
+     if(Directory.Exists(destination))Directory.Delete(destination,true);
+    }
     if(Directory.Exists(folder))Directory.Delete(folder,true);
    }
   }
