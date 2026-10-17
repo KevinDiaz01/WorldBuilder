@@ -139,6 +139,13 @@ namespace WorldBuilder {
    if(file.EndsWith(".blend.zip",StringComparison.OrdinalIgnoreCase)||
       AssetHub.RequestedCategory(file)=="Skyboxes"||IsModelArchive(file))return;
    FileInfo info=new FileInfo(file);
+   // Manual discovery must not decompress multi-hundred-MB packages on the UI thread.
+   if(info.Length>64L*1024*1024){
+    if(failures.Add(file+"|size"))
+     Diagnostics.Add("WARN","Large material ZIP deferred (over 64 MB): "+Path.GetFileName(file)+
+      ". Choose a smaller 1K/2K texture pack.");
+    return;
+   }
    string signature=info.Length+"|"+info.LastWriteTimeUtc.Ticks;
    if(!observed.TryGetValue(file,out string before)||before!=signature){observed[file]=signature;return;}
    string id=Id("zip:"+file);
@@ -152,7 +159,7 @@ namespace WorldBuilder {
      foreach(var entry in zip.Entries){
       if(++count>3000)throw new InvalidDataException("Texture ZIP contains too many entries");
       total+=entry.Length;
-      if(total>256L*1024*1024)throw new InvalidDataException("Texture ZIP exceeds 256 MB");
+      if(total>128L*1024*1024)throw new InvalidDataException("Texture ZIP exceeds 128 MB safe import limit");
       if(!Image(entry.Name)||entry.Length<=0)continue;
       string ext=Path.GetExtension(entry.Name).ToLowerInvariant();
       string output=Path.Combine(staging,candidates.Count.ToString("D3")+"_"+Path.GetFileNameWithoutExtension(entry.Name)+ext);

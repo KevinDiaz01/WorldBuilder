@@ -174,6 +174,15 @@ namespace WorldBuilder {
      }
      try{
       FileInfo info=new FileInfo(source);
+      // Hard cap on synchronous manual imports: even a valid 4K tree can
+      // exhaust memory during conversion, thumbnail creation and validation.
+      // Leave the original download untouched so it can be converted offline.
+      if(info.Length>64L*1024*1024){
+       if(reportedUnsupported.Add(source+"|size"))
+        Diagnostics.Add("WARN","Large 3D download skipped (over 64 MB): "+
+         Path.GetFileName(source)+". Try a 1K/2K model or smaller OBJ/GLB.");
+       continue;
+      }
       string fingerprint=info.Length+"|"+info.LastWriteTimeUtc.Ticks;
       string marker=source+".worldbuilder-imported";
       if(File.Exists(marker)&&File.ReadAllText(marker)==fingerprint){observed.Remove(source);continue;}
@@ -200,6 +209,7 @@ namespace WorldBuilder {
       count++;
       message="Imported "+Name(id)+" from "+provider;
       Diagnostics.Add("INFO",message);
+      return count; // Never import multiple models in one UI action.
      }catch(IOException){ /* File is still being downloaded or copied. */ }
      catch(Exception ex){
       string problem=source+"|"+ex.Message;
@@ -315,7 +325,7 @@ namespace WorldBuilder {
    }
   }
   static void ExtractSafe(string zip,string target){
-   const long maxBytes=512L*1024*1024;
+   const long maxBytes=128L*1024*1024;
    long total=0;
    int count=0;
    string canonical=Path.GetFullPath(target).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
@@ -323,7 +333,7 @@ namespace WorldBuilder {
     foreach(var entry in archive.Entries){
      if(++count>5000)throw new InvalidDataException("Archive has too many files");
      total+=entry.Length;
-     if(total>maxBytes)throw new InvalidDataException("Archive too large (512 MB extraction limit)");
+     if(total>maxBytes)throw new InvalidDataException("Archive too large (128 MB manual import limit)");
      if(string.IsNullOrEmpty(entry.Name))continue;
      string path=Path.GetFullPath(Path.Combine(target,entry.FullName.Replace('/',Path.DirectorySeparatorChar)));
      if(!path.StartsWith(canonical,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Unsafe archive path");
