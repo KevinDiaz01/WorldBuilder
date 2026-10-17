@@ -2445,8 +2445,6 @@ namespace WorldBuilder {
    }
   }
   void DrawMyAssetCollection(float left,float y,float viewport,float cardH){
-   if(Button(new Rect(left+19,y+4,210,34),"IMPORT DOWNLOADED ASSETS"))
-    ImportDownloadedAssetsSafely();
    var models=AssetHub.Catalog();
    var materials=MaterialLibrary.Catalog();
    var skies=SkyboxLibrary.Catalog();
@@ -2606,8 +2604,10 @@ namespace WorldBuilder {
    if(searchX<left+410f)searchX=left+410f;
    GUI.Label(new Rect(searchX-75,top+20,75,24),"SEARCH",mutedStyle);
    catalogSearch=GUI.TextField(new Rect(searchX+3f,top+13f,157f,35f),catalogSearch,regularStyle);
-   if(Button(new Rect(w-384,top+13,138,36),catalogCategory==12?"IMPORT SKY":catalogCategory==8?"IMPORT MAT.":"IMPORT 3D")){
-    if(catalogCategory==12)ImportSkyFile();
+   if(Button(new Rect(w-384,top+13,138,36),catalogCategory==0?"SCAN DOWNLOADS":
+      catalogCategory==12?"IMPORT SKY":catalogCategory==8?"IMPORT MAT.":"IMPORT 3D")){
+    if(catalogCategory==0)ImportDownloadedAssetsSafely();
+    else if(catalogCategory==12)ImportSkyFile();
     else if(catalogCategory==8)ImportMaterialFile();
     else{showImport=true;showExport=false;}
    }
