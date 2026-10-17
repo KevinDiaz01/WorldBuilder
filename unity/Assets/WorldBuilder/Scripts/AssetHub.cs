@@ -184,6 +184,12 @@ namespace WorldBuilder {
        observed[source]=fingerprint;continue;
       }
       using(var handle=new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.None)){}
+      if(ext==".zip"&&source.EndsWith(".blend.zip",StringComparison.OrdinalIgnoreCase)){
+       if(reportedUnsupported.Add(source))Diagnostics.Add("WARN",
+        "Blender model archive cannot be imported directly: "+Path.GetFileName(source)+
+        ". Download the glTF/GLB or OBJ version from the asset website.");
+       observed.Remove(source);continue;
+      }
       if(ext==".zip"&&TextureOnlyZip(source)){
        // MaterialLibrary handles these; do not flag them as failed 3D models.
        observed.Remove(source);continue;
