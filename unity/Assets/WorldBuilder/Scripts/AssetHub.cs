@@ -255,6 +255,8 @@ namespace WorldBuilder {
      foreach(string candidate in candidates){
       try{
        if(File.Exists(converted))File.Delete(converted);
+       string staleMtl=Path.Combine(temp,"model.mtl");
+       if(File.Exists(staleMtl))File.Delete(staleMtl);
        GltfToObj.ConvertModel(candidate,converted);
        convertedOk=true;break;
       }catch(Exception ex)when(ex is InvalidDataException||ex is NotSupportedException||
